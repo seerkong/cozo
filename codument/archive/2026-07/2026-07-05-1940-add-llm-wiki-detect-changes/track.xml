@@ -1,0 +1,58 @@
+<Track id="add-llm-wiki-detect-changes" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>detect_changes 工具（git diff → 符号映射 → 有界影响/执行流/风险）与 staleness 提示（indexed_commit vs HEAD）</Goal>
+    <Description>mission expand-llm-wiki-agent-tools 的 G4 track。Git capsule（契约+CLI 实现，internal，落 Core 供 Tools/Indexing 共享）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T10:15:55Z</CreatedAt>
+    <UpdatedAt>2026-07-05T16:40:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="core"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Core/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-detect-changes" name="add-llm-wiki-detect-changes" version="1">
+    <Description>Git capsule 与 staleness → detect_changes 工具收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Git capsule 与 staleness" status="DONE" order="0">
+        <Description>IGitDiffProvider 契约 + CLI 实现（-U0 hunk 解析）+ indexed_commit 记录 + status stale 字段。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Git capsule 与 staleness" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 diff 解析/三 scope/非 git/stale 测试（临时 git 仓 fixture）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 capsule、indexed_commit、status stale" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">三 scope diff 行区间解析正确；非 git 目录诊断不抛；indexed_commit 落 ck_meta；status stale 判定正确</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="detect_changes 工具收口" status="DONE" order="1">
+        <Description>符号映射 + 影响聚合 + 工具注册（矩阵 15），smoke 与两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="detect_changes 工具" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写工具层测试（delta 6 case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现映射/聚合/注册" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">delta 6 case 断言全过；15 工具 smoke；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

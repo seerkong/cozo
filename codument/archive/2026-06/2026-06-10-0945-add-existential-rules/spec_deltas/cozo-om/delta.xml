@@ -1,0 +1,135 @@
+<spec-patch version="1">
+  <requirement op="upsert" selector="spec://cozo-om/requirement/om-024-existential-rule-definition" id="om-024-existential-rule-definition">
+    <statement>系统 SHALL 提供 defineExistentialRule(runner, ruleName, spec) 用于声明式定义存在规则，并持久化到存储关系 om_existential_rule_def（rule_name => spec(Json), mode, message, enabled）。规则 spec SHALL 包含 forEach（body：type，可选 where 属性条件列表）与 exists（head：rel、可选 direction、toType）。v1 head 形态 SHALL 仅支持「∃ 关系边 + 目标实体」。mode SHALL 支持 'check'（默认）与 'materialize'。规则中引用的 type/rel/attr 名称 SHALL 经 alias 解析为 canonical 名称。initSchema SHALL 幂等创建 om_existential_rule_def。系统 SHALL 提供 listExistentialRules(runner) 返回全部规则定义。</statement>
+    <suite id="definition" name="规则定义与持久化">
+      <case id="define-and-persist">
+        <given>数据库已 initSchema，且已定义类型 Order、Shipment 与关系 has_shipment</given>
+        <when>调用 defineExistentialRule(runner, 'order_must_have_shipment', { forEach: { type: 'Order' }, exists: { rel: 'has_shipment', toType: 'Shipment' }, mode: 'check' })</when>
+        <then>om_existential_rule_def 中持久化该规则，listExistentialRules 返回包含该规则的结果</then>
+      </case>
+      <case id="reject-invalid-spec">
+        <given>数据库已 initSchema</given>
+        <when>调用 defineExistentialRule 时 spec 缺少 exists.rel 或 exists.toType，或引用了不存在的类型/关系，或 where 条目缺少 value（undefined）</when>
+        <then>系统返回错误且不写入规则</then>
+      </case>
+      <case id="redefine-upsert">
+        <given>规则 r1 已定义</given>
+        <when>以相同 ruleName 再次调用 defineExistentialRule 且 spec 不同</when>
+        <then>规则定义被更新（upsert 语义），listExistentialRules 返回新 spec</then>
+      </case>
+      <case id="alias-canonicalized-on-define">
+        <given>类型 Order 存在 alias 旧名 PurchaseOrder</given>
+        <when>以 forEach.type = 'PurchaseOrder' 定义规则</when>
+        <then>规则持久化时 type 引用被解析为 canonical 名称 Order</then>
+      </case>
+      <case id="init-schema-idempotent">
+        <given>数据库已 initSchema 且已存在规则定义</given>
+        <when>再次调用 initSchema(runner)</when>
+        <then>om_existential_rule_def 与既有规则定义保持不变</then>
+      </case>
+    </suite>
+  </requirement>
+
+  <requirement op="upsert" selector="spec://cozo-om/requirement/om-025-existential-violation-check" id="om-025-existential-violation-check">
+    <statement>系统 SHALL 提供 checkExistentialRules(runner, options?) 以集合语义检测存在规则违例：对每条 enabled 规则，找出满足 forEach（type 闭包含子类型实例；where 条件按 om_property 当前快照求值）但不存在满足 exists 的关系边（om_edge 按 @NOW 语义判定，目标实体类型在 toType 闭包内）的实体。返回 SHALL 为 [{ rule, entityId, message }] 列表。options SHALL 支持 rules（规则名过滤）与 asOf（按历史时间点检测）。disabled 规则 SHALL 被跳过。</statement>
+    <suite id="violation-check" name="违例检测">
+      <case id="detect-missing-edge">
+        <given>规则 order_must_have_shipment 已定义，实体 o1（Order）无 has_shipment 出边</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>返回包含 { rule: 'order_must_have_shipment', entityId: 'o1' } 的违例</then>
+      </case>
+      <case id="satisfied-not-reported">
+        <given>实体 o2（Order）已有指向 Shipment 实例的 has_shipment 边</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>o2 不出现在违例列表中</then>
+      </case>
+      <case id="polymorphic-body-and-head">
+        <given>RushOrder 继承自 Order，ExpressShipment 继承自 Shipment；实体 ro1（RushOrder）有指向 ExpressShipment 实例的 has_shipment 边，实体 ro2（RushOrder）无该边</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>ro2 被报告为违例且 ro1 不被报告（body 与 head 类型匹配均含子类型）</then>
+      </case>
+      <case id="where-condition-filters-body">
+        <given>规则 forEach.where 为 [{ attr: 'status', op: '=', value: 'confirmed' }]，实体 o3 状态为 draft 且无 has_shipment 边</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>o3 不被报告为违例</then>
+      </case>
+      <case id="retracted-edge-is-missing">
+        <given>实体 o4 的 has_shipment 边已在更早 validTime 被 retract</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>o4 被报告为违例（@NOW 语义下边不存在）</then>
+      </case>
+      <case id="as-of-historical-check">
+        <given>实体 o5 的 has_shipment 边在 T1 之后才被 assert</given>
+        <when>调用 checkExistentialRules(runner, { asOf: T0 })（T0 早于 T1）</when>
+        <then>o5 在 T0 时点被报告为违例，而不带 asOf 调用时不被报告</then>
+      </case>
+    </suite>
+  </requirement>
+
+  <requirement op="upsert" selector="spec://cozo-om/requirement/om-026-existential-skolem-chase" id="om-026-existential-skolem-chase">
+    <statement>系统 SHALL 提供 applyExistentialRules(runner, options?) 对 mode='materialize' 的规则执行 Skolem chase：循环检测违例并为每个违例实体物化目标实体与关系边，直至不动点或 maxIterations（默认 10）。Skolem 实体 ID SHALL 由规则名与触发实体 ID 的确定性哈希生成；物化 SHALL 幂等（重复执行不产生重复对象）。物化前 SHALL 先检查满足性，已满足（含人工补录）的实体 SHALL NOT 被物化。Skolem 实体 SHALL 写入内置属性 _skolem_rule 标记来源规则。options.validTime SHALL 透传给实体属性与关系边写入。返回 SHALL 包含 { created, iterations, reachedFixpoint }；达到 maxIterations 仍未收敛时 reachedFixpoint SHALL 为 false 并附诊断。</statement>
+    <suite id="skolem-chase" name="Skolem chase 物化">
+      <case id="materialize-creates-entity-and-edge">
+        <given>materialize 规则已定义，实体 o1（Order）无 has_shipment 边</given>
+        <when>调用 applyExistentialRules(runner)</when>
+        <then>系统创建 Shipment 类型的 Skolem 实体并建立 o1 到该实体的 has_shipment 边，created 包含该记录且后续 checkExistentialRules 不再报告 o1</then>
+      </case>
+      <case id="skolem-marked-with-rule">
+        <given>chase 已为 o1 物化 Skolem 实体 s1</given>
+        <when>读取 s1 的属性 _skolem_rule</when>
+        <then>返回来源规则名</then>
+      </case>
+      <case id="idempotent-rerun">
+        <given>chase 已执行一次并物化了 Skolem 实体</given>
+        <when>再次调用 applyExistentialRules(runner)</when>
+        <then>不产生新实体或新边，created 为空且 reachedFixpoint 为 true</then>
+      </case>
+      <case id="manual-fix-respected">
+        <given>实体 o2 的违例已由人工补录真实 Shipment 边修复</given>
+        <when>调用 applyExistentialRules(runner)</when>
+        <then>o2 不被物化 Skolem 实体</then>
+      </case>
+      <case id="iteration-cap-with-diagnostics">
+        <given>两条 materialize 规则构成循环依赖（A 物化的实体触发 B，B 物化的实体触发 A）</given>
+        <when>调用 applyExistentialRules(runner, { maxIterations: 3 })</when>
+        <then>chase 在 3 轮后停止，reachedFixpoint 为 false 且返回包含未收敛规则的诊断</then>
+      </case>
+      <case id="valid-time-applied">
+        <given>materialize 规则已定义且存在违例实体</given>
+        <when>调用 applyExistentialRules(runner, { validTime: T })</when>
+        <then>物化的关系边与属性以 validTime=T 写入，getNeighborsAsOf 在 T 之前查不到该边</then>
+      </case>
+      <case id="check-mode-rules-not-materialized">
+        <given>同时存在 mode='check' 与 mode='materialize' 的规则且各有违例</given>
+        <when>调用 applyExistentialRules(runner)</when>
+        <then>仅 materialize 规则的违例被物化，check 规则的违例保持不变</then>
+      </case>
+    </suite>
+  </requirement>
+
+  <requirement op="upsert" selector="spec://cozo-om/requirement/om-027-existential-governance-integration" id="om-027-existential-governance-integration">
+    <statement>存在规则子系统 SHALL 与既有治理机制集成：om_existential_rule_def SHALL 纳入 schema snapshot 范围并参与 diffSchemaVersions 与 rollbackSchema 恢复；规则中的 type/rel/attr 引用 SHALL 经 alias 解析在 schema 重命名后继续工作；chase 与违例检测 SHALL 为系统级操作，不经过 checkAccess 权限过滤；未定义任何存在规则时，既有 API 行为 SHALL 与引入本子系统前一致。</statement>
+    <suite id="governance-integration" name="治理集成">
+      <case id="snapshot-includes-rules">
+        <given>已定义存在规则且应用一次 schema 迁移</given>
+        <when>读取目标版本 schema snapshot</when>
+        <then>snapshot 包含 om_existential_rule_def 的规则定义</then>
+      </case>
+      <case id="rollback-restores-rules">
+        <given>v1 定义了规则 r1，v2 修改了 r1 的 spec</given>
+        <when>调用 rollbackSchema(runner, 1)</when>
+        <then>r1 恢复为 v1 时的定义</then>
+      </case>
+      <case id="alias-keeps-rule-working-after-rename">
+        <given>规则引用关系 has_shipment，schema 迁移将其重命名为 fulfilled_by</given>
+        <when>调用 checkExistentialRules(runner)</when>
+        <then>规则经 alias 解析继续正确检测违例</then>
+      </case>
+      <case id="backward-compatible-when-unused">
+        <given>数据库已 initSchema 但未定义任何存在规则</given>
+        <when>调用既有 API（findByType / getEntityView / setProperty / linkEntities 等）</when>
+        <then>行为与引入存在规则子系统前一致</then>
+      </case>
+    </suite>
+  </requirement>
+</spec-patch>

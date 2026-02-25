@@ -1,0 +1,36 @@
+<behavior-patch capability="llm-wiki-user-docs" version="1">
+  <upsert selector="behavior://llm-wiki-user-docs/requirements/user-manual">
+    <requirement id="user-manual">
+      <statement>cozo-lib-dotnet-llm-wiki SHALL 提供面向终端使用者的独立使用手册（cozo-lib-dotnet-llm-wiki/docs/），覆盖安装接入、CLI 命令、全部 MCP 工具、hooks、skills 生成与 DEPA 报告解读，且内容与 CLI 实际行为一致。</statement>
+      <suite id="manual-structure" name="手册结构与入口">
+        <case id="manual-sections-exist">
+          <given>仓库检出 cozo-lib-dotnet-llm-wiki/docs/</given>
+          <when>读者浏览手册目录</when>
+          <then>手册 SHALL 含快速开始、CLI 参考、MCP 工具参考、hooks 接入、skills 生成、DEPA 报告解读、故障排查七个部分，且有导航 index</then>
+        </case>
+        <case id="readme-as-entry">
+          <given>cozo-lib-dotnet-llm-wiki/README.md</given>
+          <when>读者从 README 进入</when>
+          <then>README SHALL 瘦身为概览+安装+指向 docs/ 手册的入口链接，不再承载全量使用细节</then>
+        </case>
+      </suite>
+      <suite id="manual-accuracy" name="内容准确性">
+        <case id="tools-reference-complete">
+          <given>`cozo-wiki tools` 列出的全部工具</given>
+          <when>对照手册 MCP 工具参考</when>
+          <then>手册 SHALL 覆盖全部工具（名称、用途、关键参数、示例各一），无遗漏、无已删除工具残留</then>
+        </case>
+        <case id="cli-commands-verified">
+          <given>手册中出现的每条 CLI 命令</given>
+          <when>按手册原样执行（或 --help 比对）</when>
+          <then>命令 SHALL 与当前 CLI 实际接口一致（子命令、选项名、默认值）</then>
+        </case>
+        <case id="depa-report-interpretation">
+          <given>一份真实 depa_conformance 输出</given>
+          <when>读者按手册解读章节阅读</when>
+          <then>手册 SHALL 解释 GAP/PASS/BLOCKED、confidence、32 规则分母、implemented-weakened 与 depa-map 标注侧处置路径</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

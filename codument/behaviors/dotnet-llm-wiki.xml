@@ -1,0 +1,83 @@
+<behaviors capability="dotnet-llm-wiki" version="1">
+  <requirement id="incremental-indexing">
+    <statement>索引 SHALL 支持文件级增量模式（默认 auto：有既往索引且可计算差异时走增量，否则全量）：变更/删除文件的全部观测层事实按文件归属清除并重建，未变文件事实复用；增量索引后的库状态 SHALL 与全量重索引逐表一致（一致性校验）；摘要 SHALL 报告变更/删除/复用文件计数。</statement>
+    <suite id="incremental" name="增量索引">
+      <case id="single-file-change">
+        <given>已索引仓库中修改单个源文件</given>
+        <when>auto 模式重索引</when>
+        <then>SHALL 走增量路径且 ChangedFiles=1、ReusedFiles=其余全部</then>
+      </case>
+      <case id="file-removed">
+        <given>已索引仓库中删除一个源文件</given>
+        <when>增量重索引</when>
+        <then>该文件的 ck_symbol/ck_edge/ck_doc_block/ck_external_call/ck_entry_point 行 SHALL 全部清除</then>
+      </case>
+      <case id="consistency-gate">
+        <given>同一仓库状态</given>
+        <when>增量索引后与全新全量索引对比全部 ck_* 表</when>
+        <then>两者 SHALL 逐表一致（时间戳类字段除外）</then>
+      </case>
+      <case id="fallback-full">
+        <given>无既往索引或差异不可计算（非 git 仓且无 hash 基线）</given>
+        <when>auto 模式索引</when>
+        <then>SHALL 走全量路径且行为与现状一致</then>
+      </case>
+      <case id="derived-layers-fresh">
+        <given>增量索引完成</given>
+        <when>查询社群/执行流/检索投影</when>
+        <then>派生层 SHALL 反映增量后的最新图（全量重算）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="mcp-wiki-mvp">
+    <statement>系统 SHALL 在 cozo-lib-dotnet-llm-wiki/packages 下提供基于 Cozo OM 的 .NET LLM wiki 与 MCP stdio MVP。</statement>
+    <suite id="package-structure" name="包结构">
+      <case id="multiple-projects">
+        <given>开发者查看 cozo-lib-dotnet-llm-wiki/packages</given>
+        <when>track 实现完成</when>
+        <then>系统 SHALL 包含 Core、Indexing、Wiki、McpServer 多个独立 .NET project</then>
+      </case>
+    </suite>
+    <suite id="repo-indexing" name="仓库索引">
+      <case id="index-repo-to-codeknowledge">
+        <given>一个包含代码和 Markdown 文件的本地仓库路径</given>
+        <when>调用 index_repo 或 CLI index</when>
+        <then>系统 SHALL 将 repo/file/symbol/relation/doc facts 写入 Om.CodeKnowledge</then>
+      </case>
+    </suite>
+    <suite id="wiki" name="Wiki 编译">
+      <case id="build-markdown-wiki">
+        <given>CodeKnowledge 中已有文件、符号和文档 facts</given>
+        <when>调用 build_wiki</when>
+        <then>系统 SHALL 输出 Markdown wiki 页面和索引</then>
+      </case>
+    </suite>
+    <suite id="mcp" name="MCP stdio">
+      <case id="json-rpc-tools">
+        <given>McpServer 以 mcp --stdio 启动</given>
+        <when>客户端发送 initialize、tools/list 和 tools/call JSON-RPC 消息</when>
+        <then>系统 SHALL 返回符合 MCP tools 协议的 JSON-RPC 响应</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="context-budget-ranking">
+    <statement>FractalWikiPipeline 的 modeling context 预算截断 SHALL 按重要性排序：public-API 成员数（降）→ 总成员数（降）→ 名称（升）；丢弃 SHALL 继续以 diagnostics 如实披露并注明排序依据。</statement>
+    <suite id="ranking" name="重要性排序">
+      <case id="public-api-outranks-size">
+        <given>context A 含 public API 成员、context B 成员更多但 public API 为 0，预算仅容一个</given>
+        <when>构建 modeling contexts</when>
+        <then>A SHALL 入选、B SHALL 被丢弃并出现在 diagnostics 中</then>
+      </case>
+      <case id="deterministic-tiebreak">
+        <given>public-API 数与成员数均相同的两个 context</given>
+        <when>重复构建</when>
+        <then>入选顺序 SHALL 按名称升序且跨次构建稳定（不破坏增量缓存确定性）</then>
+      </case>
+      <case id="repo-rescan-improves">
+        <given>本仓（预算默认 24）</given>
+        <when>排序改造后重新生成分形到探针目录</when>
+        <then>Om.CodeKnowledge、Om.Depa、LlmWiki.Tools 侧核心 namespace SHALL 入选；纯 demo 微社群（public API=0）SHALL 出局；前后对比 SHALL 如实记录 findings</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

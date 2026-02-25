@@ -1,0 +1,15 @@
+native/
+!native/.gitkeep
+**/node_modules
+**/.DS_Store
+npm-debug.log*
+_test_db/
+.idea/
+
+# Node/Bun demo artifacts
+bun.lockb
+bun.lock
+dist/
+.env
+.env.*
+*.local

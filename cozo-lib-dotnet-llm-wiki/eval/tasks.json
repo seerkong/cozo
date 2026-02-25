@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "description": "Eval baseline task set (track add-llm-wiki-eval-baseline). Every question is a real question about one of the two work roots; workRoot is the repository-relative path from the directory containing both repos (cozo-lib-dotnet-llm-wiki, cozo-lib-dotnet/src). tools is the suggested tool sequence for the oracle mode; must/should are the weighted answer keywords for EvalScorer (0.8/0.2, case-insensitive containment, long real identifiers only). Oracle query convention: without embeddings the BM25 channel matches whole identifier tokens against declaration text (name + signature), so 'which API/who calls X' recipes include the candidate identifier in the query — the graph evidence being validated is the returned symbol hit with its path:line source id, not the token echo (trace/check/depa outputs supply the relation-level evidence). The oracle enforces this: input-echo fields (query/rootId/targetId/reason) are stripped from every tool output before scoring, so a must hit can only come from returned graph evidence.",
+  "tasks": [
+    {
+      "id": "eval-001",
+      "question": "谁调用了 RepositoryIndexer.IndexAsync？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "RepositoryIndexer IndexAsync callers", "limit": "5" } },
+        { "name": "trace", "arguments": { "from": "CallAsync", "to": "IndexAsync" } }
+      ],
+      "must": ["LlmWikiToolRunner", "RepositoryIndexer"],
+      "should": ["index_repo", "McpServer"]
+    },
+    {
+      "id": "eval-002",
+      "question": "RepositoryIndexer 在构建调用边时调用了哪个解析组件？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "resolve call edges between parsed files", "limit": "5" } },
+        { "name": "symbol_context", "arguments": { "symbolId": "CallResolver" } }
+      ],
+      "must": ["CallResolver"],
+      "should": ["RepositoryIndexer"]
+    },
+    {
+      "id": "eval-003",
+      "question": "如果修改 CallResolver 的解析行为，会影响哪些组件或流程？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "RepositoryIndexer CallResolver call edge resolution", "limit": "5" } },
+        { "name": "trace", "arguments": { "from": "BuildBatchAsync", "to": "Resolve", "minConfidence": "0" } }
+      ],
+      "must": ["RepositoryIndexer"],
+      "should": ["BuildBatchAsync"]
+    },
+    {
+      "id": "eval-004",
+      "question": "FractalSpecChecker 属于仓库的哪个区域（哪个包/社群）？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "FractalSpecChecker", "limit": "5" } },
+        { "name": "overview_graph", "arguments": { "maxNodes": "60", "maxEdges": "120", "categories": ["code"] } }
+      ],
+      "must": ["Cozo.DotNet.LlmWiki.Wiki"],
+      "should": ["FractalSpecChecker.cs"]
+    },
+    {
+      "id": "eval-005",
+      "question": "本仓中把索引后的 CodeKnowledge 编译成 Markdown wiki 的入口类和方法是什么？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "WikiCompiler markdown wiki build entry", "limit": "5" } },
+        { "name": "trace", "arguments": { "from": "BuildWikiToolAsync", "to": "BuildAsync", "minConfidence": "0" } }
+      ],
+      "must": ["WikiCompiler"],
+      "should": ["BuildAsync"]
+    },
+    {
+      "id": "eval-006",
+      "question": "18 个 MCP 工具的统一分发入口是哪个类的哪个方法？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "LlmWikiToolRunner CallAsync ToolsJson tool dispatch", "limit": "5" } }
+      ],
+      "must": ["LlmWikiToolRunner", "CallAsync"],
+      "should": ["ToolsJson"]
+    },
+    {
+      "id": "eval-007",
+      "question": "depa_conformance 工具背后的 DEPA 合规报告扩展 API 是什么，定义在哪个类？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "GetConformanceReportAsync conformance report", "limit": "5" } },
+        { "name": "depa_conformance", "arguments": {} }
+      ],
+      "must": ["GetConformanceReportAsync"],
+      "should": ["CozoOmDepaExtensions"]
+    },
+    {
+      "id": "eval-008",
+      "question": "谁调用了 WikiCompiler.BuildAsync？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "WikiCompiler BuildAsync", "limit": "5" } },
+        { "name": "trace", "arguments": { "from": "CallAsync", "to": "BuildAsync" } }
+      ],
+      "must": ["LlmWikiToolRunner"],
+      "should": ["build_wiki", "McpServer"]
+    },
+    {
+      "id": "eval-009",
+      "question": "Claude Code agent hooks 的 augment 子命令由哪个类实现，位于哪个包？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "claude code hook augment command", "limit": "5" } }
+      ],
+      "must": ["HookCommands"],
+      "should": ["McpServer"]
+    },
+    {
+      "id": "eval-010",
+      "question": "skills 文件的生成逻辑在哪个类？其 CLI 包装又在哪个类？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "SkillsGenerator generate skills per context workflow", "limit": "5" } }
+      ],
+      "must": ["SkillsGenerator"],
+      "should": ["SkillsCommands"]
+    },
+    {
+      "id": "eval-011",
+      "question": "语义向量检索（semantic_search 工具背后）由哪个服务类实现？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "vector search service embeddings", "limit": "5" } }
+      ],
+      "must": ["CozoVectorSearchService"],
+      "should": ["VectorSearch"]
+    },
+    {
+      "id": "eval-012",
+      "question": "默认的本地 embedding 提供者是哪个类型？它产生多少维向量？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "bundled MiniLM onnx embedding provider", "limit": "5" } },
+        { "name": "symbol_context", "arguments": { "symbolId": "OnnxMiniLmEmbeddingProvider" } }
+      ],
+      "must": ["OnnxMiniLmEmbeddingProvider"],
+      "should": ["384"]
+    },
+    {
+      "id": "eval-013",
+      "question": "增量索引时文件级差异由哪个类型计算？detect_changes 工具与它是什么关系？（workRoot: cozo-lib-dotnet-llm-wiki）",
+      "difficulty": "hard",
+      "workRoot": "cozo-lib-dotnet-llm-wiki",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "IncrementalDiff incremental diff changed files baseline", "limit": "5" } }
+      ],
+      "must": ["IncrementalDiff"],
+      "should": ["detect_changes", "RepositoryIndexer"]
+    },
+    {
+      "id": "eval-014",
+      "question": "trace 工具的最短调用路径计算由哪个后端 API 完成，定义在哪个类？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "TraceCallPathAsync shortest call path CALLS edges", "limit": "5" } }
+      ],
+      "must": ["TraceCallPathAsync"],
+      "should": ["CodeGraphProjections"]
+    },
+    {
+      "id": "eval-015",
+      "question": "check 工具的依赖环检测（强连通分量）由哪个后端 API 实现？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "check", "arguments": { "cycles": "both" } },
+        { "name": "semantic_search", "arguments": { "query": "DetectCyclesAsync dependency cycles strongly connected components", "limit": "5" } }
+      ],
+      "must": ["DetectCyclesAsync"],
+      "should": ["CodeGraphProjections"]
+    },
+    {
+      "id": "eval-016",
+      "question": "谁调用了 DepaViolationDetectors.RunAsync？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "DepaScanPipeline DepaViolationDetectors detection pipeline", "limit": "5" } },
+        { "name": "trace", "arguments": { "from": "ScanAsync", "to": "RunAsync", "minConfidence": "0" } }
+      ],
+      "must": ["DepaScanPipeline"],
+      "should": ["DepaViolationDetectors"]
+    },
+    {
+      "id": "eval-017",
+      "question": "DEPA 扫描的公开入口扩展方法是什么，定义在哪个文件？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "DepaScanAsync scan entry extension method", "limit": "5" } }
+      ],
+      "must": ["DepaScanAsync"],
+      "should": ["CozoOmDepaExtensions"]
+    },
+    {
+      "id": "eval-018",
+      "question": "DEPA 静态检测目前实际运行哪些规则（rule id 列表）？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "hard",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "depa_conformance", "arguments": {} },
+        { "name": "fact_grade_map", "arguments": {} }
+      ],
+      "must": ["V-E1"],
+      "should": ["V-F1", "V-S1"]
+    },
+    {
+      "id": "eval-019",
+      "question": "如果修改 CodeEdgeKinds 中的边类型常量，会影响 Om.CodeKnowledge 的哪些组件？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "hard",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "CodeEdgeKinds edge kind constants", "limit": "5" } },
+        { "name": "impact_of_change", "arguments": { "symbolId": "CodeEdgeKinds", "direction": "up" } }
+      ],
+      "must": ["CodeGraphProjections"],
+      "should": ["ProcessExtraction", "CozoOmCodeKnowledgeExtensions"]
+    },
+    {
+      "id": "eval-020",
+      "question": "分层（layered）影响分析（含风险评级与受影响执行流）的 API 是什么？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "DeepImpactAsync layered impact risk rating affected processes", "limit": "5" } }
+      ],
+      "must": ["DeepImpactAsync"],
+      "should": ["CozoOmDeepImpactExtensions"]
+    },
+    {
+      "id": "eval-021",
+      "question": "执行流（process）抽取由哪个 API 实现，位于哪个文件？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "ExtractProcessesAsync execution processes entry symbols", "limit": "5" } }
+      ],
+      "must": ["ExtractProcessesAsync"],
+      "should": ["ProcessExtraction"]
+    },
+    {
+      "id": "eval-022",
+      "question": "代码社群（community）检测由哪个 API 计算？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "compute communities louvain symbol graph", "limit": "5" } },
+        { "name": "overview_graph", "arguments": { "maxNodes": "60", "maxEdges": "120", "categories": ["code"] } }
+      ],
+      "must": ["ComputeCommunitiesAsync"],
+      "should": ["CodeGraphProjections"]
+    },
+    {
+      "id": "eval-023",
+      "question": "FindSymbolContextAsync 定义在哪个文件、属于哪个区域？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "easy",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "semantic_search", "arguments": { "query": "FindSymbolContextAsync", "limit": "5" } },
+        { "name": "symbol_context", "arguments": { "symbolId": "FindSymbolContextAsync" } }
+      ],
+      "must": ["CozoOmCodeKnowledgeExtensions"],
+      "should": ["Om.CodeKnowledge"]
+    },
+    {
+      "id": "eval-024",
+      "question": "health_score 工具背后的 DEPA 健康评分 API 是什么？（workRoot: cozo-lib-dotnet/src）",
+      "difficulty": "medium",
+      "workRoot": "cozo-lib-dotnet/src",
+      "tools": [
+        { "name": "health_score", "arguments": {} },
+        { "name": "semantic_search", "arguments": { "query": "GetHealthScoreAsync DEPA health score per dimension", "limit": "5" } }
+      ],
+      "must": ["GetHealthScoreAsync"],
+      "should": ["DepaHealthScore"]
+    }
+  ]
+}

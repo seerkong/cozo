@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/packages/">
+    <Project Path="packages/Cozo.DotNet.LlmWiki.Core/Cozo.DotNet.LlmWiki.Core.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.Indexing/Cozo.DotNet.LlmWiki.Indexing.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.LlmClient/Cozo.DotNet.LlmWiki.LlmClient.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.McpServer/Cozo.DotNet.LlmWiki.McpServer.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.Server/Cozo.DotNet.LlmWiki.Server.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.RoslynEnhancer/Cozo.DotNet.LlmWiki.RoslynEnhancer.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.SemanticParsing/Cozo.DotNet.LlmWiki.SemanticParsing.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.Tools/Cozo.DotNet.LlmWiki.Tools.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.VectorSearch/Cozo.DotNet.LlmWiki.VectorSearch.csproj" />
+    <Project Path="packages/Cozo.DotNet.LlmWiki.Wiki/Cozo.DotNet.LlmWiki.Wiki.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj" />
+  </Folder>
+</Solution>

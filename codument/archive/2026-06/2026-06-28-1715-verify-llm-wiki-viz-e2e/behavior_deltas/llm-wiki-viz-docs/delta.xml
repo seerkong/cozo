@@ -1,0 +1,19 @@
+<behavior-patch capability="llm-wiki-viz-docs" version="1">
+  <upsert selector="behavior://llm-wiki-viz-docs/requirements/docs-and-verification">
+    <requirement id="docs-and-verification">
+      <statement>The project SHALL document and verify the cozo-wiki server and visualization frontend workflows.</statement>
+      <suite id="final-checks" name="Final checks">
+        <case id="readme-serve-viz">
+          <given>The server and frontend are implemented</given>
+          <when>A developer reads the README</when>
+          <then>The README SHALL show how to start `cozo-wiki --serve`, run the Vite frontend, and serve production dist assets</then>
+        </case>
+        <case id="build-test-smoke">
+          <given>The mission is ready to close</given>
+          <when>Final verification runs</when>
+          <then>Dotnet build/test, frontend build, and server static smoke SHALL pass</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="cozo-wiki-indexing" version="1">
+  <upsert selector="behavior://cozo-wiki-indexing/requirements/bounded-doc-symbol-links">
+    <requirement id="bounded-doc-symbol-links">
+      <statement>cozo-wiki SHALL bound inferred documentation-to-symbol relations during repository indexing.</statement>
+      <suite id="repo-indexing" name="Repository indexing">
+        <case id="avoid-global-doc-symbol-product">
+          <given>A repository has many markdown doc blocks and many code symbols with repeated common names</given>
+          <when>The repository indexer builds CodeKnowledge relations with default options</when>
+          <then>The indexer SHALL NOT scan every doc block against every symbol as persisted relations</then>
+          <and>The generated documents relations SHALL remain bounded by per-doc and total relation budgets</and>
+        </case>
+        <case id="preserve-local-doc-link">
+          <given>A markdown file documents a symbol in the same file neighborhood</given>
+          <when>The repository indexer builds CodeKnowledge relations with default options</when>
+          <then>The indexer SHALL persist a documents relation for that local high-confidence match</then>
+        </case>
+        <case id="configurable-mode">
+          <given>A caller explicitly configures doc-symbol link mode or max relations</given>
+          <when>The index_repo tool or RepositoryIndexer receives those options</when>
+          <then>The indexer SHALL apply the requested mode and budgets deterministically</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

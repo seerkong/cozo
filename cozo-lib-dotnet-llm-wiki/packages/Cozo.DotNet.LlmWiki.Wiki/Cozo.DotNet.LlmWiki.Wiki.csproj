@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Core\Cozo.DotNet.LlmWiki.Core.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.LlmClient\Cozo.DotNet.LlmWiki.LlmClient.csproj" />
+    <ProjectReference Include="..\..\..\cozo-lib-dotnet\Cozo.DotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FractalSpecChecker stays internal (minimal public surface); the test suite drives it. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+    <!-- SkillsGenerator stays internal (zero new public types); the CLI skills subcommands wire it.
+         The McpServer project builds as assembly "depa-wiki" (AssemblyName), hence this name. -->
+    <InternalsVisibleTo Include="depa-wiki" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,54 @@
+<Track id="fix-wiki-fractal-entry-and-context-ranking" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>W-1 wiki 子命令 codument-fractal 一级入口 + W-2 context 预算重要性排序（public-API 密度优先）</Goal>
+    <Description>用户指示修复 dogfood 两条最重要候选；管线规范名 codument-fractal（fractal 留兼容别名，decisions #1）。文档同步 + 本仓复扫对比。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T18:50:00Z</CreatedAt>
+    <UpdatedAt>2026-07-06T21:20:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="mcpserver"       domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+
+  <TaskSpace id="space_fix-wiki-fractal-entry-and-context-ranking" name="fix-wiki-fractal-entry-and-context-ranking" version="1">
+    <Description>codument-fractal 入口 → 预算排序与复扫收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="codument-fractal 一级入口" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="wiki --pipeline 与 build_wiki 规范名/别名" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 5 case 测试（delta llm-wiki-pipeline）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 CLI 分发 + 工具规范名/别名 + 文档同步" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">5 case 全过；legacy 路径零回归；手册（cli-reference/skills-and-wiki/mcp-tools）与 docs/modeling llm-wiki context 同步为 codument-fractal</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="context 预算重要性排序" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="排序改造与复扫" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 3 case 测试（delta dotnet-llm-wiki）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现排序 + 本仓复扫前后对比 + backlog W-1/W-2 划掉" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">3 case 全过（含确定性 tiebreak）；本仓复扫核心 namespace 入选、demo 微社群出局，对比如实记 findings；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

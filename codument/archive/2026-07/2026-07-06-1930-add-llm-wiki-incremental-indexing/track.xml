@@ -1,0 +1,58 @@
+<Track id="add-llm-wiki-incremental-indexing" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>文件级增量索引：git/hash 差异 → 按文件删除重建观测层事实，一致性与全量逐表相等（硬门禁），auto 模式默认</Goal>
+    <Description>mission harden-llm-wiki-engineering 的 G1 track。一致性优先，提速目标 ≥3x（单文件改动）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T20:41:33Z</CreatedAt>
+    <UpdatedAt>2026-07-06T16:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-incremental-indexing" name="add-llm-wiki-incremental-indexing" version="1">
+    <Description>差异与文件级重建 → 一致性门禁与 dogfood 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="差异与文件级重建" status="DONE" order="0">
+        <Description>IncrementalDiff（git 优先/hash 兜底）+ RemoveFileFactsAsync + IndexAsync 增量分支 + Summary 计数。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="增量路径" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写差异/删除/复用/兜底测试（delta 前 4 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现差异计算与增量分支" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">single-file-change/file-removed/fallback-full 断言全过；Summary 计数正确</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="一致性门禁与 dogfood 收口" status="DONE" order="1">
+        <Description>DumpFacts 逐表一致性（git 与 hash 两路径）+ 派生层新鲜 + 本仓 dogfood 提速数字 + 两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="一致性与 dogfood" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写一致性门禁/派生层测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现校验辅助 + dogfood 记录" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">consistency-gate（两路径）与 derived-layers-fresh 断言全过</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">dogfood：单文件改动增量 vs 全量耗时对比记 findings（目标 ≥3x，未达如实记录并给深化方向）；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

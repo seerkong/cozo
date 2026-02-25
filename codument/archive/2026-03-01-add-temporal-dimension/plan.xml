@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan>
+  <metadata>
+    <track_id>add-temporal-dimension</track_id>
+    <track_name>为 cozo-om 引入 Bi-temporal 时间维度</track_name>
+    <goal>将 om_property/om_edge 改造为 bi-temporal 结构，提供时间点快照查询和历史查询 API，重构 approval-flow demo 并新增 org-timeline demo</goal>
+    <created_at>2026-03-01</created_at>
+    <status>completed</status>
+    <commit_mode>auto</commit_mode>
+  </metadata>
+
+  <phases>
+    <phase id="P1" name="Schema 改造与基础 Temporal 写入" checkpoint="08bb5b78">
+      <goal>改造 om_property/om_edge 为 bi-temporal 结构，适配 setProperty/linkEntities 写入</goal>
+      <confirm protocol="yield-human-confirm" when="after" status="DONE" />
+      <tasks>
+        <task id="T1.1" name="OmValueType 新增 Validity 类型" status="DONE" priority="P0" commit="40c91253">
+          在 OmValueType 中新增 'Validity'，defineAttribute 支持 value_type: 'Validity'，om_attr_def 能存储该类型
+          <subtasks>
+            <subtask id="T1.1.1" name="编写 Validity 类型属性定义与读写测试" status="DONE"/>
+            <subtask id="T1.1.2" name="实现 OmValueType 扩展和 defineAttribute 适配" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.2" name="om_property bi-temporal 改造" status="DONE" priority="P0" commit="3bd5e18a">
+          将 om_property 从 { entity_id, attr_name => value } 改造为 { entity_id, attr_name, valid_time: Validity => value, tx_time }
+          <subtasks>
+            <subtask id="T1.2.1" name="编写 bi-temporal om_property 写入与读取测试" status="DONE"/>
+            <subtask id="T1.2.2" name="改造 initSchema 中 om_property 的 :create 语句" status="DONE"/>
+            <subtask id="T1.2.3" name="改造 setProperty：支持 options.validTime，默认使用 ASSERT" status="DONE"/>
+            <subtask id="T1.2.4" name="改造 getProperty：使用 @ NOW 查询当前有效值" status="DONE"/>
+            <subtask id="T1.2.5" name="改造 getEntityView：使用 @ NOW 查询所有属性" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.3" name="om_edge bi-temporal 改造" status="DONE" priority="P0" commit="e058d5ee">
+          将 om_edge 从 { from_id, rel_name, to_id => props } 改造为 { from_id, rel_name, to_id, valid_time: Validity => props, tx_time }
+          <subtasks>
+            <subtask id="T1.3.1" name="编写 bi-temporal om_edge 写入与读取测试" status="DONE"/>
+            <subtask id="T1.3.2" name="改造 initSchema 中 om_edge 的 :create 语句" status="DONE"/>
+            <subtask id="T1.3.3" name="改造 linkEntities：支持 options.validTime" status="DONE"/>
+            <subtask id="T1.3.4" name="新增 unlinkEntities API（RETRACT 语义）" status="DONE"/>
+            <subtask id="T1.3.5" name="改造 getNeighbors：使用 @ NOW 查询当前有效关系" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.4" name="Schema 迁移逻辑" status="DONE" priority="P0" commit="1a03aade">
+          initSchema 自动检测旧 schema 并执行 read-rebuild-reinsert 迁移
+          <subtasks>
+            <subtask id="T1.4.1" name="编写旧 schema 检测与迁移测试" status="DONE"/>
+            <subtask id="T1.4.2" name="实现 schema 版本检测（查询 om_property 列结构）" status="DONE"/>
+            <subtask id="T1.4.3" name="实现 read-rebuild-reinsert 迁移流程" status="DONE"/>
+            <subtask id="T1.4.4" name="实现迁移幂等性（新 schema 跳过迁移）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.5" name="现有测试适配" status="DONE" priority="P1">
+          确保所有现有测试在新 bi-temporal schema 下通过
+          <subtasks>
+            <subtask id="T1.5.1" name="逐个运行现有测试套件，修复因 schema 变更导致的失败" status="DONE"/>
+            <subtask id="T1.5.2" name="验证覆盖率 >80%" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <phase id="P2" name="Temporal 查询 API" checkpoint="20f70d45">
+      <goal>提供属性历史、时间点快照、关系历史等 temporal 查询能力</goal>
+      <confirm protocol="yield-human-confirm" when="after" status="DONE" />
+      <tasks>
+        <task id="T2.1" name="getPropertyHistory API" status="DONE" priority="P0" commit="d78f9b35">
+          返回指定属性的所有时间版本，支持 from/to 时间范围过滤
+          <subtasks>
+            <subtask id="T2.1.1" name="编写 getPropertyHistory 测试（完整历史 + 范围过滤）" status="DONE"/>
+            <subtask id="T2.1.2" name="实现 getPropertyHistory" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.2" name="getPropertyAsOf API" status="DONE" priority="P0" commit="374fe5d3">
+          利用 CozoDB @ timestamp 语法返回指定时间点的属性值
+          <subtasks>
+            <subtask id="T2.2.1" name="编写 getPropertyAsOf 测试（历史点、未来点、无数据点）" status="DONE"/>
+            <subtask id="T2.2.2" name="实现 getPropertyAsOf" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.3" name="getEntityViewAsOf API" status="DONE" priority="P0" commit="60036219">
+          返回实体在指定时间点的完整快照
+          <subtasks>
+            <subtask id="T2.3.1" name="编写 getEntityViewAsOf 测试" status="DONE"/>
+            <subtask id="T2.3.2" name="实现 getEntityViewAsOf（含 computed 属性 asOf 上下文传递）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.4" name="getNeighborsAsOf API" status="DONE" priority="P0" commit="00aa00e2">
+          查询指定时间点的关系邻居
+          <subtasks>
+            <subtask id="T2.4.1" name="编写 getNeighborsAsOf 测试（含 RETRACT 过滤验证）" status="DONE"/>
+            <subtask id="T2.4.2" name="实现 getNeighborsAsOf" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.5" name="getEdgeHistory API" status="DONE" priority="P0" commit="cb449084">
+          返回关系的所有时间版本，支持指定 toId 和时间范围
+          <subtasks>
+            <subtask id="T2.5.1" name="编写 getEdgeHistory 测试（全历史 + 指定 toId + 范围过滤）" status="DONE"/>
+            <subtask id="T2.5.2" name="实现 getEdgeHistory" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <phase id="P3" name="行为层集成与类型声明">
+      <goal>确保 Action/Constraint/Computed 与 temporal 协同工作，更新 TypeScript 声明</goal>
+      <tasks>
+        <task id="T3.1" name="ActionContext temporal 集成" status="DONE" priority="P0" commit="00a02bec">
+          ctx.setProperty/getProperty 支持 temporal 参数，约束基于 @ NOW 校验
+          <subtasks>
+            <subtask id="T3.1.1" name="编写 Action 中 temporal setProperty/getProperty 测试" status="DONE"/>
+            <subtask id="T3.1.2" name="改造 ActionContext 中的 setProperty/getProperty" status="DONE"/>
+            <subtask id="T3.1.3" name="验证约束校验基于最新有效值" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.2" name="Computed 属性 asOf 上下文" status="DONE" priority="P1" commit="a6bd4573">
+          getPropertyAsOf 的 computed fallback 传递 asOf 上下文给 compute 函数
+          <subtasks>
+            <subtask id="T3.2.1" name="编写 computed + asOf 交互测试" status="DONE"/>
+            <subtask id="T3.2.2" name="实现 compute 函数的 asOf 上下文传递" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.3" name="TypeScript 类型声明更新" status="DONE" priority="P0" commit="bd7ed7d0">
+          更新 cozo-om.d.ts：OmValueType 新增 Validity、新 API 签名、options 类型
+          <subtasks>
+            <subtask id="T3.3.1" name="更新 cozo-om.d.ts 所有新增/变更的类型和 API" status="DONE"/>
+            <subtask id="T3.3.2" name="更新 om-exports.test.js 验证新导出" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <phase id="P4" name="Viz Demo 更新" checkpoint="d4f64311">
+      <goal>重构 approval-flow demo 使用 om temporal API，新增 org-timeline demo</goal>
+      <confirm protocol="yield-human-confirm" when="after" status="DONE" />
+      <tasks>
+        <task id="T4.1" name="重构 approval-flow demo" status="DONE" priority="P0" commit="f56aec95">
+          移除 raw CozoDB 时间旅行代码，替换为 om temporal API
+          <subtasks>
+            <subtask id="T4.1.1" name="移除 approval_request_ledger 关系和 raw :put/:get 脚本" status="DONE"/>
+            <subtask id="T4.1.2" name="使用 setProperty+validTime 写入审批状态" status="DONE"/>
+            <subtask id="T4.1.3" name="使用 getPropertyHistory/getPropertyAsOf 替换时间轴查询" status="DONE"/>
+            <subtask id="T4.1.4" name="验证时间轴展示结果与重构前一致" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T4.2" name="新增 org-timeline demo" status="DONE" priority="P0" commit="e3bd4fcd">
+          组织架构变迁 demo：部门调整、人员调动时间轴、任意时间点快照
+          <subtasks>
+            <subtask id="T4.2.1" name="设计 org-timeline 类型/关系/种子数据" status="DONE"/>
+            <subtask id="T4.2.2" name="实现 demo 注册、schema 定义、数据导入" status="DONE"/>
+            <subtask id="T4.2.3" name="实现时间点快照查询和人员调动时间轴查询" status="DONE"/>
+            <subtask id="T4.2.4" name="注册 demo 到 index.js" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T4.3" name="E2E 测试更新" status="DONE" priority="P1" commit="2bc2e91b">
+          更新 Playwright E2E 测试覆盖重构后的 approval-flow 和新增的 org-timeline
+          <subtasks>
+            <subtask id="T4.3.1" name="更新 approval-flow E2E 测试" status="DONE"/>
+            <subtask id="T4.3.2" name="新增 org-timeline E2E 测试" status="DONE"/>
+          </subtasks>
+        </task>
+
+        <task id="T4.4" name="稳定 viz 并发执行" status="DONE" priority="P1" commit="92501480">
+          修复 /api/run 并发请求导致的 cozo-om registry 竞争，确保 Playwright 并行 e2e 稳定
+          <subtasks>
+            <subtask id="T4.4.1" name="串行化 /api/run 以避免 registry interleaving" status="DONE"/>
+            <subtask id="T4.4.2" name="运行 Playwright e2e 验证稳定性" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+  </phases>
+</plan>

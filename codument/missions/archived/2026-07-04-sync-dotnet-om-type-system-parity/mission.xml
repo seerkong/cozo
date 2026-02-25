@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="sync-dotnet-om-type-system-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>将 cozo-lib-dotnet 的 OM 类型系统底层内核语义同步到 cozo-lib-bun 参考设计，消除移植遗漏并明确任何有意差异。</Goal>
+    <Description>围绕 mixin 属性继承、继承属性 override 约束、Validity 属性、alias rename 兼容、DefineType 重定义语义、多态查询/API surface 和关系 direction 漂移创建跨 track mission，按证据、实现、验证顺序收敛 .NET 与 Bun 的类型系统功能设计。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>3</Revision>
+    <CreatedAt>2026-07-01T16:00:16Z</CreatedAt>
+    <UpdatedAt>2026-07-01T16:10:42Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="input" name="bun-om" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="behaviors" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_sync-dotnet-om-type-system-parity" name="sync-dotnet-om-type-system-parity" version="1" cdt:child-mode="dag">
+    <Description>Synchronize .NET OM type-system kernel semantics with Bun OM reference behavior.</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="证据盘点与 parity 矩阵" status="DONE" order="0">
+        <Description>盘点 Bun 参考规范、Bun tests、.NET 当前实现和 Codument 行为真源，形成可执行 gap matrix。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="创建并执行类型系统 parity audit track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="audit-dotnet-om-type-system-parity"/>
+          </Task>
+          <Task id="G1-T2" name="确认每个 gap 的 reference source 与验收测试" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="属性继承与 mixin 语义同步" status="SUPERSEDED" order="1">
+        <Description>补齐 mixin-contributed attributes、继承属性合成顺序、override tightening 规则和 description 继承。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 attribute semantics sync track" status="SUPERSEDED" order="0">
+            <cdt:TrackLink state="candidate" id="sync-dotnet-om-attribute-semantics"/>
+          </Task>
+          <Task id="G2-T2" name="验证 mixin、ancestor、self 属性合成和 override 限制" status="SUPERSEDED" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="Alias 与 Validity 语义同步" status="SUPERSEDED" order="2">
+        <Description>补齐 alias fallback/canonicalization 和 Validity attribute 读写校验，保证 rename 和 temporal value 兼容。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 alias/validity sync track" status="SUPERSEDED" order="0">
+            <cdt:TrackLink state="candidate" id="sync-dotnet-om-alias-validity-semantics"/>
+          </Task>
+          <Task id="G3-T2" name="验证旧 alias-stored 属性和 Validity 属性写入读取" status="SUPERSEDED" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="类型重定义与查询 surface 同步" status="SUPERSEDED" order="3">
+        <Description>修复 DefineType omitted-vs-explicit 语义，并补齐对外可观察的类型系统查询/API surface。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 type query/redefinition sync track" status="SUPERSEDED" order="0">
+            <cdt:TrackLink state="candidate" id="sync-dotnet-om-type-query-redefinition"/>
+          </Task>
+          <Task id="G4-T2" name="验证 parent/mixin preservation、resolve APIs、polymorphic query surface" status="SUPERSEDED" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="关系 direction 语义收敛" status="SUPERSEDED" order="4">
+        <Description>针对 directed=false 的 Bun/.NET drift 做显式决策，必要时实现或文档化共同契约。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 relation direction reconciliation track" status="SUPERSEDED" order="0">
+            <cdt:TrackLink state="candidate" id="reconcile-om-relation-direction-parity"/>
+          </Task>
+          <Task id="G5-T2" name="验证 directed relation contract 在两端清晰可观测" status="SUPERSEDED" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G6" name="最终验证与行为沉淀" status="DONE" order="5">
+        <Description>运行 .NET 与 Bun 参考测试，更新行为真源，生成最终 parity report。</Description>
+        <SubNodes>
+          <Task id="G6-T1" name="创建并执行 final parity verification track" status="SUPERSEDED" order="0">
+            <cdt:TrackLink state="candidate" id="verify-dotnet-om-type-system-parity"/>
+          </Task>
+          <Task id="G6-T2" name="完成 mission 最终验证报告和 archive-ready evidence" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_sync-dotnet-om-type-system-parity">
+      <Node id="G2">
+        <After ref="G1"/>
+      </Node>
+      <Node id="G3">
+        <After ref="G1"/>
+      </Node>
+      <Node id="G4">
+        <After ref="G1"/>
+      </Node>
+      <Node id="G5">
+        <After ref="G1"/>
+      </Node>
+      <Node id="G6">
+        <After ref="G2"/>
+        <After ref="G3"/>
+        <After ref="G4"/>
+        <After ref="G5"/>
+      </Node>
+    </Dag>
+  </Schedule>
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block"/>
+    </Hook>
+  </Hooks>
+</Mission>

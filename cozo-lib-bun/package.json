@@ -1,0 +1,53 @@
+{
+  "name": "cozo-lib-bun",
+  "version": "0.7.6",
+  "description": "Cozo database for Bun runtime",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "cozo-om.js",
+    "cozo-om.d.ts",
+    "cozo-dsl.js",
+    "cozo-dsl.d.ts",
+    "README.md",
+    "constraint-design.md",
+    "ontology-modeling-design.md",
+    "dsl-design.md",
+    "build-native.sh",
+    "example.js",
+    "oop-prototype.js",
+    "demo-procurement.js",
+    "demo-hr.js",
+    "demo-crm.js",
+    "demo-it-asset.js",
+    "native/"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "build-native": "bash ./build-native.sh",
+    "example": "bun example.js",
+    "example:oop": "bun oop-prototype.js",
+    "demo:procurement": "bun demo-procurement.js",
+    "demo:hr": "bun demo-hr.js",
+    "demo:crm": "bun demo-crm.js",
+    "demo:it-asset": "bun demo-it-asset.js"
+  },
+  "author": "Ziyang Hu",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cozodb/cozo.git"
+  },
+  "keywords": [
+    "database",
+    "datalog",
+    "graph",
+    "bun"
+  ],
+  "bugs": {
+    "url": "https://github.com/cozodb/cozo/issues"
+  },
+  "homepage": "https://www.cozodb.org"
+}

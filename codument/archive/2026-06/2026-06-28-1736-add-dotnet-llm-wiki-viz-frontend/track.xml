@@ -1,0 +1,43 @@
+<Track id="add-dotnet-llm-wiki-viz-frontend" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>新增 cozo-lib-dotnet-llm-wiki-viz 前端工作台</Goal>
+    <Description>创建 Vue/Vite 前端，接入 cozo-wiki serve API，提供搜索、图、wiki、NamedQuery 与 tools 调试视图。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T13:45:00Z</CreatedAt>
+    <UpdatedAt>2026-06-28T14:36:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="llm-wiki-viz" domain="frontend" path="vfs://@/cozo-lib-dotnet-llm-wiki-viz/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-viz-frontend" name="add-dotnet-llm-wiki-viz-frontend" version="1">
+    <Description>Add LLM wiki visualization frontend.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="前端脚手架" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="创建 Vite/Vue/TS 配置" status="DONE" order="0" priority="P0"/>
+          <Task id="T1.2" name="实现 API client" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="工作台 UI" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="实现状态/索引/搜索视图" status="DONE" order="0" priority="P0"/>
+          <Task id="T2.2" name="实现 GraphView/wiki/query/tools tabs" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="前端验证" status="DONE" order="2">
+        <SubNodes>
+          <Task id="T3.1" name="运行 npm install/build" status="DONE" order="0" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Hooks/>
+</Track>

@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Core\Cozo.DotNet.LlmWiki.Core.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Indexing\Cozo.DotNet.LlmWiki.Indexing.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Wiki\Cozo.DotNet.LlmWiki.Wiki.csproj" />
+    <ProjectReference Include="..\..\..\cozo-lib-dotnet\Cozo.DotNet.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.SemanticParsing\Cozo.DotNet.LlmWiki.SemanticParsing.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.VectorSearch\Cozo.DotNet.LlmWiki.VectorSearch.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Tools\Cozo.DotNet.LlmWiki.Tools.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Server\Cozo.DotNet.LlmWiki.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hook handlers stay internal (zero new public types); tests drive them directly. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>depa-wiki</AssemblyName>
+    <RootNamespace>Cozo.DotNet.LlmWiki.McpServer</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,44 @@
+<Track id="extract-llm-wiki-tool-runner" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>抽出 cozo-wiki 共享 tool runner 供 CLI、MCP 与未来 HTTP server 复用</Goal>
+    <Description>新增 Cozo.DotNet.LlmWiki.Tools package，迁移 LlmWikiToolRunner、storage options 和 JSON/argument helpers，并保持现有 CLI/MCP 行为兼容。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T13:21:05Z</CreatedAt>
+    <UpdatedAt>2026-06-28T13:30:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+  <TaskSpace id="space_extract-llm-wiki-tool-runner" name="extract-llm-wiki-tool-runner" version="1">
+    <Description>Extract shared LLM wiki tool runner.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="共享工具包" status="DONE" order="0">
+        <Description>新增 Tools package 并迁移 runner/helper 类型。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="创建 Tools csproj 并注册 solution" status="DONE" order="0" priority="P0"/>
+          <Task id="T1.2" name="迁移 tool runner 与 storage helpers" status="DONE" order="1" priority="P0"/>
+          <Task id="T1.3" name="更新 MCP server 复用 shared tools" status="DONE" order="2" priority="P0"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="兼容验证" status="DONE" order="1">
+        <Description>验证 build/test 和工具元数据兼容。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="补充 smoke assertions" status="DONE" order="0" priority="P1"/>
+          <Task id="T2.2" name="运行 dotnet build/test" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Hooks/>
+</Track>

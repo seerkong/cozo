@@ -1,0 +1,19 @@
+<behaviors capability="dotnet-llm-wiki-onnx-embedding" version="1">
+  <requirement id="minilm-provider">
+    <statement>系统 SHALL 随包分发 sentence-transformers/all-MiniLM-L6-v2，并提供本地 ONNX embedding provider。</statement>
+    <suite id="provider" name="Provider">
+      <case id="embed-local">
+        <given>模型资产存在于包目录</given>
+        <when>调用 OnnxMiniLmEmbeddingProvider.EmbedAsync</when>
+        <then>系统 SHALL 返回 384 维归一化 embedding</then>
+      </case>
+    </suite>
+    <suite id="vector-search" name="Vector search">
+      <case id="default-provider">
+        <given>模型资产存在</given>
+        <when>创建默认 CozoVectorSearchService</when>
+        <then>系统 SHALL 优先使用 all-MiniLM-L6-v2 ONNX provider</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

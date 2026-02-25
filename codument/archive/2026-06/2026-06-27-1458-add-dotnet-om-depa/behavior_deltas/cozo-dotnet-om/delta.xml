@@ -1,0 +1,91 @@
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/depa-capsule-layout">
+    <requirement id="depa-capsule-layout">
+      <statement>系统 SHALL 在 cozo-lib-dotnet/src/Om/ 中以 DEPA capsule 结构实现 C# OM，内部按 Contracts、Runtime、Inputs、Logic、Support、Internals 分层。</statement>
+      <suite id="layout" name="DEPA 目录结构">
+        <case id="expected-directories-exist">
+          <given>开发者查看 cozo-lib-dotnet/src/Om/</given>
+          <when>C# OM track 完成实现</when>
+          <then>系统 SHALL 提供 guidance/depa-capsule-layout.md 所定义的目录结构</then>
+        </case>
+        <case id="runtime-is-data-carrier">
+          <given>实现中存在 CozoOmRuntime</given>
+          <when>审查 Runtime 目录</when>
+          <then>CozoOmRuntime SHALL 是依赖与选项的数据载体，不承载本体业务方法</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/effect-boundary">
+    <requirement id="effect-boundary">
+      <statement>系统 SHALL 通过 ICozoOmStore 隔离 CozoDB IO，使 OM 核心逻辑不直接依赖 CozoDb 或 native interop。</statement>
+      <suite id="effect-contract" name="Effect contract">
+        <case id="logic-does-not-call-cozodb">
+          <given>开发者审查 cozo-lib-dotnet/src/Om/Logic/</given>
+          <when>查找 CozoDb、CozoNative 或直接 Run 调用</when>
+          <then>Logic 层 SHALL 不直接调用 CozoDb 或 CozoNative</then>
+        </case>
+        <case id="support-wraps-cozodb">
+          <given>开发者审查 cozo-lib-dotnet/src/Om/Support/CozoDbOmStore.cs</given>
+          <when>执行 OM API 触发 CozoScript 查询</when>
+          <then>CozoDbOmStore SHALL 作为 ICozoOmStore 的具体 effect 实现调用 CozoDb</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/node-om-parity">
+    <requirement id="node-om-parity">
+      <statement>系统 SHALL 为 .NET 调用方提供与 Node OM 同等的本体论封装能力。</statement>
+      <suite id="schema-and-instance-parity" name="Schema and instance parity">
+        <case id="schema-entity-relation-core">
+          <given>调用方使用 C# OM 初始化 schema</given>
+          <when>定义类型、属性、关系并创建实体、属性和边</when>
+          <then>系统 SHALL 以与 Node OM 兼容的 Cozo relation 语义持久化并读取这些断言</then>
+        </case>
+        <case id="temporal-versioning-permission-rules">
+          <given>Node OM 已支持 temporal、schema versioning、permission 和 existential rules</given>
+          <when>C# OM 对应能力完成</when>
+          <then>系统 SHALL 提供同等可观测行为或明确记录任何有意差异</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/existential-rule-scope">
+    <requirement id="existential-rule-scope">
+      <statement>系统 SHALL 在 C# OM 中保持 Node OM v1 的存在规则范围：仅支持 exists { rel, direction?, toType } 的关系边存在性规则。</statement>
+      <suite id="existential-rules" name="Existential rules">
+        <case id="relationship-head-supported">
+          <given>调用方定义存在规则 forEach type X exists relation R to type Y</given>
+          <when>执行 check 或 materialize</when>
+          <then>系统 SHALL 检测缺失关系边并在 materialize 模式下创建确定性 Skolem 目标实体和关系边</then>
+        </case>
+        <case id="attribute-head-is-non-goal">
+          <given>调用方需要每个实体具备某属性</given>
+          <when>选择建模方式</when>
+          <then>系统 SHALL 继续通过 required 属性与 validation 表达属性存在性，而不是扩展 existential rule head</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/dotnet-tests-and-docs">
+    <requirement id="dotnet-tests-and-docs">
+      <statement>系统 SHALL 为 C# OM 提供可运行的测试与基础使用文档。</statement>
+      <suite id="verification" name="Verification">
+        <case id="tests-cover-core-parity">
+          <given>实现者完成 C# OM 功能切片</given>
+          <when>运行 .NET 测试</when>
+          <then>测试 SHALL 覆盖该切片的 Node OM parity 行为</then>
+        </case>
+        <case id="readme-documents-usage">
+          <given>开发者阅读 cozo-lib-dotnet README</given>
+          <when>查找 OM 使用方式</when>
+          <then>README SHALL 展示最小 C# OM 初始化、定义 schema、创建实体和查询的示例</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

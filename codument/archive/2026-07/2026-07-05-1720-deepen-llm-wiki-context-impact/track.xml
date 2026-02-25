@@ -1,0 +1,67 @@
+<Track id="deepen-llm-wiki-context-impact" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>context/impact 深图化：分层影响+方向+minConfidence+风险评级+执行流关联；symbol_context 富化；修复 caller 重载归属缺陷</Goal>
+    <Description>mission expand-llm-wiki-agent-tools 的 G3 第二 track。消化 P0 交接缺口①③。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T09:20:41Z</CreatedAt>
+    <UpdatedAt>2026-07-05T14:20:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+  </Ports>
+
+  <TaskSpace id="space_deepen-llm-wiki-context-impact" name="deepen-llm-wiki-context-impact" version="1">
+    <Description>caller 修复与 Om 深化 API → 工具面升级收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="caller 修复与 Om 深化 API" status="DONE" order="0">
+        <Description>缺口① CallResolver 行区间归属修复；DeepImpactAsync（分层/方向/风险/processes）；SymbolContext 富化。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="caller 归属修复" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写重载归属回归测试（delta overload case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现行区间归属修复" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">同名重载各自区间内的调用点 caller 归属正确；既有测试不回归</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="DeepImpact 与 context 富化 API" status="DONE" order="1" priority="P0">
+            <SubNodes>
+              <Task id="T1.2.1" name="编写分层/方向/过滤/风险/有界测试（delta 前 5 case API 层）" status="DONE" order="0"/>
+              <Task id="T1.2.2" name="实现 DeepImpactAsync 与 SymbolContext 富化" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">impact-layered/min-confidence/risk-rating/layer-bounded 与 context-with-processes API 断言全过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="工具面升级收口" status="DONE" order="1">
+        <Description>impact_of_change/symbol_context 参数与输出升级（add-only），smoke 与两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="工具升级" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写工具层测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现参数与输出升级" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">两工具升级后 14 工具 smoke 全过；旧调用（不带新参）兼容；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

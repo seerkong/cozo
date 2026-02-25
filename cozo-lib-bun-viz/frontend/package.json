@@ -1,0 +1,27 @@
+{
+  "name": "@cozo/ontology-viz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tanstack/vue-table": "^8.21.3",
+    "@univerjs/engine-formula": "^0.15.1",
+    "@univerjs/preset-sheets-core": "^0.15.1",
+    "@univerjs/presets": "^0.15.1",
+    "@he-tree/vue": "^2.10.1",
+    "vis-data": "^7.1.9",
+    "vis-network": "^9.1.9",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "typescript": "^5.4.5",
+    "vite": "^6.0.0"
+  }
+}

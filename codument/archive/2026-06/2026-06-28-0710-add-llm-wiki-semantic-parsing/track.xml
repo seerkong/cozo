@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-llm-wiki-semantic-parsing" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-lib-dotnet-llm-wiki 引入暂时只支持 Tree-sitter 的语义解析 capsule</Goal>
+    <Description>新增 SemanticParsing project、Tree-sitter CLI adapter、diagnostics 和 MCP parser tools。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T03:58:50Z</CreatedAt>
+    <UpdatedAt>2026-06-28T04:10:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-llm-wiki-semantic-parsing" name="add-llm-wiki-semantic-parsing" version="1">
+    <Description>Tree-sitter semantic parsing MVP</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="SemanticParsing package" status="DONE" order="0">
+        <Description>创建 package、模型和 Tree-sitter CLI adapter。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="创建 project 与模型" status="DONE" order="0" priority="P0">
+            <Description>新增 SemanticParsing csproj 和 parse request/result/diagnostic/node 模型。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">SemanticParsing project 加入 solution</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">模型不依赖 Cozo runtime</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 Tree-sitter CLI adapter" status="DONE" order="1" priority="P0">
+            <Description>实现 parser status 和 parse file；CLI 缺失时返回 diagnostic。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">parser_status 可报告 tree-sitter CLI 可用性</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">parse_file 在 CLI 缺失时不抛未处理异常</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="MCP 接入与验证" status="DONE" order="1">
+        <Description>把 parser tools 接入 McpServer 并补 smoke tests。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="MCP parser tools" status="DONE" order="0" priority="P0">
+            <Description>新增 parser_status 和 parse_file MCP tools。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">tools/list 包含 parser_status 和 parse_file</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="测试与文档" status="DONE" order="1" priority="P0">
+            <Description>更新 smoke tests 和 README。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">dotnet build/test 通过</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">codument validate add-llm-wiki-semantic-parsing --strict 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

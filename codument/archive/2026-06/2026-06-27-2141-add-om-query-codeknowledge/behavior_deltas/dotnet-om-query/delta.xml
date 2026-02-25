@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-om-query" version="1">
+  <upsert selector="behavior://dotnet-om-query/requirements/named-query">
+    <requirement id="named-query">
+      <statement>The .NET OM SHALL provide a NamedQuery registry and execution API backed by Portable Datalog and CozoScript compilation.</statement>
+      <suite id="execute-named-query" name="NamedQuery execution">
+        <case id="registered-query">
+          <given>A NamedQuery with Portable Datalog source, relation mappings, parameter schema, and table result shape</given>
+          <when>The query is executed with valid parameters</when>
+          <then>The system SHALL parse, validate, compile, execute through ICozoOmStore, and return table rows with diagnostics</then>
+        </case>
+        <case id="invalid-query">
+          <given>A malformed Portable Datalog query</given>
+          <when>The query is executed</when>
+          <then>The system SHALL return structured diagnostics and SHALL NOT execute partial CozoScript</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

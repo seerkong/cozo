@@ -1,0 +1,131 @@
+<behaviors capability="cozo-dotnet-om" version="1">
+  <requirement id="depa-capsule-layout">
+    <statement>系统 SHALL 在 cozo-lib-dotnet/src/Om/ 中以 DEPA capsule 结构实现 C# OM，内部按 Contracts、Runtime、Inputs、Logic、Support、Internals 分层。</statement>
+    <suite id="layout" name="DEPA 目录结构">
+      <case id="expected-directories-exist">
+        <given>开发者查看 cozo-lib-dotnet/src/Om/</given>
+        <when>C# OM track 完成实现</when>
+        <then>系统 SHALL 提供 guidance/depa-capsule-layout.md 所定义的目录结构</then>
+      </case>
+      <case id="runtime-is-data-carrier">
+        <given>实现中存在 CozoOmRuntime</given>
+        <when>审查 Runtime 目录</when>
+        <then>CozoOmRuntime SHALL 是依赖与选项的数据载体，不承载本体业务方法</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="effect-boundary">
+    <statement>系统 SHALL 通过 ICozoOmStore 隔离 CozoDB IO，使 OM 核心逻辑不直接依赖 CozoDb 或 native interop。</statement>
+    <suite id="effect-contract" name="Effect contract">
+      <case id="logic-does-not-call-cozodb">
+        <given>开发者审查 cozo-lib-dotnet/src/Om/Logic/</given>
+        <when>查找 CozoDb、CozoNative 或直接 Run 调用</when>
+        <then>Logic 层 SHALL 不直接调用 CozoDb 或 CozoNative</then>
+      </case>
+      <case id="support-wraps-cozodb">
+        <given>开发者审查 cozo-lib-dotnet/src/Om/Support/CozoDbOmStore.cs</given>
+        <when>执行 OM API 触发 CozoScript 查询</when>
+        <then>CozoDbOmStore SHALL 作为 ICozoOmStore 的具体 effect 实现调用 CozoDb</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="node-om-parity">
+    <statement>系统 SHALL 为 .NET 调用方提供与 Node OM 同等的本体论封装能力。</statement>
+    <suite id="schema-and-instance-parity" name="Schema and instance parity">
+      <case id="schema-entity-relation-core">
+        <given>调用方使用 C# OM 初始化 schema</given>
+        <when>定义类型、属性、关系并创建实体、属性和边</when>
+        <then>系统 SHALL 以与 Node OM 兼容的 Cozo relation 语义持久化并读取这些断言</then>
+      </case>
+      <case id="temporal-versioning-permission-rules">
+        <given>Node OM 已支持 temporal、schema versioning、permission 和 existential rules</given>
+        <when>C# OM 对应能力完成</when>
+        <then>系统 SHALL 提供同等可观测行为或明确记录任何有意差异</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="existential-rule-scope">
+    <statement>系统 SHALL 在 C# OM 中保持 Node OM v1 的存在规则范围：仅支持 exists { rel, direction?, toType } 的关系边存在性规则。</statement>
+    <suite id="existential-rules" name="Existential rules">
+      <case id="relationship-head-supported">
+        <given>调用方定义存在规则 forEach type X exists relation R to type Y</given>
+        <when>执行 check 或 materialize</when>
+        <then>系统 SHALL 检测缺失关系边并在 materialize 模式下创建确定性 Skolem 目标实体和关系边</then>
+      </case>
+      <case id="attribute-head-is-non-goal">
+        <given>调用方需要每个实体具备某属性</given>
+        <when>选择建模方式</when>
+        <then>系统 SHALL 继续通过 required 属性与 validation 表达属性存在性，而不是扩展 existential rule head</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="dotnet-tests-and-docs">
+    <statement>系统 SHALL 为 C# OM 提供可运行的测试与基础使用文档。</statement>
+    <suite id="verification" name="Verification">
+      <case id="tests-cover-core-parity">
+        <given>实现者完成 C# OM 功能切片</given>
+        <when>运行 .NET 测试</when>
+        <then>测试 SHALL 覆盖该切片的 Node OM parity 行为</then>
+      </case>
+      <case id="readme-documents-usage">
+        <given>开发者阅读 cozo-lib-dotnet README</given>
+        <when>查找 OM 使用方式</when>
+        <then>README SHALL 展示最小 C# OM 初始化、定义 schema、创建实体和查询的示例</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="type-system-parity">
+    <statement>系统 SHALL keep the .NET OM type-system kernel semantically aligned with the Bun OM reference design for mixins, inherited attributes, aliases, validity values, and type queries.</statement>
+    <suite id="effective-attributes" name="Effective Attribute Definitions">
+      <case id="mixin-attributes-are-effective">
+        <given>A mixin defines attribute `created_by` and a type attaches that mixin</given>
+        <when>A caller sets `created_by` on an entity of that type</when>
+        <then>The .NET OM SHALL accept the property as a defined effective attribute</then>
+      </case>
+      <case id="inherited-attribute-override-is-safe">
+        <given>A parent type defines a required String attribute</given>
+        <when>A child type redefines that attribute as optional or as a different value type</when>
+        <then>The .NET OM SHALL reject the unsafe override</then>
+      </case>
+    </suite>
+    <suite id="rename-and-temporal-values" name="Rename And Temporal Values">
+      <case id="alias-stored-property-fallback">
+        <given>Legacy data stores a property under an attribute alias name</given>
+        <when>A caller reads or validates the canonical attribute</when>
+        <then>The .NET OM SHALL use alias fallback so renamed data remains observable</then>
+      </case>
+      <case id="validity-attribute-values">
+        <given>An attribute is defined with value type `Validity`</given>
+        <when>A caller sets the attribute with a supported validity-like input</when>
+        <then>The .NET OM SHALL store a Cozo validity value and pass validation</then>
+      </case>
+    </suite>
+    <suite id="relation-direction" name="Relation Direction">
+      <case id="undirected-relations-accept-reverse-endpoints">
+        <given>A relation is defined with `directed=false` from type A to type B</given>
+        <when>A caller links a B entity to an A entity through that relation</when>
+        <then>The .NET OM SHALL accept the link as an undirected relation endpoint match</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="delete-entity">
+    <statement>OM SHALL 提供 DeleteEntityAsync：在单事务内物理删除实体及其全部属性行与出入关系边，不留孤儿数据；删除不存在的实体 SHALL 无害幂等；外部代码不得绕过该 API 直删 om_* 存储行。</statement>
+    <suite id="delete" name="实体删除">
+      <case id="delete-cascades">
+        <given>实体带多个属性与出入边</given>
+        <when>DeleteEntityAsync</when>
+        <then>om_entity/om_property/om_edge 中该实体相关行 SHALL 全部清除且在同一事务内</then>
+      </case>
+      <case id="delete-idempotent">
+        <given>不存在的实体 id</given>
+        <when>DeleteEntityAsync</when>
+        <then>SHALL 无害返回（不抛错）</then>
+      </case>
+      <case id="depa-cleanup-no-orphans">
+        <given>DEPA scan 物化的 violation 在修复后过期</given>
+        <when>下一轮 scan 清理</when>
+        <then>清理 SHALL 经 DeleteEntityAsync 执行且 om_property 无孤儿残留</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

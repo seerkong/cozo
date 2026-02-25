@@ -1,0 +1,63 @@
+<behavior-patch capability="llm-wiki-pipeline" version="1">
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/llm-client">
+    <requirement id="llm-client">
+      <statement>系统 SHALL 提供 LLM 客户端 capsule：统一 CompleteAsync 契约、OpenAI 兼容与 Anthropic 两类 provider（base-url/model/key 可配）、可用性一等公民（无 key/离线时 IsAvailable=false 且带原因，不抛错）。</statement>
+      <suite id="client" name="LLM 客户端">
+        <case id="openai-compatible">
+          <given>配置了 OpenAI 兼容 base-url 与 key（mock HTTP）</given>
+          <when>CompleteAsync</when>
+          <then>SHALL 发送正确请求结构并返回文本</then>
+        </case>
+        <case id="unavailable-graceful">
+          <given>无任何 provider 配置</given>
+          <when>查询可用性</when>
+          <then>IsAvailable SHALL 为 false 且 UnavailableReason 非空，CompleteAsync 不被调用方触发时不抛</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/pipeline">
+    <requirement id="pipeline">
+      <statement>wiki 生成 SHALL 按四阶段执行：确定性图结构收集、社群主导归组（LLM 仅命名与有界归并评审：merge/rename/flag，禁移动单文件）、页面生成为确定性骨架加显式标记的 LLM 叙述段、索引页汇总；LLM 不可用时 SHALL 完整产出结构层（code-map/overview 骨架），叙述段标记 pending；输出默认落 .cozo-wiki/docs-preview/ 镜像布局。</statement>
+      <suite id="pipeline" name="管线">
+        <case id="structure-without-llm">
+          <given>LLM 不可用</given>
+          <when>build wiki</when>
+          <then>SHALL 产出完整结构层页面（overview 骨架+code-map），叙述段标记 pending，退出成功</then>
+        </case>
+        <case id="grouping-community-led">
+          <given>已索引仓库含社群数据</given>
+          <when>Phase1 归组</when>
+          <then>归组 SHALL 以社群划分为基础；LLM 评审动作 SHALL 限于 merge/rename/flag</then>
+        </case>
+        <case id="narrative-marked">
+          <given>LLM 可用（mock）</given>
+          <when>生成页面</when>
+          <then>叙述内容 SHALL 位于显式 llm 标记段内，骨架部分与 LLM 不可用时逐字一致</then>
+        </case>
+        <case id="preview-layout">
+          <given>默认参数 build</given>
+          <when>落盘</when>
+          <then>输出 SHALL 在 .cozo-wiki/docs-preview/ 下镜像 docs/ 布局（index.md 等）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/incremental">
+    <requirement id="incremental">
+      <statement>wiki 生成 SHALL 支持页级增量：.meta 记录 fromCommit 与每页 structureHash/narrativeInputsHash；重跑时结构未变页 SHALL 跳过重生成；force 参数 SHALL 强制全量。</statement>
+      <suite id="incr" name="增量">
+        <case id="unchanged-skipped">
+          <given>两次 build 之间无代码改动</given>
+          <when>第二次 build</when>
+          <then>所有页 SHALL 命中缓存跳过（计数为证）</then>
+        </case>
+        <case id="changed-page-rebuilt">
+          <given>某社群内文件发生改动并重索引</given>
+          <when>增量 build</when>
+          <then>仅受影响页 SHALL 重生成，其余跳过</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

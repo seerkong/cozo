@@ -1,0 +1,24 @@
+<behavior-patch capability="agent-sop-skills" version="1">
+  <upsert selector="behavior://agent-sop-skills/requirements/sop-skills">
+    <requirement id="sop-skills">
+      <statement>本项目执行中验证过的 SOP SHALL 沉淀为 .agents/skills/ 下的可复用 skill，每个 skill 语义单一、含实证教训，并引用（不复制）codument/std/sop/ 既有方法论。</statement>
+      <suite id="skill-set" name="skill 集合与格式">
+        <case id="four-skills-exist">
+          <given>.agents/skills/</given>
+          <when>沉淀完成后检查</when>
+          <then>SHALL 存在 subagent-orchestration、gap-loop-probe-design、codex-dual-eval、depa-rectification-loop 四个 skill 目录，各含带 name/description frontmatter 的 SKILL.md</then>
+        </case>
+        <case id="lessons-grounded">
+          <given>任一新 skill 正文</given>
+          <when>审阅其操作步骤</when>
+          <then>关键步骤 SHALL 附本项目实证教训（如最小公开面硬要求、approval-mode 自动 Cancel 坑、误报走标注侧），SHALL NOT 是无来源的通用建议</then>
+        </case>
+        <case id="reference-not-copy">
+          <given>与 codument/std/sop/（wave-exec/workflow/tdd 等）重叠的内容</given>
+          <when>比对新 skill 正文</when>
+          <then>新 skill SHALL 以路径引用既有 SOP，SHALL NOT 复制其正文形成第二真源</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

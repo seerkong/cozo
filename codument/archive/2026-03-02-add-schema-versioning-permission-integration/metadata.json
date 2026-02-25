@@ -1,0 +1,9 @@
+{
+  "track_id": "add-schema-versioning-permission-integration",
+  "type": "feature",
+  "status": "completed",
+  "commit_mode": "manual",
+  "created_at": "2026-03-01T11:05:31Z",
+  "updated_at": "2026-03-02T08:11:57Z",
+  "description": "实现本体 schema 版本化与迁移框架，并新增可视化演示页：本体论+权限集成、schema 版本化（不改动旧权限 demo）。"
+}

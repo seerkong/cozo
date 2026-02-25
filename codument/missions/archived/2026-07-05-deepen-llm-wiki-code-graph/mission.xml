@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="deepen-llm-wiki-code-graph" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-wiki 建立 GitNexus 级语义代码图地基：v2 图 schema、tree-sitter+Roslyn 混合解析（C#/TS/JS）、带 confidence 的调用消解、Cozo Louvain 社群检测与执行流提取</Goal>
+    <Description>P0 地基 mission。决策已定（2026-07-04 用户确认）：D1 混合解析（tree-sitter 原生统一 + Roslyn 增强 C#）、D2 首批 C#+TS/JS、D3 ck v2 schema 重设计+迁移、D4 CozoDB 内置 Louvain、D5 入口点=public API+Main/CLI+ASP.NET 路由/MCP 工具定义。后续 P1（expand-llm-wiki-agent-tools）、P2（add-llm-wiki-depa-fractal-wiki）依赖本 mission。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>11</Revision>
+    <CreatedAt>2026-07-04T18:29:44Z</CreatedAt>
+    <UpdatedAt>2026-07-05T08:20:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet" path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+  </Ports>
+  <TaskSpace id="space_deepen-llm-wiki-code-graph" name="deepen-llm-wiki-code-graph" version="1" cdt:child-mode="dag">
+    <Description>语义图地基 mission：v2 schema → 混合解析 ingestion → 调用消解 → 聚类与执行流 → 验证。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="证据盘点与设计定稿" status="DONE" order="0">
+        <Description>D1–D5 已定（见 decisions.md）；本组做落地前技术证据与设计文档定稿。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="spike：tree-sitter 原生 P/Invoke 绑定与 C#/TS grammar 动态库打包（runtimes/rid 模式）" status="DONE" order="0"/>
+          <Task id="G1-T2" name="spike：Roslyn 语义模型提取调用边的输出与 v2 schema 对齐样例" status="DONE" order="1"/>
+          <Task id="G1-T3" name="v2 图 schema 设计定稿（节点/边类型全集、confidence、固定规则算法输入适配、GitNexus schema 对照裁剪）" status="DONE" order="2"/>
+          <Task id="G1-T4" name="定稿首批 track 切片与验收门禁（12 工具回归、调用边抽样正确率）" status="DONE" order="3"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="v2 图 schema 与迁移" status="DONE" order="1">
+        <Description>Om.CodeKnowledge v2 relations（含 confidence 边）、重建式迁移、既有 12 工具适配与全量回归。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 CodeKnowledge v2 schema track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="redesign-codeknowledge-schema-v2"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="tree-sitter 统一解析 ingestion" status="DONE" order="2">
+        <Description>解析后端契约 + per-language extractor（C#/TS/JS），符号与结构边（DEFINES/HAS_METHOD/EXTENDS/IMPORTS）入 v2 图，替换正则提取主路径；CLI adapter 降级为备选后端。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 tree-sitter 原生 ingestion track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-treesitter-ingestion"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="调用消解与语义边" status="DONE" order="3">
+        <Description>导入绑定 → 跨文件符号匹配 → 接收者/构造推导，产出带 confidence 的 CALLS/ACCESSES/METHOD_OVERRIDES 边；Roslyn 后端增强 C# 置信度。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行统一调用消解 track（tree-sitter 基线，C#/TS/JS）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-call-resolution"/>
+          </Task>
+          <Task id="G4-T2" name="创建并执行 Roslyn C# 增强消解 track" status="DONE" order="1">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-roslyn-csharp-resolution"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="社群检测与执行流" status="DONE" order="4">
+        <Description>Cozo 内置 Louvain → Community/MEMBER_OF（内聚度元数据、可替换策略契约）；入口点（public API/Main/CLI/ASP.NET 路由/MCP 工具定义）→ 图遍历 → Process/STEP_IN_PROCESS，有界产出。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行社群检测 track（Cozo Louvain）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-community-detection"/>
+          </Task>
+          <Task id="G5-T2" name="创建并执行执行流提取 track" status="DONE" order="1">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-process-extraction"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G6" name="验证与收口" status="DONE" order="5">
+        <Description>对 cozo-lib-dotnet*（C#）与 viz 前端（TS）端到端索引：调用边抽样正确率、社群/执行流有界可解释、12 工具回归、行为沉淀。</Description>
+        <SubNodes>
+          <Task id="G6-T1" name="创建并执行图质量 E2E 验证 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-llm-wiki-code-graph-e2e"/>
+          </Task>
+          <Task id="G6-T2" name="mission 收口报告与 P1/P2 交接说明" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_deepen-llm-wiki-code-graph">
+      <Node id="G2"><After ref="G1"/></Node>
+      <Node id="G3"><After ref="G2"/></Node>
+      <Node id="G4"><After ref="G3"/></Node>
+      <Node id="G5"><After ref="G4"/></Node>
+      <Node id="G6"><After ref="G5"/></Node>
+    </Dag>
+  </Schedule>
+</Mission>

@@ -1,0 +1,9 @@
+{
+  "track_id": "add-temporal-dimension",
+  "type": "feature",
+  "status": "completed",
+  "commit_mode": "auto",
+  "created_at": "2026-03-01T12:00:00Z",
+  "updated_at": "2026-03-01T18:10:00Z",
+  "description": "为 cozo-om 层引入时间维度支持（bi-temporal 属性/关系、时间点快照查询 API），将 CozoDB 原生 Validity 能力提升为 om 层一等公民"
+}

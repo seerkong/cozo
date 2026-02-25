@@ -1,0 +1,77 @@
+<Track id="add-llm-wiki-llm-pipeline" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>LLM wiki 管线基建：LlmClient capsule（双 provider+可用性一等公民）、四阶段管线（社群主导归组、确定性骨架+llm 标记段）、页级增量、docs-preview 落盘</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G2 track。design.md 为 G1-T3 定稿全文。分形类目全形归 G3/G4。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T11:36:56Z</CreatedAt>
+    <UpdatedAt>2026-07-05T21:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="llm-client"      domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.LlmClient/"/>
+    <MaterialBundle role="output" name="wiki"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Wiki/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-llm-pipeline" name="add-llm-wiki-llm-pipeline" version="1">
+    <Description>LlmClient capsule → 管线与增量 → 回归收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="LlmClient capsule" status="DONE" order="0">
+        <Description>契约 + OpenAI 兼容/Anthropic provider + 可用性一等公民 + mock HTTP 单测（design §1）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="LlmClient 包" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写契约/两 provider/不可用降级测试（mock HTTP）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现包与配置解析" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">openai-compatible/unavailable-graceful case 断言全过；Anthropic 请求结构正确（mock）</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="管线与增量" status="DONE" order="1">
+        <Description>四阶段管线（overview/code-map 先导页）、docs-preview 落盘、页级增量、build_wiki 工具升级（design §2-§4）。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="四阶段管线与先导页" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写管线测试（structure-without-llm/grouping/narrative-marked/preview-layout）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现管线与页面模板" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">pipeline suite 4 case 断言全过；LLM 不可用完整出结构层</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="页级增量与工具升级" status="DONE" order="1" priority="P0">
+            <SubNodes>
+              <Task id="T2.2.1" name="编写增量测试（unchanged-skipped/changed-page-rebuilt）" status="DONE" order="0"/>
+              <Task id="T2.2.2" name="实现 .meta 哈希增量与 build_wiki 参数" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">incremental suite 2 case 断言全过；force 全量生效</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="回归收口" status="DONE" order="2">
+        <Description>两侧全量回归 + 15 工具 smoke（build_wiki 升级不回归）。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="全量回归" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">两侧测试套件全绿；15 工具 smoke 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

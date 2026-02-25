@@ -1,0 +1,34 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/agent-hooks">
+    <requirement id="agent-hooks">
+      <statement>CLI SHALL 提供 Claude Code hook 子命令：hook augment 读取 PostToolUse JSON 把搜索命中富化为有界图上下文（callers/callees/执行流，字符预算可配），hook staleness 在索引落后 HEAD 时输出提示；任何错误 SHALL 静默降级（空输出、exit 0）不阻塞 agent；hooks install/uninstall SHALL merge-safe 地管理目标仓 .claude/settings.json 且不触碰用户既有条目。</statement>
+      <suite id="hooks" name="agent hooks">
+        <case id="augment-enriches">
+          <given>已索引仓库与含符号命中的 Grep PostToolUse JSON</given>
+          <when>hook augment</when>
+          <then>输出 SHALL 含该符号的 callers/callees/执行流摘要且不超字符预算</then>
+        </case>
+        <case id="augment-budget">
+          <given>命中大量符号</given>
+          <when>hook augment（预算 2000 字符）</when>
+          <then>输出 SHALL 截断在预算内且标注截断</then>
+        </case>
+        <case id="silent-degrade">
+          <given>无索引库/损坏输入/查询异常</given>
+          <when>hook augment 或 staleness</when>
+          <then>SHALL 空 stdout、exit 0（诊断只进 stderr）</then>
+        </case>
+        <case id="staleness-hint">
+          <given>索引 commit 落后 HEAD</given>
+          <when>hook staleness</when>
+          <then>输出 SHALL 含落后提示与 reindex 指引；未落后时空输出</then>
+        </case>
+        <case id="install-merge-safe">
+          <given>目标仓已有用户自定义 hooks 的 .claude/settings.json</given>
+          <when>hooks install 后 uninstall</when>
+          <then>install SHALL 只追加自有条目且保留用户条目；uninstall SHALL 只移除自有条目</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

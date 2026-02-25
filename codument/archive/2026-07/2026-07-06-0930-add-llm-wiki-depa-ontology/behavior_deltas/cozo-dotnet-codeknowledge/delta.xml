@@ -1,0 +1,39 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/depa-ontology">
+    <requirement id="depa-ontology">
+      <statement>系统 SHALL 提供 DEPA 本体层：depa_* OM 类型/关系/存在规则一键初始化；effect API 白名单（内置起步 + depa-effects.json 扩展）物化为可查询实体；角色标注经 depa-map.json（assigned_by=config）与启发式兜底（assigned_by=heuristic，confidence≤0.7）同步为 depa 实体并物化结构关系；索引器 SHALL 在丢弃仓外调用目标前落 ck_external_call 摘要行（含调用计数、白名单预分类与首个调用点 path:line 证据）；depa_scan SHALL 幂等且零标注时输出 BLOCKED 而非猜测。</statement>
+      <suite id="ontology" name="本体与标注">
+        <case id="init-idempotent">
+          <given>已初始化 CodeKnowledge v2 的库</given>
+          <when>两次调用 InitDepaOntologyAsync</when>
+          <then>depa_* Type/Relation/ExistentialRule SHALL 全部就位且幂等</then>
+        </case>
+        <case id="external-call-summary">
+          <given>C# 源码中 core 方法直调 System.IO.File.WriteAllText 两次</given>
+          <when>索引</when>
+          <then>ck_external_call SHALL 含该 (caller,target) 行，count=2、category=file_io、first_file/line 指向首个调用点</then>
+        </case>
+        <case id="config-annotation">
+          <given>depa-map.json 声明某目录为 capsule、某接口为 effect contract</given>
+          <when>depa_scan</when>
+          <then>SHALL 物化 depa_capsule/depa_contract 实体（assigned_by=config）与 capsule_contains/contract_implemented_by 关系</then>
+        </case>
+        <case id="heuristic-annotation">
+          <given>无 depa-map.json 但存在 Contracts/ 目录下的 interface</given>
+          <when>depa_scan</when>
+          <then>SHALL 产出 assigned_by=heuristic 且 confidence≤0.7 的 depa_contract 实体</then>
+        </case>
+        <case id="blocked-not-guess">
+          <given>零标注（无配置、无启发式命中）的库</given>
+          <when>depa_scan</when>
+          <then>ExistentialRule 依赖标注的检查 SHALL 输出 BLOCKED 行并说明缺失，不产出任何猜测性 violation</then>
+        </case>
+        <case id="scan-idempotent">
+          <given>同一标注与图数据</given>
+          <when>连续两次 depa_scan</when>
+          <then>depa 实体与关系 SHALL 幂等（无重复行）且输出一致</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

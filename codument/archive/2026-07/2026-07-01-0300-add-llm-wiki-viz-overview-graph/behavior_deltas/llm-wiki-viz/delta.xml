@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="llm-wiki-viz" version="1">
+  <upsert selector="behavior://llm-wiki-viz/requirements/category-filtered-search">
+    <requirement id="category-filtered-search">
+      <statement>cozo-wiki SHALL allow semantic search callers to restrict results to a caller-provided set of source categories.</statement>
+      <suite id="semantic-search" name="Semantic search categories">
+        <case id="filter-doc-results">
+          <given>The repository database has indexed code symbol embeddings and documentation block embeddings</given>
+          <when>A caller searches with the docs category selected</when>
+          <then>The semantic search result SHALL only include documentation source hits</then>
+        </case>
+        <case id="filter-code-results">
+          <given>The repository database has indexed code symbol embeddings and documentation block embeddings</given>
+          <when>A caller searches with the code category selected</when>
+          <then>The semantic search result SHALL only include code source hits</then>
+        </case>
+        <case id="default-all-categories">
+          <given>A caller does not provide any source categories</given>
+          <when>The caller runs semantic search</when>
+          <then>The semantic search result SHALL preserve the prior all-source behavior</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://llm-wiki-viz/requirements/overview-graph">
+    <requirement id="overview-graph">
+      <statement>cozo-wiki SHALL expose a bounded project overview graph so the visualization workbench can show repository structure before the user runs a search.</statement>
+      <suite id="project-graph" name="Project overview graph">
+        <case id="load-overview-without-search">
+          <given>The cozo-wiki server is connected to a work directory with an existing CodeKnowledge database</given>
+          <when>The user clicks the load overview graph action in the visualization workbench</when>
+          <then>The workbench SHALL render a graph assembled from repository, file, code symbol, documentation block, and relation facts without requiring a prior search</then>
+        </case>
+        <case id="bounded-overview">
+          <given>The repository contains many indexed facts</given>
+          <when>The overview graph is requested</when>
+          <then>The server SHALL return a bounded graph with truncation metadata rather than an unbounded full dump</then>
+        </case>
+        <case id="overview-category-controls">
+          <given>The user has selected code and docs category controls</given>
+          <when>The overview graph is loaded</when>
+          <then>The graph SHALL include only the selected category families while preserving useful containment and relation edges between included nodes</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,48 @@
+<Track id="add-cozo-wiki-serve-api" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-wiki 添加本地 HTTP serve mode 支持前端可视化工作台</Goal>
+    <Description>新增 Cozo.DotNet.LlmWiki.Server package 和 cozo-wiki --serve CLI 入口，提供 repo DB 搜索、wiki、symbol/impact 和 named query API。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T13:30:00Z</CreatedAt>
+    <UpdatedAt>2026-06-28T13:45:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+  <TaskSpace id="space_add-cozo-wiki-serve-api" name="add-cozo-wiki-serve-api" version="1">
+    <Description>Add cozo-wiki server mode.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Server package" status="DONE" order="0">
+        <Description>新增 ASP.NET Core API package。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="创建 Server csproj 并注册 solution" status="DONE" order="0" priority="P0"/>
+          <Task id="T1.2" name="实现 LlmWikiWebServer endpoints" status="DONE" order="1" priority="P0"/>
+          <Task id="T1.3" name="支持 static-dir/api-only" status="DONE" order="2" priority="P1"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="CLI serve mode" status="DONE" order="1">
+        <Description>给 cozo-wiki CLI 添加 --serve 和 serve alias。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="新增 serve dispatch 与 help" status="DONE" order="0" priority="P0"/>
+          <Task id="T2.2" name="复用 storage/host/port/static options" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="Server 验证" status="DONE" order="2">
+        <Description>补 endpoint smoke 并运行 build/test。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="补充 server endpoint smoke" status="DONE" order="0" priority="P0"/>
+          <Task id="T3.2" name="运行 dotnet build/test" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Hooks/>
+</Track>

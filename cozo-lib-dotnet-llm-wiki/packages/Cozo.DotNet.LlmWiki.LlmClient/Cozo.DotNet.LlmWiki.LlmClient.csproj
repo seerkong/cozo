@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- LLM backend capsule (add-llm-wiki-llm-pipeline track, design §1): provider internals
+         (HTTP request shapes) are not exported; Tests exercise them through the contract plus
+         injected HttpMessageHandler mocks. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+  </ItemGroup>
+
+</Project>

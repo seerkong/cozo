@@ -1,0 +1,56 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/call-resolution">
+    <requirement id="call-resolution">
+      <statement>索引 SHALL 在 tree-sitter 基线上提取调用点并做启发式消解，产出带分级 confidence 的 CALLS 边（0.9 唯一精确/0.7 仓内 name+arity 唯一/0.5 多候选，evidence 记录依据）；无法消解的调用点 SHALL 不落边并计入诊断计数；resolver 标注 treesitter。</statement>
+      <suite id="calls" name="调用消解">
+        <case id="same-file-call">
+          <given>同文件内方法 A 调用方法 B（唯一匹配）</given>
+          <when>索引该文件</when>
+          <then>ck_edge SHALL 含 A→B 的 CALLS 边，confidence≥0.9，file/line 指向调用点</then>
+        </case>
+        <case id="cross-file-import-call">
+          <given>文件 X import 文件 Y 的符号并调用之</given>
+          <when>索引仓库</when>
+          <then>SHALL 产出跨文件 CALLS 边且 confidence≥0.7</then>
+        </case>
+        <case id="constructor-call">
+          <given>代码含 new SomeType(...) 且 SomeType 在仓内</given>
+          <when>索引</when>
+          <then>SHALL 产出指向 SomeType 构造函数（或类型符号）的 CALLS 边</then>
+        </case>
+        <case id="ambiguous-degrades">
+          <given>被调名在仓内有多个同名候选且无法唯一化</given>
+          <when>索引</when>
+          <then>边 confidence SHALL 为 0.5 且 evidence 含 ambiguous 标注</then>
+        </case>
+        <case id="unresolved-no-edge">
+          <given>调用目标不在仓内（如 BCL API）</given>
+          <when>索引</when>
+          <then>SHALL 不落 CALLS 边且未消解计数出现在索引 summary/诊断中</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/overrides-and-accesses">
+    <requirement id="overrides-and-accesses">
+      <statement>索引 SHALL 基于继承结构边与成员 name+arity 匹配产出 METHOD_OVERRIDES/METHOD_IMPLEMENTS 边；成员访问 SHALL 在接收者可消解时产出 ACCESSES 边（evidence 标注 read|write），受 per-file 预算上限约束且可整体关闭。</statement>
+      <suite id="derived" name="重写与访问">
+        <case id="override-edge">
+          <given>类 C 继承 B 并重写同名同参方法 m</given>
+          <when>索引</when>
+          <then>SHALL 产出 C.m→B.m 的 METHOD_OVERRIDES 边（接口场景为 METHOD_IMPLEMENTS）</then>
+        </case>
+        <case id="accesses-budget">
+          <given>ACCESSES 开启且某文件成员访问数超过 per-file 上限</given>
+          <when>索引</when>
+          <then>该文件落边数 SHALL 不超过上限且诊断记录截断</then>
+        </case>
+        <case id="accesses-off">
+          <given>ACCESSES 开关关闭</given>
+          <when>索引</when>
+          <then>SHALL 不产出任何 ACCESSES 边</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,9 @@
+{
+  "track_id": "add-action-and-constraints",
+  "type": "feature",
+  "status": "completed",
+  "commit_mode": "manual",
+  "created_at": "2026-02-28T07:30:00Z",
+  "updated_at": "2026-02-28T09:30:00Z",
+  "description": "为 cozo-om 添加 Action/Mutation 行为层与复合约束引擎"
+}

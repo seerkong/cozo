@@ -1,0 +1,34 @@
+<behavior-patch capability="llm-wiki-pipeline" version="1">
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/engineering-fractal">
+    <requirement id="engineering-fractal">
+      <statement>wiki 生成 SHALL 产出符合 docs-engineering-fractal 规范的 engineering 分形：根结构（index.md/migration-map.md/impl/）、plane→类目→主题递归、六类目（overview/howto/rules/examples/reference/troubleshooting）、每目录 index.md 携带 folder-manifest 职责块（叶类目精简型、plane 完整型）、受控 frontmatter（knowledge_plane/doc_role/status/last_verified，禁数组字段）；index 页 SHALL 只做导航；结构层 SHALL 在 LLM 不可用时完整产出。产出 SHALL 通过分形规范检查器的全部程序可断言项。</statement>
+      <suite id="fractal" name="engineering 分形">
+        <case id="root-structure">
+          <given>完成索引的仓库</given>
+          <when>fractal build</when>
+          <then>docs-preview SHALL 含 index.md、migration-map.md 与 impl/ 递归结构</then>
+        </case>
+        <case id="six-categories">
+          <given>同上</given>
+          <when>build</when>
+          <then>impl plane 下 SHALL 存在 overview/howto/rules/examples/reference/troubleshooting 六类目且各有带职责块的 index.md</then>
+        </case>
+        <case id="manifest-blocks">
+          <given>产出的每个类目 index.md</given>
+          <when>检查器扫描</when>
+          <then>职责块格式（holds/excludes/tier/⬆from/⬇to）SHALL 逐一匹配规范正则</then>
+        </case>
+        <case id="controlled-frontmatter">
+          <given>产出的每个 .md 页面</given>
+          <when>检查器扫描</when>
+          <then>frontmatter SHALL 只含受控字段且值域合法，无数组堆砌</then>
+        </case>
+        <case id="checker-gate">
+          <given>本仓 dogfood 产出</given>
+          <when>FractalSpecChecker 全量断言</when>
+          <then>程序可断言项 SHALL 100% 通过</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

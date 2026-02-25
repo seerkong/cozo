@@ -1,0 +1,61 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/depa-conformance">
+    <requirement id="depa-conformance">
+      <statement>DEPA 扫描 SHALL 执行 8 条红灯检测（V-E1/V-E2/V-D1/V-S1/V-F1/V-F2/V-L1/V-L3）并把命中物化为带 evidence_json（每条证据必有 path:line）的 depa_violation 实体与信号边；输入缺失的规则 SHALL 显式 BLOCKED 并说明缺失而非 PASS；violation SHALL 幂等 upsert 且随 scan_commit 过期清理；depa_conformance/fact_grade_map/health_score 三工具 SHALL 经统一 tool runner 暴露，health_score 不得把四维合并为单一裁决。</statement>
+      <suite id="detect" name="红灯检测">
+        <case id="effect-leak-detected">
+          <given>标注为 core 的方法经 ck_external_call 直调 file_io 类 API 且不经任何 effect contract</given>
+          <when>depa_scan</when>
+          <then>SHALL 产出 V-E1 violation（GAP、path:line 证据、effect_leaks_through 边）</then>
+        </case>
+        <case id="compliant-no-leak">
+          <given>core 方法只经标注为 effect contract 的接口产生副作用</given>
+          <when>depa_scan</when>
+          <then>V-E1 对该方法 SHALL 无命中（合规样本可区分）</then>
+        </case>
+        <case id="func-in-config">
+          <given>标注为 config 角色的参数类型含 Func/Action 字段</given>
+          <when>depa_scan</when>
+          <then>SHALL 产出 V-F1 violation 且证据指向该字段声明行</then>
+        </case>
+        <case id="internals-crossing">
+          <given>capsule A 的符号 IMPORTS/CALLS capsule B 的 internals 路径</given>
+          <when>depa_scan</when>
+          <then>SHALL 产出 V-L1 violation，每条越界边一条证据</then>
+        </case>
+        <case id="multi-writer">
+          <given>grade≤3 的 fact_source 有两个写入者</given>
+          <when>depa_scan</when>
+          <then>SHALL 产出 V-D1 violation 且 message 列出全部写入者</then>
+        </case>
+        <case id="blocked-on-missing-input">
+          <given>某规则前置输入缺失（如无 fact_source 定级表时的 V-D1/V-S1）</given>
+          <when>depa_scan</when>
+          <then>该规则 SHALL 输出 BLOCKED+缺失说明，不产出猜测 violation</then>
+        </case>
+        <case id="violation-idempotent-and-expiring">
+          <given>同一代码与标注下两次 scan，随后修复违规再 scan</given>
+          <when>连续扫描</when>
+          <then>violation SHALL 幂等（无重复）且修复后被清理</then>
+        </case>
+      </suite>
+      <suite id="tools" name="工具面">
+        <case id="conformance-report">
+          <given>含违规与合规混合的库</given>
+          <when>调用 depa_conformance 工具</when>
+          <then>输出 SHALL 按维度分组、规则×verdict、violations 按 confidence 降序、BLOCKED 附原因</then>
+        </case>
+        <case id="fact-grade-map">
+          <given>已定级 fact_source 与写入/派生关系</given>
+          <when>调用 fact_grade_map 工具</when>
+          <then>SHALL 输出分级节点与 fact_written_by/projection_derived_from 邻接</then>
+        </case>
+        <case id="health-score-no-merge">
+          <given>四维各有不同 GAP 数</given>
+          <when>调用 health_score 工具</when>
+          <then>输出 SHALL 每维独立给分与覆盖率，不产出合并四维的单一总分裁决</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

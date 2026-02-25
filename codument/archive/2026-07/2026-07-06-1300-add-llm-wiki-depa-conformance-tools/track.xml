@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-depa-conformance-tools" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>8 条 V-* 红灯检测 + depa_violation 物化（evidence path:line 纪律）+ depa_conformance/fact_grade_map/health_score 三工具（矩阵 14→17）</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G6 track，DEPA 线收口。mission 成功判据（合规/违规样本可区分）在此验收。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T19:06:27Z</CreatedAt>
+    <UpdatedAt>2026-07-06T10:00:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-depa"         domain="dotnet"   path="vfs://@/cozo-lib-dotnet/src/Om.Depa/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-depa-conformance-tools" name="add-llm-wiki-depa-conformance-tools" version="1">
+    <Description>红灯检测与物化 → 工具面与双样本验收收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="红灯检测与 violation 物化" status="DONE" order="0">
+        <Description>③段：8 条检测（先 V-F1/V-L1/V-E1 后 V-D1/V-S1/V-E2/V-F2/V-L3）、evidence_json 纪律、幂等 upsert 与 scan_commit 清理、缺输入 BLOCKED。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="检测与物化" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 detect suite 7 case 测试（含幂等/清理/BLOCKED）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 8 条检测与物化管线" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">detect suite 7 case 断言全过；每条 violation 证据均带 path:line；缺输入规则 BLOCKED 不猜测</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="工具面与双样本验收收口" status="DONE" order="1">
+        <Description>三工具（17 矩阵）、报告聚合 API、合规/违规双样本可区分验收、两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="工具与验收" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 tools suite 3 case + 双样本测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现聚合 API 与工具注册" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">tools suite 3 case 断言全过；17 工具 smoke；合规样本零 GAP、违规样本逐条 path:line 可区分（mission 成功判据证据记 findings）；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

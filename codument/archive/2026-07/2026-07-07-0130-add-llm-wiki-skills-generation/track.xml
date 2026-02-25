@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-skills-generation" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>skills generate/clean/status：per-context SKILL.md（确定性、有界、禁 #N）+ 三个通用工作流 skill，自有前缀纪律</Goal>
+    <Description>mission harden-llm-wiki-engineering 的 G3 track。复用 modeling context 发现；零 LLM。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T22:01:58Z</CreatedAt>
+    <UpdatedAt>2026-07-06T22:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="wiki"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Wiki/"/>
+    <MaterialBundle role="output" name="mcpserver"       domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-skills-generation" name="add-llm-wiki-skills-generation" version="1">
+    <Description>生成器与渲染 → CLI 与 dogfood 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="生成器与渲染" status="DONE" order="0">
+        <Description>SkillsGenerator（context 复用 + per-context 渲染 + 3 通用模板 + 预算/确定性）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="生成器" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 per-context/workflow/deterministic-bounded 测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 SkillsGenerator 与渲染模板" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">per-context skill（frontmatter/关键符号 file:line/工具示例/无 #N）与 3 个 workflow skill 断言全过；双跑逐字节一致；预算生效</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="CLI 与 dogfood 收口" status="DONE" order="1">
+        <Description>skills generate/clean/status 子命令（自有前缀纪律、同步语义）+ dogfood + 两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="CLI 与收口" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 own-prefix-only/同步语义测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 CLI + dogfood 评注" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">用户目录零触碰、clean 只删自有、消失 context 同步清理；dogfood 评注记 findings；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

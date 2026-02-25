@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-code-knowledge" version="1">
+  <upsert selector="behavior://dotnet-code-knowledge/requirements/code-knowledge">
+    <requirement id="code-knowledge">
+      <statement>The .NET OM SHALL provide a code/document knowledge graph capsule that indexes code/doc facts into Cozo and exposes agent-oriented query facades.</statement>
+      <suite id="index-and-query" name="Index and query code knowledge">
+        <case id="batch-index">
+          <given>A batch containing repository, file, symbol, relation, and doc block facts</given>
+          <when>The batch is indexed</when>
+          <then>The system SHALL persist facts into CodeKnowledge relations without requiring HTTP, MCP, or server concerns</then>
+        </case>
+        <case id="agent-facade">
+          <given>Indexed symbols, calls, and documentation links</given>
+          <when>The caller asks for symbol context, impact of change, docs for code, relation explanation, or wiki plan</when>
+          <then>The system SHALL return structured C# domain results built on Om.Query and Cozo Datalog queries</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

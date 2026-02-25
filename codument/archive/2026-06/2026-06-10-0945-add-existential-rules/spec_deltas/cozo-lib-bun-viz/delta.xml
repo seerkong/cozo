@@ -1,0 +1,22 @@
+<spec-patch version="1">
+  <requirement op="upsert" selector="spec://cozo-lib-bun-viz/requirement/viz-007-governance-integrity-tab" id="viz-007-governance-integrity-tab">
+    <statement>系统 SHALL 在 /governance 页面新增「完整性检查」子 tab，演示存在规则的违例检测与 Skolem chase 物化：展示规则列表与违例结果，并支持一键执行物化后展示 created 结果与刷新后的违例列表。现有子 tab（数据准备、权限查询）与旧 /permission demo 的行为 SHALL NOT 改变。server 端 SHALL 提供对应 API 端点（列出规则、执行违例检测、执行 chase 物化）。新增能力 SHALL 具备单元测试与 Playwright E2E 覆盖，并通过既有门控命令（bun test、bun test --coverage、codument validate --strict、npm run test:e2e）。</statement>
+    <suite id="integrity-tab" name="完整性检查子 tab">
+      <case id="tab-shows-violations">
+        <given>用户进入 /governance 的「完整性检查」子 tab，演示数据含存在规则违例</given>
+        <when>执行违例检测</when>
+        <then>页面展示规则列表与违例实体列表（含规则名与提示消息）</then>
+      </case>
+      <case id="chase-materializes-and-clears">
+        <given>违例列表非空且存在 materialize 规则</given>
+        <when>用户点击一键物化</when>
+        <then>页面展示 created 结果（Skolem 实体与新边），重新检测后对应违例消失</then>
+      </case>
+      <case id="existing-tabs-unaffected">
+        <given>用户访问 /governance 的数据准备与权限查询子 tab，以及 /permission 页面</given>
+        <when>执行既有交互流程</when>
+        <then>行为与新增「完整性检查」tab 之前一致</then>
+      </case>
+    </suite>
+  </requirement>
+</spec-patch>

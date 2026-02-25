@@ -1,0 +1,39 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/detect-changes">
+    <requirement id="detect-changes">
+      <statement>系统 SHALL 提供 detect_changes 工具：按 scope（unstaged|staged|compare+baseRef）取 git diff，把改动行按文件与符号行区间映射到受影响符号，聚合有界的传递影响（DeepImpact up）、受影响执行流与总体风险评级；索引 SHALL 记录 indexed_commit，工具与 status SHALL 在 HEAD 与索引 commit 不一致时给出 stale 提示；非 git 目录或 git 不可用时 SHALL 返回明确诊断而不抛错。</statement>
+      <suite id="detect" name="变更检测">
+        <case id="unstaged-mapping">
+          <given>已索引的 git 仓中某方法体内出现未暂存修改</given>
+          <when>detect_changes scope=unstaged</when>
+          <then>changedSymbols SHALL 含该方法且带 file:line</then>
+        </case>
+        <case id="staged-vs-unstaged">
+          <given>一处改动已 stage、另一处未 stage</given>
+          <when>分别以 staged 与 unstaged 调用</when>
+          <then>两次结果 SHALL 各只含对应改动的符号</then>
+        </case>
+        <case id="compare-base">
+          <given>相对 baseRef 有一次已提交的修改</given>
+          <when>detect_changes scope=compare baseRef=&lt;ref&gt;</when>
+          <then>SHALL 映射该提交改动的符号</then>
+        </case>
+        <case id="impact-aggregation">
+          <given>被改符号有调用者并参与执行流</given>
+          <when>detect_changes</when>
+          <then>结果 SHALL 含去重有界的 impactedSymbols、affectedProcesses 与聚合风险</then>
+        </case>
+        <case id="stale-hint">
+          <given>索引后又有新 commit（HEAD ≠ indexed_commit）</given>
+          <when>detect_changes 或 api/status</when>
+          <then>SHALL 返回 stale=true 与 reindex 提示</then>
+        </case>
+        <case id="non-git-safe">
+          <given>work dir 不是 git 仓（或 git 不可用）</given>
+          <when>detect_changes</when>
+          <then>SHALL 返回明确诊断（不抛错），索引与其他工具不受影响</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

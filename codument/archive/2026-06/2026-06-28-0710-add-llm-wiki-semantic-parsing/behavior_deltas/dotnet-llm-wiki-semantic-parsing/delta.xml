@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/tree-sitter-parser">
+    <requirement id="tree-sitter-parser">
+      <statement>系统 SHALL 提供 Tree-sitter-only 语义解析入口，并在 Tree-sitter 不可用时返回结构化诊断。</statement>
+      <suite id="parser-status" name="Parser status">
+        <case id="detect-cli">
+          <given>运行环境可能安装或未安装 tree-sitter CLI</given>
+          <when>调用 parser_status</when>
+          <then>系统 SHALL 返回 Tree-sitter 是否可用及版本/诊断信息</then>
+        </case>
+      </suite>
+      <suite id="parse-file" name="Parse file">
+        <case id="parse-via-tree-sitter">
+          <given>存在本地源文件路径</given>
+          <when>调用 parse_file</when>
+          <then>系统 SHALL 使用 Tree-sitter 解析文件，或在 CLI 缺失时返回 diagnostic 而不是静默 fallback</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-om-depa" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 cozo-lib-dotnet/src/Om/ 基于 DEPA capsule 实现与 Node OM 同等的 C# 本体论封装</Goal>
+    <Description>新增 .NET OM 层，采用 contract/runtime/input/logic/support/internals 分层，公共 facade 保持易用，核心逻辑通过 ICozoOmStore 隔离 CozoDB IO，并逐步达到 Node OM parity。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-27T05:28:01Z</CreatedAt>
+    <UpdatedAt>2026-06-27T06:58:31Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="guidance" domain="doc" path="vfs://./guidance/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-dotnet-om-depa" name="add-dotnet-om-depa" version="1">
+    <Description>基于 DEPA capsule 的 C# OM 实现计划</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="DEPA capsule 骨架与测试基座" status="DONE" order="0">
+        <Description>建立 cozo-lib-dotnet/src/Om/ 目录结构、effect contract、runtime/input/model 基础类型、public facade 和 .NET 测试基座。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>guidance/depa-capsule-layout.md 中的目录边界已落地</cdt:Criterion>
+          <cdt:Criterion>最小测试命令可运行</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T1.1" name="创建 DEPA 目录与基础契约" status="DONE" order="0" priority="P0">
+            <Description>创建 src/Om/ 目录，补齐 Contracts、Runtime、Inputs、Logic、Support、Internals，并定义 ICozoOmStore、CozoOmRuntime、CozoOmOptions。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">目录结构与 guidance/depa-capsule-layout.md 一致</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">Logic 层不引用 CozoDb 或 CozoNative</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="建立 public facade 与 support store" status="DONE" order="1" priority="P0">
+            <Description>实现薄 facade CozoOm 与 CozoDbOmStore，确保 facade 委托 Logic，Support 层独占 CozoDb 调用。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">CozoOm 可从 CozoDb 构造并执行最小 schema 初始化</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">CozoDbOmStore 实现 ICozoOmStore</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="新增 .NET OM 测试基座" status="DONE" order="2" priority="P0">
+            <Description>按仓库现状选择并建立 .NET 测试项目或测试目录，覆盖最小 facade/store/runtime 行为。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">测试命令可在 cozo-lib-dotnet 范围内运行</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC2" checked="true">测试不依赖隐藏全局状态</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P2" name="Schema/TBox/ABox 核心 parity" status="DONE" order="1">
+        <Description>实现 schema 初始化、类型/属性/关系定义、实体/属性/边写入读取，以及类型继承和多态基础查询。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="Schema 初始化与定义 API" status="DONE" order="0" priority="P0">
+            <Description>实现 InitSchema、DefineType、DefineAttribute、DefineRelation 等基础能力。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">C# 初始化后的核心 OM relation 与 Node OM 兼容</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">重复初始化幂等</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实体属性边 API" status="DONE" order="1" priority="P0">
+            <Description>实现 CreateEntity、UpsertEntity、SetProperty、GetProperty、LinkEntities、UnlinkEntities、GetNeighbors、GetEntityView。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">实体、属性、边可写入并按 Node OM 语义读取</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">关系方向与类型校验行为有测试覆盖</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="继承、多态与 alias 基础" status="DONE" order="2" priority="P1">
+            <Description>实现 type hierarchy、isSubtypeOf、findByType、多态关系/属性定义解析和 alias resolution 的核心能力。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">父类型查询覆盖子类型实例</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">别名解析不破坏 canonical stored semantics</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P3" name="高级 OM 能力 parity" status="DONE" order="2">
+        <Description>迁移 temporal、constraints/computed/actions、schema versioning、permission 与 existential rules 等高级能力。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="Temporal property/edge 能力" status="DONE" order="0" priority="P0">
+            <Description>实现 validTime、asOf、history 相关 property/edge 查询，保持 Node OM 时间语义。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">property/edge asOf 查询有 parity 测试覆盖</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">retract 后 NOW 与历史时间点行为正确</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="Constraints、computed、actions 与 mutations" status="DONE" order="1" priority="P1">
+            <Description>为 C# 提供约束、计算值、action/mutation/interceptor 的对应封装；需要区别可持久化 metadata 与进程内委托。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">required 与 custom validation 行为有测试覆盖</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">进程内委托不被误写为可恢复事实源</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.3" name="Schema versioning 与 rollback" status="DONE" order="2" priority="P1">
+            <Description>实现 schema state、snapshot、diff、migration、rollback 的 C# API，对齐 Node OM 的治理语义。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.3-AC1" checked="true">snapshot/diff/rollback 覆盖核心 metadata 表</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC2" checked="true">strict rollback 诊断行为有测试覆盖</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.4" name="Permission 与 access check" status="DONE" order="3" priority="P1">
+            <Description>实现 seedPermissionMetadata、checkAccess 及相关模型，保持 Hybrid ABAC/path rule 行为 parity。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.4-AC1" checked="true">allow/deny、field visibility、witness path 行为有测试覆盖</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.5" name="Existential rules" status="DONE" order="4" priority="P0">
+            <Description>实现 define/list/check/apply existential rules，范围限定为 exists { rel, direction?, toType }，支持 Skolem materialization 与 maxIterations。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.5-AC1" checked="true">check 模式检测缺失关系边</cdt:Criterion>
+              <cdt:Criterion id="T3.5-AC2" checked="true">materialize 模式幂等创建 Skolem 实体与边</cdt:Criterion>
+              <cdt:Criterion id="T3.5-AC3" checked="true">属性存在性不进入 existential rule head</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P4" name="文档、示例与 parity 验收" status="DONE" order="3">
+        <Description>补充 README/example，运行测试与结构审查，确认 DEPA 分层和 Node OM parity 目标达成。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>核心功能测试通过</cdt:Criterion>
+          <cdt:Criterion>Logic 层 effect 边界审查通过</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T4.1" name="README 与 example" status="DONE" order="0" priority="P1">
+            <Description>补充 cozo-lib-dotnet README 中的 OM quick start，并按需增加 example。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">README 展示初始化、定义 schema、创建实体和查询示例</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="Parity 与 DEPA 验收" status="DONE" order="1" priority="P0">
+            <Description>运行 .NET 测试、构建，并审查 DEPA 结构不变量：runtime 数据载体、logic 无 CozoDb direct IO、support effect 隔离。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">dotnet build 通过</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">.NET OM 测试通过</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC3" checked="true">DEPA 边界检查无 gap 或已记录例外</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

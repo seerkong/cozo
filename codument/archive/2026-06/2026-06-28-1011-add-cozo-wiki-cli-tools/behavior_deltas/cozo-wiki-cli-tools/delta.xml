@@ -1,0 +1,24 @@
+<behavior-patch capability="cozo-wiki-cli-tools" version="1">
+  <upsert selector="behavior://cozo-wiki-cli-tools/requirements/direct-tool-cli">
+    <requirement id="direct-tool-cli">
+      <statement>cozo-wiki SHALL provide a direct CLI surface for listing and invoking the same tools exposed by MCP stdio.</statement>
+      <suite id="manual-and-e2e" name="Manual And E2E Usage">
+        <case id="list-tools">
+          <given>A user has built cozo-wiki</given>
+          <when>The user runs `cozo-wiki tools`</when>
+          <then>The command SHALL print machine-readable JSON describing available MCP tools</then>
+        </case>
+        <case id="call-tool">
+          <given>A user has a repo database selected by work-dir storage options</given>
+          <when>The user runs `cozo-wiki call semantic_search --query SampleService`</when>
+          <then>The command SHALL invoke the same implementation as the MCP semantic_search tool and print JSON output</then>
+        </case>
+        <case id="storage-options">
+          <given>A user passes `--work-dir` pointing at a real local repository</given>
+          <when>The user invokes CLI tools</when>
+          <then>The command SHALL use the sqlite database under `&lt;work-dir&gt;/.cozo-wiki/cozo-wiki.db` unless `--db` overrides it</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

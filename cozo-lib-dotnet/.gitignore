@@ -1,0 +1,6 @@
+bin/
+obj/
+runtimes/*/native/*.dylib
+runtimes/*/native/*.so
+runtimes/*/native/*.dll
+!runtimes/**/native/.gitkeep

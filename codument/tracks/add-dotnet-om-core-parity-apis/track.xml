@@ -1,0 +1,125 @@
+<Track id="add-dotnet-om-core-parity-apis" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>补齐 C# OM 在核心对象系统 API 与相邻行为层上相对 Bun OM 的少量 parity 缺口。</Goal>
+    <Description>为 cozo-lib-dotnet 的 OM.Core 增加历史实体视图、属性过滤 type search、公开 validation/finalize API、computed 继承与 typed constraint scopes，并同步两侧测试。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-12T13:20:46Z</CreatedAt>
+    <UpdatedAt>2026-07-12T13:44:35Z</UpdatedAt>
+    <cdt:Risks>
+      <cdt:Risk>findByType rich result 可能增加查询成本；保留现有轻量 API 并新增显式 rich API。</cdt:Risk>
+      <cdt:Risk>runtime delegate 不可从 Cozo metadata 恢复；本 track 不改变该模型。</cdt:Risk>
+      <cdt:Risk>cross-entity constraint 需要确保 relation write 失败时回滚。</cdt:Risk>
+    </cdt:Risks>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-om-core-parity-apis" name="add-dotnet-om-core-parity-apis" version="1">
+    <Description>补齐 C# OM core object-system parity APIs and behavior-layer parity with Bun OM.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="确认 parity 缺口与 API 设计" status="DONE" order="0">
+        <Description>固定缺口清单、选择兼容的 C# API 形状，并避免破坏既有调用方。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="复核 Bun reference behavior" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>核对 getEntityViewAsOf、findByType filter、validation helpers、computed inheritance、constraint scopes 的 Bun 行为与测试。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">每个目标行为都有 Bun 源码或测试证据。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="确定 C# additive API" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>保留现有 API，新增历史 entity view、rich find、公开 validation/finalize API。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">现有 FindByTypeAsync lightweight contract 不被移除或破坏。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="实现 C# OM core API parity" status="DONE" order="1">
+        <Description>在 Om.Core facade、inputs/models、logic 中补齐核心对象系统 API。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现 GetEntityViewAsOfAsync" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>按 asOf 读取属性与出边，并在历史上下文中组装 computed properties。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">历史属性、历史出边、alias canonicalization、computed asOf 均有测试覆盖。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现属性过滤 rich find" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>新增带 properties 的 type search API，支持 equality filter 与 exact/polymorphic 选项。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">结果包含 id/typeName/label/properties，过滤使用 canonical property names。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="暴露 validation 与 finalize facade" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>公开 property type、relation、required properties、finalize entity 相关 API。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">公开 API 不写入数据即可 preflight，并在失败时提供可诊断错误。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="实现 behavior-layer parity" status="DONE" order="2">
+        <Description>补齐 computed inheritance 和 constraint scopes，确保写入路径触发正确校验。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="统一 inherited computed lookup" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>让 getProperty/entity view/asOf view 使用同一套父类继承与子类覆盖规则。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">父类 computed 在子类实体 view 中可见，子类 computed 覆盖父类同名定义。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="实现 typed constraint scopes" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>支持 conditional、cross-entity、computed-dep 和 inherited constraints，同时保留 custom validator 兼容性。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">SetPropertyAsync、LinkEntitiesAsync、ValidateEntityAsync、FinalizeEntityAsync 均触发相应 constraint。</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">cross-entity constraint 失败时 relation write 不留下违反状态。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="同步测试与验证" status="DONE" order="3">
+        <Description>补充 .NET 与 Bun 测试，运行可用验证命令。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="补充 .NET tests" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>覆盖 behavior delta 中所有 C# parity cases。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">cozo-lib-dotnet/tests 覆盖 historical view、rich find、validation facade、computed inheritance、constraint scopes。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="补充 Bun reference tests" ownerAccount="agent:impl" status="DONE" order="1" priority="P1">
+            <Description>检查并补齐 Bun reference coverage，确保 parity target 稳定。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">Bun tests 覆盖 findByType filter/properties 与 validation helper exports 等缺口。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.3" name="运行验证" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>运行 .NET tests、Bun tests 和 codument validate；不可运行时记录环境原因。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.3-AC1" checked="true">验证结果记录在最终实现报告中。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="false"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Parallel max-concurrent="1" spot-check="true"/>
+  </Schedule>
+  <Hooks>
+  </Hooks>
+</Track>

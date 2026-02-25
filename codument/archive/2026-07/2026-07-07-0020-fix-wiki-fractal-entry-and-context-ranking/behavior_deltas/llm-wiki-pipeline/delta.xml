@@ -1,0 +1,36 @@
+<behavior-patch capability="llm-wiki-pipeline" version="1">
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/codument-fractal-entry">
+    <requirement id="codument-fractal-entry">
+      <statement>cozo-wiki wiki 子命令 SHALL 提供分形管线一级入口，管线规范名为 codument-fractal；legacy 保持默认且行为不变。</statement>
+      <suite id="cli-entry" name="CLI 入口">
+        <case id="codument-fractal-runs-fractal">
+          <given>已索引仓库</given>
+          <when>执行 cozo-wiki wiki --repo &lt;path&gt; --out &lt;dir&gt; --pipeline codument-fractal</when>
+          <then>系统 SHALL 走 FractalWikiPipeline 产出双分形（modeling/impl）到 --out，结果 pipeline 字段回显 codument-fractal</then>
+        </case>
+        <case id="legacy-default-unchanged">
+          <given>不带 --pipeline 或 --pipeline legacy</given>
+          <when>执行 wiki 子命令</when>
+          <then>行为 SHALL 与既有 legacy WikiCompiler 完全一致</then>
+        </case>
+        <case id="invalid-pipeline-rejected">
+          <given>--pipeline 取未知值</given>
+          <when>执行 wiki 子命令</when>
+          <then>系统 SHALL 报错并列出合法取值（legacy、codument-fractal），不静默降级</then>
+        </case>
+      </suite>
+      <suite id="tool-alias" name="build_wiki 规范名与别名">
+        <case id="canonical-name-in-tool">
+          <given>build_wiki 工具</given>
+          <when>pipeline=codument-fractal 调用</when>
+          <then>SHALL 走分形管线；schema 描述 SHALL 以 codument-fractal 为规范名</then>
+        </case>
+        <case id="fractal-alias-compat">
+          <given>既有调用 pipeline=fractal</given>
+          <when>调用 build_wiki</when>
+          <then>SHALL 继续等效于 codument-fractal（静默别名），结果 pipeline 字段回显 codument-fractal</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

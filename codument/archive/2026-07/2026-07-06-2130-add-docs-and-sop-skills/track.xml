@@ -1,0 +1,94 @@
+<Track id="add-docs-and-sop-skills" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>沉淀知识资产：终端用户手册 + 双分形文档补齐（cozo-wiki 自举 dogfood）+ 执行 SOP skill 化</Goal>
+    <Description>P1 用户手册（llm-wiki/docs/ 独立手册 + README 瘦身）；P2 双分形补齐（自举骨架 staging + 人工充实合并）；P3 四个 SOP skill 落 .agents/skills/。三项定位决策已用户确认（decisions.md #1-3）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T16:40:00Z</CreatedAt>
+    <UpdatedAt>2026-07-06T18:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="user-docs"       domain="docs"     path="vfs://@/cozo-lib-dotnet-llm-wiki/docs/"/>
+    <MaterialBundle role="output" name="fractal-docs"    domain="docs"     path="vfs://@/docs/"/>
+    <MaterialBundle role="output" name="sop-skills"      domain="local"    path="vfs://@/.agents/skills/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-docs-and-sop-skills" name="add-docs-and-sop-skills" version="1">
+    <Description>用户手册 → 双分形补齐 → SOP skill 沉淀</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="终端用户手册" status="DONE" order="0">
+        <Description>cozo-lib-dotnet-llm-wiki/docs/ 七部分手册 + README 瘦身；内容以 CLI 实测为准</Description>
+        <SubNodes>
+          <Task id="T1.1" name="手册写作与 README 瘦身" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="素材实测采集（--help/tools/hooks/skills/真实 depa 报告样例）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="写七部分手册 + index 导航" status="DONE" order="1"/>
+              <Task id="T1.1.3" name="README 瘦身为入口 + 命令逐条核验" status="DONE" order="2"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">七部分齐全有导航；`cozo-wiki tools` 全部工具在参考中无遗漏无残留</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">手册内 CLI 命令逐条与 --help 比对一致；README 瘦身并链接手册</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="docs"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P2" name="双分形文档补齐" status="DONE" order="1">
+        <Description>自举骨架（staging，不覆盖既有树）→ 人工充实 → 合并进 docs/；符合两份 fractal 标准 + folder-manifest</Description>
+        <SubNodes>
+          <Task id="T2.1" name="自举骨架与差距盘点" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="cozo-wiki wiki 生成 staging 骨架（checker 0 违规）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="骨架 vs 标准 vs 既有树 差距盘点（记 findings，产品缺陷登记 backlog）" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">staging 骨架生成成功且 checker 0 违规；仓库 docs/ 未被直接写入</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="人工充实与合并" status="DONE" order="1" priority="P0">
+            <SubNodes>
+              <Task id="T2.2.1" name="modeling：新增 code-knowledge/llm-wiki/depa context（Boundary+code-map+类目）" status="DONE" order="0"/>
+              <Task id="T2.2.2" name="impl：维护知识落类目（索引运维/hooks 排障/DEPA 规则扩展/eval 跑法）" status="DONE" order="1"/>
+              <Task id="T2.2.3" name="目录职责块补齐 + index 只导航核查 + 与 om-type-system 树合并" status="DONE" order="2"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">新 context 各含 index.md（Boundary+职责块）与 code-map.md，类目 3-6 正交；om-type-system 真源未被覆盖</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">impl 第一层全为类目且各 index 带职责块；规则叶子链接 modeling 不复制；delta 5 case 逐条核验通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="docs"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P3" name="SOP skill 沉淀" status="DONE" order="2">
+        <Description>四个 skill 落 .agents/skills/（gitignored 本机生效）；实证教训入正文；引用不复制 std/sop</Description>
+        <SubNodes>
+          <Task id="T3.1" name="四个 SOP skill 写作" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T3.1.1" name="素材回收（memory/归档 track lessons/本会话执行史）" status="DONE" order="0"/>
+              <Task id="T3.1.2" name="写 subagent-orchestration 与 gap-loop-probe-design" status="DONE" order="1"/>
+              <Task id="T3.1.3" name="写 codex-dual-eval 与 depa-rectification-loop" status="DONE" order="2"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">四 skill 各含 frontmatter SKILL.md；关键步骤附实证教训；与 std/sop 重叠处为路径引用非复制</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="docs"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

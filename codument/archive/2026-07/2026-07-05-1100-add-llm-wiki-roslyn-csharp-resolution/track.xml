@@ -1,0 +1,69 @@
+<Track id="add-llm-wiki-roslyn-csharp-resolution" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>Roslyn 轻量编译语义增强：DocId 符号富化 + 语义级 CALLS 边（1.0/0.6）与 tree-sitter 基线按调用点归并（Roslyn 胜）</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G4 第二 track（D1 混合决策的 Roslyn 半边）。spike 证据：TPA 全量引用 + implicit usings 下 1.0 命中 98.8%。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T02:56:19Z</CreatedAt>
+    <UpdatedAt>2026-07-05T08:00:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="roslyn-enhancer" domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.RoslynEnhancer/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-roslyn-csharp-resolution" name="add-llm-wiki-roslyn-csharp-resolution" version="1">
+    <Description>Roslyn 语义遍历 → 归并集成 → dogfood 回归收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Roslyn 语义遍历包" status="DONE" order="0">
+        <Description>RoslynEnhancer 新包：轻量编译 + 语义遍历 → RoslynCallEdge/RoslynSymbolInfo（design §1）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="RoslynEnhancer 包" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写语义遍历固定样例测试（1.0/0.6/外部计数/caller 归属）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现轻量编译与语义遍历" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">固定样例：语义命中 1.0、候选 0.6+CandidateReason、BCL 外部只计数、caller DocId 归属正确</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="归并集成" status="DONE" order="1">
+        <Description>RoslynMergeStep（internal）：doc_id 富化 + 调用点归并（Roslyn 胜）+ 开关 + summary 计数（design §2）。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="归并集成" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写归并用例测试（delta 6 case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现归并与开关" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">同调用点 Roslyn 覆盖基线（含 0.5 歧义被 1.0 纠正）；doc_id 富化；开关关闭产出与基线一致</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">外部调用/unmapped 计数进 summary；compilation 失败不炸索引</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="dogfood 与回归收口" status="DONE" order="2">
+        <Description>本仓 C# 消解率/confidence 分布前后对比 + 两侧全量回归。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="dogfood 与回归" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">dogfood 对比记入 findings：增强后 C# CALLS 边 confidence=1.0 占比显著提升且消解率上升（数字为准）</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">两侧测试套件全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

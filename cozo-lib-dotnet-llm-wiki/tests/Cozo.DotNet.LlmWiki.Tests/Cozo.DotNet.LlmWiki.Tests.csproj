@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.Core\Cozo.DotNet.LlmWiki.Core.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.Indexing\Cozo.DotNet.LlmWiki.Indexing.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.LlmClient\Cozo.DotNet.LlmWiki.LlmClient.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.Wiki\Cozo.DotNet.LlmWiki.Wiki.csproj" />
+    <ProjectReference Include="..\..\..\cozo-lib-dotnet\Cozo.DotNet.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.SemanticParsing\Cozo.DotNet.LlmWiki.SemanticParsing.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.RoslynEnhancer\Cozo.DotNet.LlmWiki.RoslynEnhancer.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.VectorSearch\Cozo.DotNet.LlmWiki.VectorSearch.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.Tools\Cozo.DotNet.LlmWiki.Tools.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.Server\Cozo.DotNet.LlmWiki.Server.csproj" />
+    <ProjectReference Include="..\..\packages\Cozo.DotNet.LlmWiki.McpServer\Cozo.DotNet.LlmWiki.McpServer.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,39 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/community-detection">
+    <requirement id="community-detection">
+      <statement>系统 SHALL 提供基于 Cozo 内置 Louvain 固定规则的社群检测公开 API：以 CALLS/IMPORTS 加权投影为输入，产出确定性的 ck_community/ck_member 事实，社群带真实 cohesion（社群内边权占关联总边权比）与可解释 label（公共限定名前缀优先，退化为最高加权度成员名）；产出受 maxCommunities 预算与最小 size 阈值约束，索引管线 SHALL 支持开关控制的自动重算。</statement>
+      <suite id="community" name="社群检测">
+        <case id="two-clusters">
+          <given>图中存在两个内部密集互调、彼此无边的符号簇</given>
+          <when>运行社群检测</when>
+          <then>两簇 SHALL 落入不同社群，各社群 cohesion 为 1.0</then>
+        </case>
+        <case id="deterministic">
+          <given>同一图数据</given>
+          <when>连续运行两次社群检测</when>
+          <then>社群划分与 label SHALL 完全一致（确定性排序）</then>
+        </case>
+        <case id="label-common-prefix">
+          <given>某社群全部成员的限定名共享公共前缀（如同一命名空间）</given>
+          <when>计算 label</when>
+          <then>label SHALL 采用该公共前缀</then>
+        </case>
+        <case id="min-size-noise">
+          <given>存在成员数低于最小 size 阈值的孤立小簇</given>
+          <when>运行社群检测</when>
+          <then>该小簇 SHALL 不产出 ck_community/ck_member 行且计入 noise 诊断计数</then>
+        </case>
+        <case id="budget-truncate">
+          <given>社群数超过 maxCommunities 预算</given>
+          <when>运行社群检测</when>
+          <then>SHALL 按规模降序保留预算内社群并记录截断诊断</then>
+        </case>
+        <case id="pipeline-switch">
+          <given>ComputeCommunities=false</given>
+          <when>索引仓库</when>
+          <then>SHALL 不产生任何 ck_community/ck_member 行</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

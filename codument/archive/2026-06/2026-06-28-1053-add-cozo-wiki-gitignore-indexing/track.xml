@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-cozo-wiki-gitignore-indexing" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>让 cozo-wiki 构建 repo DB 时读取 work-dir 根目录 .gitignore 并跳过匹配文件</Goal>
+    <Description>避免 node_modules、构建产物和项目自定义忽略文件污染 repo DB。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T07:31:38Z</CreatedAt>
+    <UpdatedAt>2026-06-28T07:53:37Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="llm-wiki" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/"/>
+  </Ports>
+  <TaskSpace id="space_add-cozo-wiki-gitignore-indexing" name="add-cozo-wiki-gitignore-indexing" version="1">
+    <Description>Gitignore-aware repo indexing.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Indexer ignore support" status="DONE" order="0">
+        <Description>实现 root .gitignore matcher 并接入文件遍历。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="实现 .gitignore matcher" status="DONE" order="0" priority="P0">
+            <Description>支持常用 gitignore pattern、目录规则和反选。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">node_modules/ 规则可跳过目录</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">*.log 规则可跳过文件</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="接入 RepositoryIndexer" status="DONE" order="1" priority="P0">
+            <Description>默认读取 repository root 的 .gitignore。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">RepositoryIndexer 默认启用 .gitignore</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">CLI/MCP index_repo 自动继承该行为</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Tests and docs" status="DONE" order="1">
+        <Description>补 smoke test 和 README。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="测试 .gitignore indexing" status="DONE" order="0" priority="P0">
+            <Description>临时 repo 写入 .gitignore 并断言忽略文件不进入索引。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">测试覆盖 ignored directory</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">测试覆盖 ignored glob file</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="README 说明" status="DONE" order="1" priority="P1">
+            <Description>说明 repo indexing 默认读取 .gitignore。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">README 包含 .gitignore 行为说明</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

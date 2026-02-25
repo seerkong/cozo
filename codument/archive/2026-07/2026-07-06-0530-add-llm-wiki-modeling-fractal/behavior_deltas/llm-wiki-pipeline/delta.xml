@@ -1,0 +1,34 @@
+<behavior-patch capability="llm-wiki-pipeline" version="1">
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/modeling-fractal">
+    <requirement id="modeling-fractal">
+      <statement>分形 wiki 管线 SHALL 生成 modeling 分形（domain canonical plane）：contexts 由社群与命名空间聚合确定性发现（禁止 #N 退化命名，LLM 归组审查稿可改名合并），每 context 含 objects/（类型页：成员/继承/code-map 链接）与 workflows/（执行流页：步骤链）类目与 code-map；frontmatter 含 context 与 doc_role=canonical；产物 SHALL 通过 M-* 规范检查全集并并入既有页级增量体系。</statement>
+      <suite id="modeling" name="modeling 分形">
+        <case id="context-discovery-no-degenerate">
+          <given>索引后的代码图（含社群）</given>
+          <when>生成 modeling 分形</when>
+          <then>全部 context 名 SHALL 无 #N 退化形式且确定性可复现</then>
+        </case>
+        <case id="objects-leaf">
+          <given>某 context 内的公开类型含成员与继承关系</given>
+          <when>生成</when>
+          <then>objects/&lt;type&gt;.md SHALL 含成员表、继承关系与 file:line code-map 链接（结构层零 LLM）</then>
+        </case>
+        <case id="workflows-leaf">
+          <given>某执行流入口属于该 context</given>
+          <when>生成</when>
+          <then>workflows/ SHALL 含该流页且步骤链与 ck_process_step 一致</then>
+        </case>
+        <case id="m-rules-pass">
+          <given>本仓 dogfood 产物</given>
+          <when>运行 FractalSpecChecker（含 M-* 全集）</when>
+          <then>[P] 违规 SHALL 为 0</then>
+        </case>
+        <case id="incremental-shared">
+          <given>已生成的双分形产物</given>
+          <when>无源变化二次生成</when>
+          <then>modeling 页 SHALL 全部 skip（与 impl 共用增量体系）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

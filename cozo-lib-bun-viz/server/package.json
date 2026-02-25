@@ -1,0 +1,14 @@
+{
+  "name": "cozo-viz-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.js",
+    "start": "bun src/index.js"
+  },
+  "dependencies": {
+    "elysia": "^1.2.25",
+    "@elysiajs/cors": "^1.2.0",
+    "cozo-lib-bun": "file:../../cozo-lib-bun"
+  }
+}

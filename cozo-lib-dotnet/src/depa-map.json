@@ -1,0 +1,13 @@
+{
+  "_comment": "DEPA annotation truth source for scans rooted at cozo-lib-dotnet/src (track fix-om-depa-conformance-gaps REC-4). Same content as the repo-root depa-map.json with paths relative to this directory — the depa_conformance dogfood/rescan uses workDirectory=cozo-lib-dotnet/src, whose ck_file paths are relative to this root. runtimeCarrierTypes declares the real runtime carriers via the config channel (confidence 1.0), suppressing the heuristic name-based V-F2 false positives on OmMutationContext. layers declares the real low→high architecture (track expand-depa-detection-rules T3.1, V-P2): the native DB binding is the lowest layer, Om.Core the OM base, the Om.* capability packages sit above it, and Om.Depa (which interprets ck_* observations) on top — lower layers must stay unaware of higher ones. recoveryPaths is intentionally undeclared: this repo has no journal/checkpoint (grade-4/5) semantics, so V-S2a/V-S2b honestly report BLOCKED.",
+  "runtimeCarrierTypes": ["CozoOmRuntime", "CozoOmOptions"],
+  "capsules": [
+    { "name": "Om.Core", "rootPath": "Om.Core" }
+  ],
+  "layers": [
+    { "name": "db-binding", "pathGlobs": ["*.cs"] },
+    { "name": "om-core", "pathGlobs": ["Om.Core/**"] },
+    { "name": "om-capabilities", "pathGlobs": ["Om.CodeKnowledge/**", "Om.Query/**", "Om.Analytics/**", "Om.Batch/**"] },
+    { "name": "om-depa", "pathGlobs": ["Om.Depa/**"] }
+  ]
+}

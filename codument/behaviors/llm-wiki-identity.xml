@@ -1,0 +1,32 @@
+<behaviors capability="llm-wiki-identity" version="1">
+  <requirement id="depa-wiki-identity">
+    <statement>产品对外身份 SHALL 统一为 depa-wiki：可执行名、默认数据目录、hooks 标记、skills 前缀、MCP server 示例名；旧 cozo-wiki 标识 SHALL 不再被产出或识别（硬切换）。</statement>
+    <suite id="identity" name="对外身份">
+      <case id="binary-and-usage">
+        <given>Release 构建产物</given>
+        <when>执行 depa-wiki --help</when>
+        <then>可执行名 SHALL 为 depa-wiki；usage/帮助文案 SHALL 全部以 depa-wiki 呈现，无 cozo-wiki 残留</then>
+      </case>
+      <case id="data-folder-default">
+        <given>未显式指定 --data-folder-name</given>
+        <when>index/mcp/wiki 任一命令运行</when>
+        <then>默认数据目录 SHALL 为 .depa-wiki（global 与 work 两处），db 路径随之</then>
+      </case>
+      <case id="hooks-marker">
+        <given>hooks install 于目标 work-dir</given>
+        <when>写入 .claude/settings.json 并再执行 status/uninstall</when>
+        <then>hook 命令行与 own-entry 标记 SHALL 为 depa-wiki；uninstall SHALL 只移除 depa-wiki 标记条目（merge-safe 语义保持）</then>
+      </case>
+      <case id="skills-prefix">
+        <given>skills generate/clean/status</given>
+        <when>写入与清理目标目录</when>
+        <then>生成目录前缀 SHALL 为 depa-wiki-*；clean SHALL 只删除 depa-wiki-* 目录（own-prefix 安全边界保持）</then>
+      </case>
+      <case id="no-legacy-emission">
+        <given>全部源码字符串、tests、手册、eval 配置</given>
+        <when>grep 检查</when>
+        <then>SHALL 无产出性 &quot;cozo-wiki&quot;/&quot;cozo_wiki&quot;/&quot;.cozo-wiki&quot; 残留（.NET 包名/命名空间与 codument 历史材料除外）；两侧测试套件 SHALL 全绿</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

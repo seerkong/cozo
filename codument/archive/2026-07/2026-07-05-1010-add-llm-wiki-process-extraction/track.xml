@@ -1,0 +1,58 @@
+<Track id="add-llm-wiki-process-extraction" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>执行流提取：入口点识别（main/http_route/mcp_tool/public_api）+ 有界 BFS → ck_entry_point/ck_process/ck_process_step，管线自动重算</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G5 第二 track（最后一块图能力）。D5 入口范围 + A2 预算模式（maxProcesses=max(20,min(300,symbolCount/10))、minSteps=3）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T04:09:49Z</CreatedAt>
+    <UpdatedAt>2026-07-05T07:10:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-process-extraction" name="add-llm-wiki-process-extraction" version="1">
+    <Description>入口点与遍历 API → 管线集成与 dogfood 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="入口点与遍历 API" status="DONE" order="0">
+        <Description>ck_entry_point 检测（分层：Indexing 语法级 route/tool 候选 + Om 图级 main/public_api）、ExtractProcessesAsync 有界 BFS、查询 API（design §1/§2）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="入口点与遍历" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写入口/遍历/预算/去环测试（delta 前 6 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现检测器、BFS、查询与落库" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">main/http_route 入口识别、步骤编号、minSteps 弃流、预算与 maxSteps 截断、去环、cross_community 标注 断言全过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="管线集成与 dogfood 收口" status="DONE" order="1">
+        <Description>索引尾部自动重算（开关）、失败安全、双仓 dogfood、两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="管线集成与 dogfood" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写管线开关/失败安全测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现集成 + dogfood 记录" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">ExtractProcesses 开关生效；失败不炸索引；Summary 计数透传</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">dogfood（本仓 + llm-wiki 仓）：入口分布/Process 数量与规模/抽样评注记入 findings 且有界；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

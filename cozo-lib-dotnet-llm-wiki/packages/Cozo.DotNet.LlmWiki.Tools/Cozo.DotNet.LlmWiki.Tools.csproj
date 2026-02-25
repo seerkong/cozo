@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Core\Cozo.DotNet.LlmWiki.Core.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Indexing\Cozo.DotNet.LlmWiki.Indexing.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Wiki\Cozo.DotNet.LlmWiki.Wiki.csproj" />
+    <ProjectReference Include="..\..\..\cozo-lib-dotnet\Cozo.DotNet.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.SemanticParsing\Cozo.DotNet.LlmWiki.SemanticParsing.csproj" />
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.VectorSearch\Cozo.DotNet.LlmWiki.VectorSearch.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Git-capsule seam (detect-changes track): tests may inject an IGitDiffProvider on the runner. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

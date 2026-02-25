@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-llm-wiki-mcp" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 cozo-lib-dotnet-llm-wiki/packages 下实现基于 Cozo OM 的 .NET LLM wiki 与 MCP stdio MVP</Goal>
+    <Description>创建多个 .NET project，补齐仓库扫描、CodeKnowledge 索引、Markdown wiki 编译和 MCP stdio 工具面。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-27T20:50:34Z</CreatedAt>
+    <UpdatedAt>2026-06-27T21:12:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-mcp" name="add-dotnet-llm-wiki-mcp" version="1">
+    <Description>.NET LLM wiki MCP MVP</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="包结构与核心模型" status="DONE" order="0">
+        <Description>创建 solution、多 project 和 Core 模型。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="创建 solution 和 project 骨架" status="DONE" order="0" priority="P0">
+            <Description>在 cozo-lib-dotnet-llm-wiki 下创建 solution、packages 和 tests project，并建立 ProjectReference。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">packages 下存在 Core、Indexing、Wiki、McpServer 四个 csproj</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">dotnet build solution 可解析 project 引用</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 Core 模型" status="DONE" order="1" priority="P0">
+            <Description>实现配置、扫描结果、索引请求、wiki 请求和 MCP 工具结果模型。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">Core 不依赖 Cozo runtime</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">模型可被 Indexing、Wiki、McpServer 复用</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="索引与 Wiki 编译" status="DONE" order="1">
+        <Description>实现仓库扫描、轻量抽取、CodeKnowledge batch 写入和 Markdown wiki 编译。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现仓库扫描与抽取" status="DONE" order="0" priority="P0">
+            <Description>扫描文件、识别语言、计算 hash、抽取轻量符号/Markdown doc block/关系。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">可从本地目录生成 CodeKnowledgeBatch</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">默认跳过 bin/obj/.git/node_modules 等目录</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现 indexing service 和 wiki compiler" status="DONE" order="1" priority="P0">
+            <Description>把 batch 写入 CozoOm，并基于 WikiPlan 生成 Markdown wiki。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">Indexing service 调用 InitCodeKnowledgeAsync 与 IndexCodeKnowledgeAsync</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">Wiki compiler 输出 index 和 page markdown</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="MCP 主入口与验证" status="DONE" order="2">
+        <Description>实现 CLI/MCP stdio 主入口和 smoke tests。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="实现 MCP stdio tools" status="DONE" order="0" priority="P0">
+            <Description>实现 initialize、tools/list、tools/call，并提供 index_repo/build_wiki/symbol_context/impact/docs/explain/query_named。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">mcp --stdio 能响应 initialize 和 tools/list</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">至少一个 tools/call smoke 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="测试、README 和最终验证" status="DONE" order="1" priority="P0">
+            <Description>添加 smoke tests、README 命令说明，并运行 build/test/codument validate。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">dotnet build cozo-lib-dotnet-llm-wiki 通过</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">dotnet test/smoke 通过</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC3" checked="true">codument validate add-dotnet-llm-wiki-mcp --strict 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

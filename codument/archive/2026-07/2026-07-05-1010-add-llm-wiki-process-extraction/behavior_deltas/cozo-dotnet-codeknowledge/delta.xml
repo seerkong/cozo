@@ -1,0 +1,44 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/process-extraction">
+    <requirement id="process-extraction">
+      <statement>系统 SHALL 识别入口点（main/cli_command/http_route/mcp_tool/public_api）写入 ck_entry_point，并从每个入口点沿 confidence≥阈值的 CALLS 边做去环 BFS，产出有界的 ck_process/ck_process_step 事实（maxProcesses 预算、minSteps 下限、maxSteps 截断），步骤跨社群的执行流 SHALL 标注 cross_community；索引管线 SHALL 支持开关控制的自动重算且失败不中断索引。</statement>
+      <suite id="process" name="执行流提取">
+        <case id="main-entry">
+          <given>仓内存在 Main 方法且其调用链深度≥minSteps</given>
+          <when>提取执行流</when>
+          <then>ck_entry_point SHALL 含 kind=main 的入口，且对应 ck_process 步骤按调用顺序编号</then>
+        </case>
+        <case id="route-entry">
+          <given>代码含 MapGet/MapPost 调用注册 handler</given>
+          <when>提取执行流</when>
+          <then>handler SHALL 被识别为 kind=http_route 入口</then>
+        </case>
+        <case id="min-steps-dropped">
+          <given>某入口点可达链长小于 minSteps</given>
+          <when>提取执行流</when>
+          <then>SHALL 不产出该 process 且计入 dropped 计数</then>
+        </case>
+        <case id="budget-and-truncate">
+          <given>入口点数量超过 maxProcesses 或某流步骤超过 maxSteps</given>
+          <when>提取执行流</when>
+          <then>产出 SHALL 被预算截断且记录诊断/计数</then>
+        </case>
+        <case id="cycle-safe">
+          <given>调用图存在 A→B→A 环</given>
+          <when>提取执行流</when>
+          <then>遍历 SHALL 终止且每符号在单个 process 中只出现一次</then>
+        </case>
+        <case id="cross-community-marked">
+          <given>某执行流步骤跨越两个社群</given>
+          <when>提取执行流</when>
+          <then>该 process 的 process_type SHALL 含 cross_community 标注</then>
+        </case>
+        <case id="pipeline-switch">
+          <given>ExtractProcesses=false</given>
+          <when>索引仓库</when>
+          <then>SHALL 不产生任何 ck_process/ck_process_step/ck_entry_point 行</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

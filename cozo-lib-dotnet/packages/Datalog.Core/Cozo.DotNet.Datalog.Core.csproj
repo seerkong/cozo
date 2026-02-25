@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cozo.DotNet.Datalog.Core</PackageId>
+    <Version>0.7.6</Version>
+    <Authors>Ziyang Hu</Authors>
+    <Description>Portable Datalog parser, validator, normalized IR, and diagnostics for Cozo .NET integrations.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/cozodb/cozo</RepositoryUrl>
+    <PackageProjectUrl>https://www.cozodb.org</PackageProjectUrl>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,24 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/eval-baseline">
+    <requirement id="eval-baseline">
+      <statement>项目 SHALL 提供轻量 eval 基准：≥20 题本仓任务集（含期望答案要素与建议工具序列）、加权要素评分器、oracle 模式（工具序列直答）；oracle 全集 must 要素命中率 SHALL ≥90%（证明任务集可被图回答）；运行器 SHALL 支持可插拔 agent 命令与 baseline/native 两模式模板。</statement>
+      <suite id="eval" name="eval 基准">
+        <case id="task-set-shape">
+          <given>eval/tasks.json</given>
+          <when>加载</when>
+          <then>SHALL ≥20 题且每题含 question/must 要素/工具序列/难度</then>
+        </case>
+        <case id="scorer-discriminates">
+          <given>一题的满分答案与空答案</given>
+          <when>评分</when>
+          <then>满分答案 SHALL 得满 must 分、空答案 SHALL 0 分</then>
+        </case>
+        <case id="oracle-gate">
+          <given>已索引本仓与全部任务</given>
+          <when>oracle 模式执行全集</when>
+          <then>must 要素命中率 SHALL ≥90%</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

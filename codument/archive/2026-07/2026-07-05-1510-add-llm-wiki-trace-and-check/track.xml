@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-trace-and-check" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>trace 调用路径（ShortestPathDijkstra + 名称消歧 + 逐 hop file:line）与 check 循环检测（SCC，import/calls）工具，单实现三入口</Goal>
+    <Description>mission expand-llm-wiki-agent-tools 的 G3 第一 track。正式化 P0 遗留的 internal cycles API。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T07:55:52Z</CreatedAt>
+    <UpdatedAt>2026-07-05T12:10:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-trace-and-check" name="add-llm-wiki-trace-and-check" version="1">
+    <Description>Om 查询 API → 工具面接线收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Om 查询 API" status="DONE" order="0">
+        <Description>TraceCallPathAsync（Dijkstra + hop 装配 + MinConfidence/MaxDepth）与 DetectCyclesAsync 正式化（import/calls，确定性旋转）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="trace 与 cycles API" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写路径/无路径/置信度截断/环检测测试（delta 6 case 的 API 层）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 API 与固定规则接线" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">known-path/no-path/min-confidence-cut/import-cycle/no-cycle API 断言全过；输出确定性</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="工具面接线收口" status="DONE" order="1">
+        <Description>trace/check 工具注册与名称消歧、smoke 与两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="工具接线" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写工具层测试（含 name-disambiguation case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现工具注册与消歧" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">trace/check 经 runner 派发可用（14 工具 smoke）；名称多候选返回清单；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

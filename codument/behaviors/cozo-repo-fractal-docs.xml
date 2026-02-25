@@ -1,0 +1,36 @@
+<behaviors capability="cozo-repo-fractal-docs" version="1">
+  <requirement id="fractal-coverage">
+    <statement>仓库 docs/ 双分形树 SHALL 覆盖 cozo-lib-dotnet* 本轮交付的能力域（代码知识图、llm-wiki 工具面、DEPA 分析），并符合 docs-modeling-fractal 与 docs-engineering-fractal 标准。</statement>
+    <suite id="bootstrap" name="自举骨架">
+      <case id="dogfood-skeleton">
+        <given>本仓已建索引</given>
+        <when>运行 cozo-wiki wiki --repo 生成到 staging 目录</when>
+        <then>生成 SHALL 成功产出双分形骨架且自带 checker 0 违规；骨架 SHALL NOT 直接写入仓库 docs/（人工合并）</then>
+      </case>
+    </suite>
+    <suite id="modeling-tree" name="modeling 分形">
+      <case id="new-contexts-exist">
+        <given>docs/modeling/domain/contexts/</given>
+        <when>人工充实合并完成后检查</when>
+        <then>SHALL 新增覆盖 code-knowledge（ck_* 观测本体）、llm-wiki（工具面/wiki 生成）、depa（解释层本体）的 context，每个 context 含 index.md（Boundary+目录职责块）与 code-map.md，类目 3-6 个正交；既有 om-type-system context SHALL 保持为真源不被覆盖</then>
+      </case>
+      <case id="no-canonical-duplication">
+        <given>任一 derived/引用位置</given>
+        <when>与 canonical 真源比对</when>
+        <then>SHALL 引用而非复制真源；index 文件 SHALL 只承载导航与边界</then>
+      </case>
+    </suite>
+    <suite id="impl-tree" name="engineering/impl 分形">
+      <case id="categories-first">
+        <given>docs/impl/ 各 plane 第一层</given>
+        <when>检查目录结构</when>
+        <then>第一层 SHALL 全部为类目（overview/howto/rules/examples/reference/troubleshooting 或领域自定义），主题在类目之下；每个类目 index.md SHALL 带目录职责块</then>
+      </case>
+      <case id="maintenance-knowledge-present">
+        <given>本轮交付的维护性知识（索引/增量/一致性门禁运维、hooks 接入排障、DEPA 规则扩展流程、eval 跑法）</given>
+        <when>在 impl 树中检索</when>
+        <then>上述知识 SHALL 各有落点（howto/troubleshooting/reference 恰当类目），规则类叶子 SHALL 链接 modeling 真源而非复制</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

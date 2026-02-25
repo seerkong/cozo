@@ -1,0 +1,386 @@
+<behaviors capability="cozo-dotnet-codeknowledge" version="1">
+  <requirement id="schema-v2">
+    <statement>CodeKnowledge 存储 SHALL 使用 v2 图 schema：符号表带 sym_key/doc_id/parent_id/lang/resolver，单一边表 ck_edge 以 (from_id, to_id, kind, file_id, line) 为键并携带 confidence 与 resolver，另含 ck_meta、ck_entry_point、ck_community/ck_member、ck_process/ck_process_step 派生层专表。</statement>
+    <suite id="schema" name="schema 初始化">
+      <case id="init-creates-v2">
+        <given>一个空的 Cozo 数据库</given>
+        <when>调用 InitCodeKnowledgeAsync</when>
+        <then>系统 SHALL 创建全部 v2 relations 并将 ck_meta.schema_version 置为 2</then>
+      </case>
+      <case id="init-idempotent">
+        <given>已初始化 v2 schema 的数据库</given>
+        <when>再次调用 InitCodeKnowledgeAsync</when>
+        <then>调用 SHALL 幂等成功且不破坏既有数据</then>
+      </case>
+      <case id="detect-v1-requires-reindex">
+        <given>存在 v1 旧表（有 ck_relation 而无 ck_meta）的数据库</given>
+        <when>调用 InitCodeKnowledgeAsync</when>
+        <then>系统 SHALL 抛出带 reindex 指引的错误，且不静默混用两代 schema</then>
+      </case>
+      <case id="reindex-rebuilds">
+        <given>存在 v1 旧表的数据库</given>
+        <when>以 reindex 选项初始化</when>
+        <then>系统 SHALL 删除旧代 relations 并重建 v2 schema</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="edge-facts">
+    <statement>批量索引 SHALL 支持写入带 confidence 与 resolver 的类型化边事实（CONTAINS/IMPORTS/EXTENDS/IMPLEMENTS/HAS_METHOD/HAS_PROPERTY/CALLS/ACCESSES/METHOD_OVERRIDES/DOC_LINKS/MENTIONS），同一 (from,to,kind) 的多个调用点按 (file_id, line) 区分保留。</statement>
+    <suite id="ingest" name="边事实写入">
+      <case id="edge-with-confidence">
+        <given>包含 kind=CALLS、confidence=0.3、resolver=regex 的边事实批次</given>
+        <when>调用 IndexCodeKnowledgeAsync</when>
+        <then>ck_edge SHALL 保存该边及其 confidence 与 resolver 字段</then>
+      </case>
+      <case id="callsite-granularity">
+        <given>同一 from/to 符号对在两个不同行位置的两条 CALLS 边</given>
+        <when>批量写入</when>
+        <then>两条边 SHALL 都被保留（键含 file_id 与 line）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="query-compat">
+    <statement>既有查询 API（FindSymbolContext/ImpactOfChange/ExplainRelation/DocsForCode 等）SHALL 基于 ck_edge 工作并保持结果契约兼容，且 SHALL 支持按最小 confidence 过滤；系统 SHALL 提供 call_graph/import_graph 的 Datalog 投影，供 Cozo 固定规则算法（Louvain/SCC/最短路）消费。</statement>
+    <suite id="query" name="查询兼容">
+      <case id="symbol-context-on-edges">
+        <given>已写入 v2 符号与边事实</given>
+        <when>调用 FindSymbolContextAsync</when>
+        <then>结果 SHALL 含该符号的 incoming/outgoing 边且与 v1 结果契约字段兼容</then>
+      </case>
+      <case id="impact-min-confidence">
+        <given>存在 confidence 分别为 0.3 与 1.0 的 CALLS 边</given>
+        <when>以 minConfidence=0.8 调用 ImpactOfChangeAsync</when>
+        <then>结果 SHALL 只含 confidence≥0.8 的路径</then>
+      </case>
+      <case id="louvain-projection">
+        <given>已写入含 CALLS/IMPORTS 边的图</given>
+        <when>以 cluster_input 投影调用 CommunityDetectionLouvain 固定规则</when>
+        <then>查询 SHALL 成功返回社群划分（本 track 仅验证投影可被固定规则消费）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="community-detection">
+    <statement>系统 SHALL 提供基于 Cozo 内置 Louvain 固定规则的社群检测公开 API：以 CALLS/IMPORTS 加权投影为输入，产出确定性的 ck_community/ck_member 事实，社群带真实 cohesion（社群内边权占关联总边权比）与可解释 label（公共限定名前缀优先，退化为最高加权度成员名）；产出受 maxCommunities 预算与最小 size 阈值约束，索引管线 SHALL 支持开关控制的自动重算。</statement>
+    <suite id="community" name="社群检测">
+      <case id="two-clusters">
+        <given>图中存在两个内部密集互调、彼此无边的符号簇</given>
+        <when>运行社群检测</when>
+        <then>两簇 SHALL 落入不同社群，各社群 cohesion 为 1.0</then>
+      </case>
+      <case id="deterministic">
+        <given>同一图数据</given>
+        <when>连续运行两次社群检测</when>
+        <then>社群划分与 label SHALL 完全一致（确定性排序）</then>
+      </case>
+      <case id="label-common-prefix">
+        <given>某社群全部成员的限定名共享公共前缀（如同一命名空间）</given>
+        <when>计算 label</when>
+        <then>label SHALL 采用该公共前缀</then>
+      </case>
+      <case id="min-size-noise">
+        <given>存在成员数低于最小 size 阈值的孤立小簇</given>
+        <when>运行社群检测</when>
+        <then>该小簇 SHALL 不产出 ck_community/ck_member 行且计入 noise 诊断计数</then>
+      </case>
+      <case id="budget-truncate">
+        <given>社群数超过 maxCommunities 预算</given>
+        <when>运行社群检测</when>
+        <then>SHALL 按规模降序保留预算内社群并记录截断诊断</then>
+      </case>
+      <case id="pipeline-switch">
+        <given>ComputeCommunities=false</given>
+        <when>索引仓库</when>
+        <then>SHALL 不产生任何 ck_community/ck_member 行</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="process-extraction">
+    <statement>系统 SHALL 识别入口点（main/cli_command/http_route/mcp_tool/public_api）写入 ck_entry_point，并从每个入口点沿 confidence≥阈值的 CALLS 边做去环 BFS，产出有界的 ck_process/ck_process_step 事实（maxProcesses 预算、minSteps 下限、maxSteps 截断），步骤跨社群的执行流 SHALL 标注 cross_community；索引管线 SHALL 支持开关控制的自动重算且失败不中断索引。</statement>
+    <suite id="process" name="执行流提取">
+      <case id="main-entry">
+        <given>仓内存在 Main 方法且其调用链深度≥minSteps</given>
+        <when>提取执行流</when>
+        <then>ck_entry_point SHALL 含 kind=main 的入口，且对应 ck_process 步骤按调用顺序编号</then>
+      </case>
+      <case id="route-entry">
+        <given>代码含 MapGet/MapPost 调用注册 handler</given>
+        <when>提取执行流</when>
+        <then>handler SHALL 被识别为 kind=http_route 入口</then>
+      </case>
+      <case id="min-steps-dropped">
+        <given>某入口点可达链长小于 minSteps</given>
+        <when>提取执行流</when>
+        <then>SHALL 不产出该 process 且计入 dropped 计数</then>
+      </case>
+      <case id="budget-and-truncate">
+        <given>入口点数量超过 maxProcesses 或某流步骤超过 maxSteps</given>
+        <when>提取执行流</when>
+        <then>产出 SHALL 被预算截断且记录诊断/计数</then>
+      </case>
+      <case id="cycle-safe">
+        <given>调用图存在 A→B→A 环</given>
+        <when>提取执行流</when>
+        <then>遍历 SHALL 终止且每符号在单个 process 中只出现一次</then>
+      </case>
+      <case id="cross-community-marked">
+        <given>某执行流步骤跨越两个社群</given>
+        <when>提取执行流</when>
+        <then>该 process 的 process_type SHALL 含 cross_community 标注</then>
+      </case>
+      <case id="pipeline-switch">
+        <given>ExtractProcesses=false</given>
+        <when>索引仓库</when>
+        <then>SHALL 不产生任何 ck_process/ck_process_step/ck_entry_point 行</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="code-graph-quality">
+    <statement>语义代码图 SHALL 满足端到端质量门禁：对真实仓库索引后，confidence≥0.8 的 CALLS 边抽样正确率 SHALL ≥90%；社群与执行流产出 SHALL 受预算约束（数量不超各自公式上限）；全部既有查询工具 SHALL 在完整图（含派生层）上无回归。</statement>
+    <suite id="quality" name="端到端质量">
+      <case id="sample-accuracy">
+        <given>对本仓（cozo-lib-dotnet 与 viz 前端）完成全量索引</given>
+        <when>随机抽取 30 条 confidence≥0.8 的 CALLS 边逐条核对源码</when>
+        <then>正确率 SHALL ≥90%</then>
+      </case>
+      <case id="bounded-derived-layers">
+        <given>同一索引</given>
+        <when>统计 ck_community 与 ck_process 行数</when>
+        <then>SHALL 分别不超过 max(10,min(200,symbols/20)) 与 max(20,min(300,symbols/10))</then>
+      </case>
+      <case id="tools-regression">
+        <given>完整图（含社群/执行流）</given>
+        <when>运行 12 个工具 smoke</when>
+        <then>SHALL 全部通过</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="trace-and-cycles">
+    <statement>系统 SHALL 提供基于 Cozo 固定规则的调用路径追踪（ShortestPathDijkstra over call_graph，受 MaxDepth 与 MinConfidence 约束，输出逐 hop 的符号/文件/行/confidence）与循环检测（SCC over import_graph，可选 CALLS 环），并经 trace/check 工具暴露；trace 的名称输入 SHALL 消歧（唯一命中直接追踪，多候选返回候选清单）。</statement>
+    <suite id="trace" name="路径追踪">
+      <case id="known-path">
+        <given>图中 A 经 B 可达 C（CALLS，conf≥0.7）</given>
+        <when>trace from=A to=C</when>
+        <then>SHALL 返回有序 hop A→B→C，各 hop 带 file:line 与 confidence</then>
+      </case>
+      <case id="no-path">
+        <given>A 与 D 无调用连通</given>
+        <when>trace from=A to=D</when>
+        <then>SHALL 返回空路径与明确说明，不报错</then>
+      </case>
+      <case id="min-confidence-cut">
+        <given>A→C 仅经一条 confidence 0.5 的边可达</given>
+        <when>trace（默认 MinConfidence=0.7）</when>
+        <then>SHALL 返回无路径；MinConfidence=0.5 时返回该路径</then>
+      </case>
+      <case id="name-disambiguation">
+        <given>from 给名称且仓内多个同名符号</given>
+        <when>trace</when>
+        <then>SHALL 返回候选清单（id/file/kind）而非任选其一</then>
+      </case>
+    </suite>
+    <suite id="cycles" name="循环检测">
+      <case id="import-cycle">
+        <given>文件 m1→m2→m3→m1 的 IMPORTS 环</given>
+        <when>check cycles=import</when>
+        <then>SHALL 返回该环的确定性路径</then>
+      </case>
+      <case id="no-cycle">
+        <given>无环图</given>
+        <when>check</when>
+        <then>SHALL 返回空列表</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="deep-context-impact">
+    <statement>符号上下文查询 SHALL 附带该符号参与的执行流与所属社群；影响分析 SHALL 支持按深度分层输出、方向选择（up=受影响方/down=依赖方）、minConfidence 过滤，并给出基于直接受影响数量与执行流参与度的风险评级（LOW/MEDIUM/HIGH/CRITICAL）与受影响执行流清单；每层输出 SHALL 有界并携带截断计数。调用边的 caller 归属 SHALL 按调用点行号落在符号行区间内定位（同名重载不串位）。</statement>
+    <suite id="deep" name="深图化">
+      <case id="context-with-processes">
+        <given>符号参与至少一条执行流且属于某社群</given>
+        <when>查询 symbol_context</when>
+        <then>结果 SHALL 含执行流列表与社群标识（add-only 字段）</then>
+      </case>
+      <case id="impact-layered">
+        <given>A←B←C 的调用链（C 调 B、B 调 A）</given>
+        <when>impact A（direction=up，maxDepth=2）</when>
+        <then>第 1 层 SHALL 只含 B、第 2 层只含 C</then>
+      </case>
+      <case id="impact-min-confidence">
+        <given>某受影响路径仅经 confidence 0.5 边</given>
+        <when>impact minConfidence=0.8</when>
+        <then>该路径 SHALL 被排除</then>
+      </case>
+      <case id="risk-rating">
+        <given>符号有 10+ 直接调用者且参与 ≥3 条执行流</given>
+        <when>impact</when>
+        <then>风险 SHALL 为 CRITICAL；直接调用者 2 个时 SHALL 为 LOW</then>
+      </case>
+      <case id="layer-bounded">
+        <given>某层受影响符号超过每层上限</given>
+        <when>impact</when>
+        <then>该层 SHALL 截断并携带截断计数</then>
+      </case>
+      <case id="overload-caller-attribution">
+        <given>类中存在同名两个重载方法且第二个重载内含调用点</given>
+        <when>索引后查询该调用边</when>
+        <then>caller SHALL 是包含该行的第二个重载符号（按行区间归属）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="depa-ontology">
+    <statement>系统 SHALL 提供 DEPA 本体层：depa_* OM 类型/关系/存在规则一键初始化；effect API 白名单（内置起步 + depa-effects.json 扩展）物化为可查询实体；角色标注经 depa-map.json（assigned_by=config）与启发式兜底（assigned_by=heuristic，confidence≤0.7）同步为 depa 实体并物化结构关系；索引器 SHALL 在丢弃仓外调用目标前落 ck_external_call 摘要行（含调用计数、白名单预分类与首个调用点 path:line 证据）；depa_scan SHALL 幂等且零标注时输出 BLOCKED 而非猜测。</statement>
+    <suite id="ontology" name="本体与标注">
+      <case id="init-idempotent">
+        <given>已初始化 CodeKnowledge v2 的库</given>
+        <when>两次调用 InitDepaOntologyAsync</when>
+        <then>depa_* Type/Relation/ExistentialRule SHALL 全部就位且幂等</then>
+      </case>
+      <case id="external-call-summary">
+        <given>C# 源码中 core 方法直调 System.IO.File.WriteAllText 两次</given>
+        <when>索引</when>
+        <then>ck_external_call SHALL 含该 (caller,target) 行，count=2、category=file_io、first_file/line 指向首个调用点</then>
+      </case>
+      <case id="config-annotation">
+        <given>depa-map.json 声明某目录为 capsule、某接口为 effect contract</given>
+        <when>depa_scan</when>
+        <then>SHALL 物化 depa_capsule/depa_contract 实体（assigned_by=config）与 capsule_contains/contract_implemented_by 关系</then>
+      </case>
+      <case id="heuristic-annotation">
+        <given>无 depa-map.json 但存在 Contracts/ 目录下的 interface</given>
+        <when>depa_scan</when>
+        <then>SHALL 产出 assigned_by=heuristic 且 confidence≤0.7 的 depa_contract 实体</then>
+      </case>
+      <case id="blocked-not-guess">
+        <given>零标注（无配置、无启发式命中）的库</given>
+        <when>depa_scan</when>
+        <then>ExistentialRule 依赖标注的检查 SHALL 输出 BLOCKED 行并说明缺失，不产出任何猜测性 violation</then>
+      </case>
+      <case id="scan-idempotent">
+        <given>同一标注与图数据</given>
+        <when>连续两次 depa_scan</when>
+        <then>depa 实体与关系 SHALL 幂等（无重复行）且输出一致</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="depa-conformance">
+    <statement>DEPA 扫描 SHALL 执行 8 条红灯检测（V-E1/V-E2/V-D1/V-S1/V-F1/V-F2/V-L1/V-L3）并把命中物化为带 evidence_json（每条证据必有 path:line）的 depa_violation 实体与信号边；输入缺失的规则 SHALL 显式 BLOCKED 并说明缺失而非 PASS；violation SHALL 幂等 upsert 且随 scan_commit 过期清理；depa_conformance/fact_grade_map/health_score 三工具 SHALL 经统一 tool runner 暴露，health_score 不得把四维合并为单一裁决。</statement>
+    <suite id="detect" name="红灯检测">
+      <case id="effect-leak-detected">
+        <given>标注为 core 的方法经 ck_external_call 直调 file_io 类 API 且不经任何 effect contract</given>
+        <when>depa_scan</when>
+        <then>SHALL 产出 V-E1 violation（GAP、path:line 证据、effect_leaks_through 边）</then>
+      </case>
+      <case id="compliant-no-leak">
+        <given>core 方法只经标注为 effect contract 的接口产生副作用</given>
+        <when>depa_scan</when>
+        <then>V-E1 对该方法 SHALL 无命中（合规样本可区分）</then>
+      </case>
+      <case id="func-in-config">
+        <given>标注为 config 角色的参数类型含 Func/Action 字段</given>
+        <when>depa_scan</when>
+        <then>SHALL 产出 V-F1 violation 且证据指向该字段声明行</then>
+      </case>
+      <case id="internals-crossing">
+        <given>capsule A 的符号 IMPORTS/CALLS capsule B 的 internals 路径</given>
+        <when>depa_scan</when>
+        <then>SHALL 产出 V-L1 violation，每条越界边一条证据</then>
+      </case>
+      <case id="multi-writer">
+        <given>grade≤3 的 fact_source 有两个写入者</given>
+        <when>depa_scan</when>
+        <then>SHALL 产出 V-D1 violation 且 message 列出全部写入者</then>
+      </case>
+      <case id="blocked-on-missing-input">
+        <given>某规则前置输入缺失（如无 fact_source 定级表时的 V-D1/V-S1）</given>
+        <when>depa_scan</when>
+        <then>该规则 SHALL 输出 BLOCKED+缺失说明，不产出猜测 violation</then>
+      </case>
+      <case id="violation-idempotent-and-expiring">
+        <given>同一代码与标注下两次 scan，随后修复违规再 scan</given>
+        <when>连续扫描</when>
+        <then>violation SHALL 幂等（无重复）且修复后被清理</then>
+      </case>
+    </suite>
+    <suite id="tools" name="工具面">
+      <case id="conformance-report">
+        <given>含违规与合规混合的库</given>
+        <when>调用 depa_conformance 工具</when>
+        <then>输出 SHALL 按维度分组、规则×verdict、violations 按 confidence 降序、BLOCKED 附原因</then>
+      </case>
+      <case id="fact-grade-map">
+        <given>已定级 fact_source 与写入/派生关系</given>
+        <when>调用 fact_grade_map 工具</when>
+        <then>SHALL 输出分级节点与 fact_written_by/projection_derived_from 邻接</then>
+      </case>
+      <case id="health-score-no-merge">
+        <given>四维各有不同 GAP 数</given>
+        <when>调用 health_score 工具</when>
+        <then>输出 SHALL 每维独立给分与覆盖率，不产出合并四维的单一总分裁决</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="depa-scan-explicitness">
+    <statement>DEPA scan 的配置文件读取 SHALL 只发生在公开入口层（core 管线接收已解析配置对象，不自发现文件依赖）；索引时间戳 SHALL 经 Runtime.Options.TimeProvider 获取（可测）；本仓 SHALL 提供 depa-map.json 标注真源使 runtime 载体经 config 通道声明（heuristic 误报被压制）。</statement>
+    <suite id="explicit" name="scan 显式化">
+      <case id="config-at-entry">
+        <given>以已解析配置对象调用 scan 管线</given>
+        <when>执行 scan</when>
+        <then>管线 SHALL 不做任何文件读取（可注入验证）</then>
+      </case>
+      <case id="timeprovider-indexed-at">
+        <given>注入固定 TimeProvider 的 OM</given>
+        <when>索引</when>
+        <then>ck_meta.indexed_at SHALL 等于注入时间</then>
+      </case>
+      <case id="carrier-false-positive-suppressed">
+        <given>仓根 depa-map.json 声明 runtimeCarrierTypes</given>
+        <when>对本仓 depa_conformance 复扫</when>
+        <then>OmMutationContext SHALL 不再产生 V-F2 violation</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="depa-extended-rules">
+    <statement>DEPA 检测 SHALL 扩展至判据目录的全部静态可判条目（批次一 14 条零新标注 + 批次二 3 条经 depa-map add-only 键），规则 id 与项目内 rubrics 真源（src/Om.Depa/rubrics/，含 rule-map 三方映射）一一锚定；报告 SHALL 按 8 维分组（含 overdesign/vendor）且 coverage 分母覆盖判据全目录（静态不可判条目显式 BLOCKED 占位、仅人工条目标注不计入工具分母）；既有 8 条检测器语义不变、dimension 归属按 rubrics 原文修正。</statement>
+    <suite id="extended" name="扩展规则">
+      <case id="rule-map-anchored">
+        <given>src/Om.Depa/rubrics/rule-map.md</given>
+        <when>对照实现</when>
+        <then>每条实现/占位规则 SHALL 在映射表中有 catalog 出处与状态，反之 catalog 静态可判条目全部有规则 id</then>
+      </case>
+      <case id="batch1-detectors">
+        <given>为每条批次一规则构造的正/反 fixture</given>
+        <when>depa_scan</when>
+        <then>14 条规则 SHALL 正例 GAP（带 path:line）、反例不误报</then>
+      </case>
+      <case id="batch2-annotated">
+        <given>depa-map 声明 recoveryPaths/layers 的 fixture</given>
+        <when>depa_scan</when>
+        <then>V-S2a/b 与 V-P2 SHALL 依标注判定；未声明时 SHALL BLOCKED 而非猜测</then>
+      </case>
+      <case id="eight-dimensions">
+        <given>conformance 报告</given>
+        <when>查询</when>
+        <then>SHALL 含 8 维分组（新增 overdesign/vendor），V-F1/F2 归属与 rubrics 一致，coverage 分母为全目录口径</then>
+      </case>
+      <case id="rescan-honest">
+        <given>本仓全规则复扫</given>
+        <when>新规则命中</when>
+        <then>每条命中 SHALL 经人工裁真伪并记录（误报走标注/调优，不为清零弱化规则）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="f2-pure-delegate-exemption">
+    <statement>V-F2（runtime 载体承载业务方法）检测 SHALL 豁免纯委托 facade 形态：方法出边仅单条 CALLS 且无写访问的成员不产 GAP（以低置信 INFO 形态留痕或不物化，实现口径记录于 rule-map），使无 runtimeCarrierTypes 标注的仓库不误伤该合规形态。</statement>
+    <suite id="exemption" name="纯委托豁免">
+      <case id="pure-delegate-exempt">
+        <given>heuristic 判定的 carrier 类型上的方法为单条 CALLS 委托转发且无写访问</given>
+        <when>V-F2 检测</when>
+        <then>SHALL 不产出 GAP violation</then>
+      </case>
+      <case id="real-logic-still-caught">
+        <given>carrier 方法含多条 CALLS 或写访问（真业务逻辑）</given>
+        <when>V-F2 检测</when>
+        <then>SHALL 仍产出 GAP</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="add-dotnet-llm-wiki-viz" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-lib-dotnet-llm-wiki 增加本地前端可视化工作台，并让 cozo-wiki CLI 通过 --serve 启动支持该前端的 server 模式</Goal>
+    <Description>参考 cozo-lib-bun-viz 的 Vue/Vite/vis-network 工程经验，在 cozo-lib-dotnet-llm-wiki-viz 新建 repo knowledge 前端；在 cozo-lib-dotnet-llm-wiki 中抽出共享 tool runner，新增 ASP.NET Core server package，并为 cozo-wiki CLI 添加 --serve，本地提供搜索、wiki、NamedQuery 和图可视化交互。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>5</Revision>
+    <CreatedAt>2026-06-28T13:15:34Z</CreatedAt>
+    <UpdatedAt>2026-06-28T14:15:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="llm-wiki-viz" domain="frontend" path="vfs://@/cozo-lib-dotnet-llm-wiki-viz/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-viz" name="add-dotnet-llm-wiki-viz" version="1" cdt:child-mode="dag">
+    <Description>Dotnet LLM wiki visualization mission.</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="证据盘点与契约收敛" status="DONE" order="0">
+        <Description>盘点现有 cozo-wiki CLI/MCP/tools、Bun viz 前端模式和 server API 参考，收敛本地工作台 API/UX contract。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="盘点现有 LLM wiki packages 与 CLI tools" status="DONE" order="0"/>
+          <Task id="G1-T2" name="盘点 cozo-lib-bun-viz 可复用前端/测试模式" status="DONE" order="1"/>
+          <Task id="G1-T3" name="确定 server API 与前端工作台 MVP contract" status="DONE" order="2"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="共享工具层重构" status="DONE" order="1">
+        <Description>抽出 MCP/CLI/HTTP 可共用的 tool runner、tool metadata、argument binding 和 storage options，保持现有 MCP/CLI 行为不变。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并实现 shared tool runner track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="extract-llm-wiki-tool-runner"/>
+          </Task>
+          <Task id="G2-T2" name="验证 MCP stdio 与 CLI call 行为未回归" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="Serve API 与 CLI 模式" status="DONE" order="2">
+        <Description>新增 ASP.NET Core minimal API server package，并给 cozo-wiki 增加 --serve 启动入口。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并实现 cozo-wiki serve API track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-cozo-wiki-serve-api"/>
+          </Task>
+          <Task id="G3-T2" name="验证 health/status/tools/search/wiki/named-query endpoints" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="前端可视化工作台" status="DONE" order="3">
+        <Description>新建 cozo-lib-dotnet-llm-wiki-viz Vue/Vite 前端，接入 server API，实现搜索、图、wiki 和 query 调试工作流。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并实现 LLM wiki viz frontend track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-llm-wiki-viz-frontend"/>
+          </Task>
+          <Task id="G4-T2" name="验证 frontend build 与 API integration smoke" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="文档、E2E 与收口" status="DONE" order="4">
+        <Description>补充 README/help，完成 server/frontend smoke 或 Playwright E2E，并根据验证结果修订 mission 或 tracks。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并实现 viz E2E 与文档 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-llm-wiki-viz-e2e"/>
+          </Task>
+          <Task id="G5-T2" name="完成 mission 最终验证报告" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add-dotnet-llm-wiki-viz">
+      <Node id="G2">
+        <After ref="G1"/>
+      </Node>
+      <Node id="G3">
+        <After ref="G2"/>
+      </Node>
+      <Node id="G4">
+        <After ref="G3"/>
+      </Node>
+      <Node id="G5">
+        <After ref="G4"/>
+      </Node>
+    </Dag>
+  </Schedule>
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block"/>
+    </Hook>
+  </Hooks>
+</Mission>

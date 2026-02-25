@@ -1,0 +1,29 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/skills-generation">
+    <requirement id="skills-generation">
+      <statement>CLI SHALL 提供 skills generate/clean/status：按确定性 context 划分生成有界的 per-context SKILL.md（frontmatter + 职责/关键符号 file:line/调用概览/执行流/工具调用示例）与通用工作流 skill；生成 SHALL 只写自有前缀目录、幂等覆盖、clean 只删自有；skill 内容 SHALL 结构层确定性（零 LLM）。</statement>
+      <suite id="skills" name="skills 生成">
+        <case id="per-context-skill">
+          <given>已索引仓库（含社群）</given>
+          <when>skills generate</when>
+          <then>每 context SHALL 产出 SKILL.md 含 frontmatter、关键符号 file:line 与工具调用示例，且无 #N 退化命名</then>
+        </case>
+        <case id="workflow-skills">
+          <given>同上</given>
+          <when>skills generate</when>
+          <then>SHALL 产出 exploring/impact/depa 三个通用工作流 skill</then>
+        </case>
+        <case id="own-prefix-only">
+          <given>目标 .claude/skills/ 下已有用户自建 skill 目录</given>
+          <when>generate 后 clean</when>
+          <then>generate SHALL 不触碰用户目录；clean SHALL 只删自有前缀目录</then>
+        </case>
+        <case id="deterministic-bounded">
+          <given>同一图数据</given>
+          <when>两次 generate</when>
+          <then>产物 SHALL 逐字节一致；skill 数与单 skill 字符数 SHALL 有界</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

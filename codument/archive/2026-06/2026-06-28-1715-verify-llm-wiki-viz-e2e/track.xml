@@ -1,0 +1,35 @@
+<Track id="verify-llm-wiki-viz-e2e" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>补齐 cozo-wiki viz 文档并完成最终验证</Goal>
+    <Description>更新 README，运行 dotnet/frontend/server smoke，并输出 mission 完成证据。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T14:00:00Z</CreatedAt>
+    <UpdatedAt>2026-06-28T14:15:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_verify-llm-wiki-viz-e2e" name="verify-llm-wiki-viz-e2e" version="1">
+    <Description>Final docs and verification.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="文档" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="更新 README serve/viz 用法" status="DONE" order="0" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="最终验证" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="运行 dotnet build/test" status="DONE" order="0" priority="P0"/>
+          <Task id="T2.2" name="运行 frontend build 和 server static smoke" status="DONE" order="1" priority="P0"/>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Hooks/>
+</Track>

@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.Core\Cozo.DotNet.LlmWiki.Core.csproj" />
+    <!-- One-way dependency (design.md §4): Indexing → SemanticParsing; SemanticParsing must never reference Indexing. -->
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.SemanticParsing\Cozo.DotNet.LlmWiki.SemanticParsing.csproj" />
+    <!-- roslyn-csharp-resolution track (design.md §2): semantic enhancement capsule consumed by RoslynMergeStep. -->
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.RoslynEnhancer\Cozo.DotNet.LlmWiki.RoslynEnhancer.csproj" />
+    <!-- hybrid-search track (design.md §5): the IndexAsync tail rebuilds the ck_search_text FTS projection. -->
+    <ProjectReference Include="..\Cozo.DotNet.LlmWiki.VectorSearch\Cozo.DotNet.LlmWiki.VectorSearch.csproj" />
+    <ProjectReference Include="..\..\..\cozo-lib-dotnet\Cozo.DotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RoslynMergeStep is internal by design (minimal public surface); the failure-safety test injects a throwing analyzer. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

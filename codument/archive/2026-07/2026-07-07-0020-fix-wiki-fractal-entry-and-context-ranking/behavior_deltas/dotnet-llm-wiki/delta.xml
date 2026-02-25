@@ -1,0 +1,24 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/context-budget-ranking">
+    <requirement id="context-budget-ranking">
+      <statement>FractalWikiPipeline 的 modeling context 预算截断 SHALL 按重要性排序：public-API 成员数（降）→ 总成员数（降）→ 名称（升）；丢弃 SHALL 继续以 diagnostics 如实披露并注明排序依据。</statement>
+      <suite id="ranking" name="重要性排序">
+        <case id="public-api-outranks-size">
+          <given>context A 含 public API 成员、context B 成员更多但 public API 为 0，预算仅容一个</given>
+          <when>构建 modeling contexts</when>
+          <then>A SHALL 入选、B SHALL 被丢弃并出现在 diagnostics 中</then>
+        </case>
+        <case id="deterministic-tiebreak">
+          <given>public-API 数与成员数均相同的两个 context</given>
+          <when>重复构建</when>
+          <then>入选顺序 SHALL 按名称升序且跨次构建稳定（不破坏增量缓存确定性）</then>
+        </case>
+        <case id="repo-rescan-improves">
+          <given>本仓（预算默认 24）</given>
+          <when>排序改造后重新生成分形到探针目录</when>
+          <then>Om.CodeKnowledge、Om.Depa、LlmWiki.Tools 侧核心 namespace SHALL 入选；纯 demo 微社群（public API=0）SHALL 出局；前后对比 SHALL 如实记录 findings</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

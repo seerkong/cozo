@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageId>cozo-lib-dotnet</PackageId>
+    <Version>0.7.6</Version>
+    <Authors>Ziyang Hu</Authors>
+    <Description>Cozo database for .NET 10</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/cozodb/cozo</RepositoryUrl>
+    <PackageProjectUrl>https://www.cozodb.org</PackageProjectUrl>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tests exercise internal preview APIs (e.g. import-cycle detection). -->
+    <InternalsVisibleTo Include="Cozo.DotNet.Om.Tests" />
+    <!-- add-llm-wiki-incremental-indexing track: RepositoryIndexer's incremental branch calls the
+         internal RemoveFileFactsAsync (file-level fact removal stays off the public surface). -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Indexing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="packages/Datalog.Core/Cozo.DotNet.Datalog.Core.csproj" />
+    <ProjectReference Include="packages/Datalog.Cozo/Cozo.DotNet.Datalog.Cozo.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Pack native libraries into correct NuGet runtimes layout -->
+    <None Include="runtimes/osx-arm64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/osx-arm64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="runtimes/osx-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/osx-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="runtimes/linux-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="runtimes/linux-arm64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/linux-arm64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="runtimes/win-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

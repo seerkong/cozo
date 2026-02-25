@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan>
+  <metadata>
+    <track_id>add-existential-rules</track_id>
+    <track_name>cozo-om 存在规则子系统</track_name>
+    <type>feature</type>
+    <status>completed</status>
+    <goal>在 cozo-om 层以「Skolem 改写 + 宿主驱动循环 + 违例检测查询」实现存在规则：声明式定义持久化、集合语义违例检测、幂等 Skolem chase 物化，并与 schema 版本化/alias 集成；viz governance 页新增完整性检查演示</goal>
+    <description>新增 om_existential_rule_def 与 defineExistentialRule/listExistentialRules/checkExistentialRules/applyExistentialRules 四个 API；v1 head 仅支持 exists:{rel,toType}；纳入 schema snapshot/diff/rollback；/governance 新增完整性检查子 tab</description>
+    <created_at>2026-06-10T07:49:38Z</created_at>
+    <updated_at>2026-06-10T09:45:19Z</updated_at>
+    <commit_mode>manual</commit_mode>
+    <execution_mode>sequential</execution_mode>
+    <validation_mode>yield-gap-loop</validation_mode>
+    <validation_granularity>final_phase</validation_granularity>
+    <gap_loop_round>5</gap_loop_round>
+  </metadata>
+
+  <phases>
+    <phase id="P1" name="规则定义与持久化">
+      <goal>创建 om_existential_rule_def；实现 defineExistentialRule / listExistentialRules，含 spec 校验与 alias canonicalize（OM-024）</goal>
+      <context_files>
+        <file>codument/tracks/add-existential-rules/spec_deltas/cozo-om/delta.xml</file>
+        <file>codument/tracks/add-existential-rules/design.md</file>
+        <file>codument/tracks/add-existential-rules/analysis/findings.md</file>
+      </context_files>
+      <tasks>
+        <task id="T1.1" name="om_existential_rule_def 建表与 define/list API" status="DONE" priority="P0">
+          <description>initSchema 幂等创建 om_existential_rule_def{rule_name => spec(Json), mode, message, enabled}；实现 defineExistentialRule（upsert 语义）与 listExistentialRules。</description>
+          <acceptance_criteria>
+            <criterion id="T1.1-AC1" checked="true">initSchema 重复调用不破坏既有规则定义</criterion>
+            <criterion id="T1.1-AC2" checked="true">define 后 listExistentialRules 返回持久化的规则，重定义为 upsert</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T1.1.1" name="编写测试：建表幂等 + define/list/upsert（om-existential-define.test.js）" status="DONE"/>
+            <subtask id="T1.1.2" name="实现：建表 + defineExistentialRule/listExistentialRules + d.ts" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.2" name="spec 校验与 alias canonicalize" status="DONE" priority="P0">
+          <description>define 时校验 forEach.type / exists.rel / exists.toType 存在性与 where 合法性；引用经 resolveType/resolveRel/resolveAttr 解析为 canonical 名称后持久化；非法 spec 报错不写入。</description>
+          <acceptance_criteria>
+            <criterion id="T1.2-AC1" checked="true">缺失 exists.rel/toType 或引用不存在的类型/关系时返回错误</criterion>
+            <criterion id="T1.2-AC2" checked="true">以 alias 名称定义的规则持久化为 canonical 名称</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T1.2.1" name="编写测试：非法 spec 拒绝 + alias canonicalize" status="DONE"/>
+            <subtask id="T1.2.2" name="实现：spec 校验与 canonicalize" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <gate_criteria>
+        <criterion>P1 任务全部 DONE 且 bun test 通过</criterion>
+      </gate_criteria>
+    </phase>
+
+    <phase id="P2" name="违例检测 checkExistentialRules">
+      <goal>集合语义违例检测：多态 body/head 匹配、where 属性条件、@NOW 与 asOf 时间语义（OM-025）</goal>
+      <context_files>
+        <file>codument/tracks/add-existential-rules/spec_deltas/cozo-om/delta.xml</file>
+        <file>codument/tracks/add-existential-rules/design.md</file>
+      </context_files>
+      <tasks>
+        <task id="T2.1" name="违例查询编译与基础检测" status="DONE" priority="P0">
+          <description>每条 enabled 规则编译为一次集合查询：body 实例集（type 后代闭包）减 head 满足集（om_edge@NOW 且对端在 toType 闭包内）；返回 [{rule, entityId, message}]；支持 options.rules 过滤与 disabled 跳过。</description>
+          <acceptance_criteria>
+            <criterion id="T2.1-AC1" checked="true">缺边实体被报告，已满足实体不被报告</criterion>
+            <criterion id="T2.1-AC2" checked="true">body 与 head 的子类型实例均正确匹配（多态）</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T2.1.1" name="编写测试：基础违例 + 多态匹配（om-existential-check.test.js）" status="DONE"/>
+            <subtask id="T2.1.2" name="实现：checkExistentialRules 查询编译" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.2" name="where 条件与 temporal 语义" status="DONE" priority="P0">
+          <description>where 条件按 om_property 当前快照过滤 body；边存在性按 @NOW 判定（retract 视为不存在）；options.asOf 支持历史时点检测。</description>
+          <acceptance_criteria>
+            <criterion id="T2.2-AC1" checked="true">where 不满足的实体不进入违例</criterion>
+            <criterion id="T2.2-AC2" checked="true">retract 边计为缺失；asOf 时点检测与 NOW 结果按时间线一致</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T2.2.1" name="编写测试：where 过滤 + retract + asOf（om-existential-temporal.test.js）" status="DONE"/>
+            <subtask id="T2.2.2" name="实现：where 编译与 asOf 透传" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <gate_criteria>
+        <criterion>P2 任务全部 DONE 且 bun test 通过</criterion>
+      </gate_criteria>
+    </phase>
+
+    <phase id="P3" name="Skolem chase applyExistentialRules">
+      <goal>幂等 Skolem 物化：确定性 ID、满足性先检、_skolem_rule 标记、validTime 透传、maxIterations 兜底（OM-026）</goal>
+      <context_files>
+        <file>codument/tracks/add-existential-rules/spec_deltas/cozo-om/delta.xml</file>
+        <file>codument/tracks/add-existential-rules/design.md</file>
+      </context_files>
+      <tasks>
+        <task id="T3.1" name="单轮物化与来源标记" status="DONE" priority="P0">
+          <description>对 materialize 规则的每个违例：生成确定性 Skolem ID（sha256(rule|entity) 截 16 hex，前缀 skolem:），upsertEntity + linkEntities + _skolem_rule 属性 + materialize.props/labelTemplate；返回 created。</description>
+          <acceptance_criteria>
+            <criterion id="T3.1-AC1" checked="true">物化后实体与边存在且违例消失</criterion>
+            <criterion id="T3.1-AC2" checked="true">Skolem 实体 _skolem_rule 属性为来源规则名；check 模式规则不被物化</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T3.1.1" name="编写测试：物化 + 标记 + check 模式不物化（om-existential-chase.test.js）" status="DONE"/>
+            <subtask id="T3.1.2" name="实现：单轮物化" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.2" name="驱动循环：不动点、幂等、上限诊断" status="DONE" priority="P0">
+          <description>循环至本轮无新建（reachedFixpoint:true）或 maxIterations（默认 10，返回 reachedFixpoint:false + 未收敛规则诊断）；重跑幂等；人工补录的实体不被物化；options.validTime 透传到全部写入。</description>
+          <acceptance_criteria>
+            <criterion id="T3.2-AC1" checked="true">重复执行不产生重复对象，created 为空且 reachedFixpoint:true</criterion>
+            <criterion id="T3.2-AC2" checked="true">循环规则在 maxIterations 停止并返回诊断</criterion>
+            <criterion id="T3.2-AC3" checked="true">validTime=T 时 getNeighborsAsOf 在 T 前查不到物化边</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T3.2.1" name="编写测试：幂等重跑 + 人工补录 + 上限 + validTime（om-existential-fixpoint.test.js）" status="DONE"/>
+            <subtask id="T3.2.2" name="实现：驱动循环与诊断" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <gate_criteria>
+        <criterion>P3 任务全部 DONE 且 bun test 通过</criterion>
+      </gate_criteria>
+    </phase>
+
+    <phase id="P4" name="治理集成：snapshot/rollback 与 alias 稳定性">
+      <goal>规则定义纳入 schema snapshot/diff/rollback；重命名后规则经 alias 继续工作；未用规则时向后兼容（OM-027）</goal>
+      <context_files>
+        <file>codument/tracks/add-existential-rules/spec_deltas/cozo-om/delta.xml</file>
+        <file>codument/tracks/add-existential-rules/design.md</file>
+      </context_files>
+      <tasks>
+        <task id="T4.1" name="snapshot/diff/rollback 纳入规则表" status="DONE" priority="P0">
+          <description>_readSchemaSnapshotParts 增加 om_existential_rule_def；rollbackSchema 恢复路径覆盖规则表；旧 snapshot 无规则 part 时视为空集。</description>
+          <acceptance_criteria>
+            <criterion id="T4.1-AC1" checked="true">snapshot 含规则定义；回滚恢复历史规则</criterion>
+            <criterion id="T4.1-AC2" checked="true">无规则 part 的旧 snapshot 回滚不报错</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T4.1.1" name="编写测试：snapshot 含规则 + 回滚恢复（om-existential-versioning.test.js）" status="DONE"/>
+            <subtask id="T4.1.2" name="实现：snapshot parts 与 rollback 扩展" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T4.2" name="alias 重命名稳定性与向后兼容" status="DONE" priority="P1">
+          <description>规则执行时引用经 resolve* 解析，schema 迁移重命名 rel/type 后 checkExistentialRules 仍正确；未定义规则时既有 API 行为不变。</description>
+          <acceptance_criteria>
+            <criterion id="T4.2-AC1" checked="true">重命名后规则继续正确检测违例</criterion>
+            <criterion id="T4.2-AC2" checked="true">向后兼容用例通过（om-exports/backward-compat 回归）</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T4.2.1" name="编写测试：rename + alias 稳定性 + 向后兼容" status="DONE"/>
+            <subtask id="T4.2.2" name="实现：执行路径 resolve 接入与回归修复" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <gate_criteria>
+        <criterion>P4 任务全部 DONE 且 bun test 通过</criterion>
+      </gate_criteria>
+    </phase>
+
+    <phase id="P5" name="viz 完整性检查演示与门控">
+      <goal>/governance 新增「完整性检查」子 tab（VIZ-007）；全量门控通过</goal>
+      <context_files>
+        <file>codument/tracks/add-existential-rules/spec_deltas/cozo-lib-bun-viz/delta.xml</file>
+        <file>codument/tracks/add-existential-rules/design.md</file>
+      </context_files>
+      <confirm protocol="yield-gap-loop" when="after" status="DONE" />
+      <tasks>
+        <task id="T5.1" name="server integrity API" status="DONE" priority="P0">
+          <description>新增 GET /api/governance/integrity/rules、POST .../check、POST .../apply，复用 governance demo 的 runner/seed 机制与 /api/run 串行化约束。</description>
+          <acceptance_criteria>
+            <criterion id="T5.1-AC1" checked="true">三个端点单元测试通过（含违例检测与物化后违例消失）</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T5.1.1" name="编写测试：integrity API（server 单测）" status="DONE"/>
+            <subtask id="T5.1.2" name="实现：端点与 demo seed 规则" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.2" name="前端完整性检查子 tab" status="DONE" priority="P1">
+          <description>GovernanceDemo.vue 新增子 tab：规则列表、违例表格、一键物化与 created 展示；不改动既有两个子 tab 逻辑；api.ts 增加客户端方法。</description>
+          <acceptance_criteria>
+            <criterion id="T5.2-AC1" checked="true">tab 可展示违例并一键物化后刷新</criterion>
+            <criterion id="T5.2-AC2" checked="true">既有数据准备/权限查询 tab 行为不变</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T5.2.1" name="实现：子 tab UI 与 api 客户端" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.3" name="E2E 与全量门控" status="DONE" priority="P0">
+          <description>新增 governance-integrity.pw.ts E2E（检测→物化→违例消失 + 既有 tab 回归）；运行全量门控：bun test、bun test --coverage（新代码 >80%）、codument validate --strict、npm run test:e2e。</description>
+          <acceptance_criteria>
+            <criterion id="T5.3-AC1" checked="true">E2E 通过</criterion>
+            <criterion id="T5.3-AC2" checked="true">四项门控命令全部通过</criterion>
+          </acceptance_criteria>
+          <subtasks>
+            <subtask id="T5.3.1" name="编写 E2E：governance-integrity.pw.ts" status="DONE"/>
+            <subtask id="T5.3.2" name="执行并修复全量门控" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <gate_criteria>
+        <criterion>bun test / bun test --coverage / codument validate --strict / npm run test:e2e 全部通过</criterion>
+        <criterion>新代码覆盖率 >80%</criterion>
+      </gate_criteria>
+    </phase>
+  </phases>
+</plan>

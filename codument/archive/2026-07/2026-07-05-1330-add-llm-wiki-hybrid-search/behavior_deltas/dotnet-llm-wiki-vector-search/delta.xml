@@ -1,0 +1,34 @@
+<behavior-patch capability="dotnet-llm-wiki-vector-search" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-vector-search/requirements/hybrid-search">
+    <requirement id="hybrid-search">
+      <statement>语义检索 SHALL 支持混合模式：Cozo FTS(BM25) 文本检索与向量检索经 RRF（K 可配，默认 60）融合排序，mode 参数 SHALL 支持 hybrid|vector|text（默认 hybrid）；FTS 不可用或查询解析失败时 SHALL 降级为纯向量并附诊断；用户查询文本 SHALL 按字面处理（不透传 FTS 表达式语法）。</statement>
+      <suite id="hybrid" name="混合检索">
+        <case id="exact-identifier-hit">
+          <given>索引含符号 ComputeCommunitiesAsync 且查询词为该精确名称</given>
+          <when>hybrid 模式检索</when>
+          <then>该符号 SHALL 出现在前 3 结果（文本通道保证精确命中）</then>
+        </case>
+        <case id="rrf-fusion">
+          <given>某结果仅向量通道命中、另一结果仅文本通道命中</given>
+          <when>hybrid 检索</when>
+          <then>两者 SHALL 都出现在结果中且按 RRF 分数排序</then>
+        </case>
+        <case id="mode-selection">
+          <given>同一查询分别以 text/vector/hybrid 模式执行</given>
+          <when>检索</when>
+          <then>text 模式 SHALL 只走 FTS、vector 模式 SHALL 只走向量、结果结构一致</then>
+        </case>
+        <case id="fts-fallback">
+          <given>FTS 索引不存在或查询导致 FTS 错误</given>
+          <when>hybrid 检索</when>
+          <then>SHALL 返回纯向量结果且附降级诊断，不抛错</then>
+        </case>
+        <case id="literal-query">
+          <given>查询词含 FTS 语法字符（如 AND、括号、引号）</given>
+          <when>text/hybrid 检索</when>
+          <then>SHALL 按字面 token 处理，不被解析为表达式，不报语法错</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

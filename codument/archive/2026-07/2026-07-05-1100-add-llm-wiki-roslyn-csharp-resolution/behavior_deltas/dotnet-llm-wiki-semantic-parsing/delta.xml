@@ -1,0 +1,39 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/roslyn-enhancement">
+    <requirement id="roslyn-enhancement">
+      <statement>C# 索引 SHALL 支持 Roslyn 语义增强：轻量编译（无 MSBuildWorkspace）产出语义级调用边（confidence 1.0 语义命中 / 0.6 候选）与 DocId 符号富化，并与 tree-sitter 基线按 sym_key+位置归并（同调用点 Roslyn 覆盖，resolver=roslyn）；增强可经开关关闭且关闭时行为与基线完全一致。</statement>
+      <suite id="enhance" name="Roslyn 增强">
+        <case id="semantic-call-edge">
+          <given>C# 仓内方法 A 调用同仓方法 B 且 Roslyn 语义命中</given>
+          <when>索引（增强开启）</when>
+          <then>A→B 的 CALLS 边 SHALL 为 confidence 1.0、resolver=roslyn</then>
+        </case>
+        <case id="override-baseline">
+          <given>同一调用点 tree-sitter 基线已产出 0.5 歧义边而 Roslyn 语义命中另一目标</given>
+          <when>归并</when>
+          <then>该调用点 SHALL 只保留 Roslyn 边（正确目标、1.0），基线歧义边被覆盖</then>
+        </case>
+        <case id="docid-enrichment">
+          <given>tree-sitter 基线符号与 Roslyn 符号经 sym_key+行区间匹配</given>
+          <when>归并</when>
+          <then>ck_symbol 的 doc_id SHALL 填入 Roslyn DocumentationCommentId</then>
+        </case>
+        <case id="candidate-degrades">
+          <given>调用点 Roslyn 只有 CandidateSymbols（如部分编译歧义）</given>
+          <when>索引</when>
+          <then>边 confidence SHALL 为 0.6 且 evidence 含 CandidateReason</then>
+        </case>
+        <case id="switch-off-identical">
+          <given>EnableRoslynEnhancement=false</given>
+          <when>索引同一仓库</when>
+          <then>产出 SHALL 与 tree-sitter 基线完全一致（无 roslyn resolver 事实）</then>
+        </case>
+        <case id="repo-external-not-edged">
+          <given>调用目标为 BCL/仓外程序集符号</given>
+          <when>索引（增强开启）</when>
+          <then>SHALL 不落 CALLS 边，计入 Roslyn 外部调用计数</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

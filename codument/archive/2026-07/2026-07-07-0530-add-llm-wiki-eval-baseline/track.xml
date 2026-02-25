@@ -1,0 +1,54 @@
+<Track id="add-llm-wiki-eval-baseline" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>轻量 eval：≥20 题任务集 + 加权评分器 + oracle 直答门禁（must 命中 ≥90%）+ 可插拔运行器骨架（真实 agent 运行留使用期）</Goal>
+    <Description>mission harden-llm-wiki-engineering 的 G4 track。方法论验证优先；不跑真实 LLM。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T22:34:56Z</CreatedAt>
+    <UpdatedAt>2026-07-07T02:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="eval"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/eval/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-eval-baseline" name="add-llm-wiki-eval-baseline" version="1">
+    <Description>任务集与评分 → oracle 门禁与运行器收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="任务集与评分器" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="任务集与评分" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 task-set-shape/scorer-discriminates 测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="编写 ≥20 题任务集 + 实现评分器" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">任务集形态与评分判别性断言全过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="oracle 门禁与运行器收口" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="oracle 与运行器" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 oracle-gate 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 oracle 执行器 + 运行器骨架/README + dogfood" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">oracle 全集 must 命中 ≥90%（得分明细记 findings）；运行器骨架与两模式模板/README 就位；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

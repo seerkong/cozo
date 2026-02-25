@@ -1,0 +1,24 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/code-graph-quality">
+    <requirement id="code-graph-quality">
+      <statement>语义代码图 SHALL 满足端到端质量门禁：对真实仓库索引后，confidence≥0.8 的 CALLS 边抽样正确率 SHALL ≥90%；社群与执行流产出 SHALL 受预算约束（数量不超各自公式上限）；全部既有查询工具 SHALL 在完整图（含派生层）上无回归。</statement>
+      <suite id="quality" name="端到端质量">
+        <case id="sample-accuracy">
+          <given>对本仓（cozo-lib-dotnet 与 viz 前端）完成全量索引</given>
+          <when>随机抽取 30 条 confidence≥0.8 的 CALLS 边逐条核对源码</when>
+          <then>正确率 SHALL ≥90%</then>
+        </case>
+        <case id="bounded-derived-layers">
+          <given>同一索引</given>
+          <when>统计 ck_community 与 ck_process 行数</when>
+          <then>SHALL 分别不超过 max(10,min(200,symbols/20)) 与 max(20,min(300,symbols/10))</then>
+        </case>
+        <case id="tools-regression">
+          <given>完整图（含社群/执行流）</given>
+          <when>运行 12 个工具 smoke</when>
+          <then>SHALL 全部通过</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

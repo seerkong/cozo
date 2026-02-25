@@ -1,0 +1,34 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/depa-extended-rules">
+    <requirement id="depa-extended-rules">
+      <statement>DEPA 检测 SHALL 扩展至判据目录的全部静态可判条目（批次一 14 条零新标注 + 批次二 3 条经 depa-map add-only 键），规则 id 与项目内 rubrics 真源（src/Om.Depa/rubrics/，含 rule-map 三方映射）一一锚定；报告 SHALL 按 8 维分组（含 overdesign/vendor）且 coverage 分母覆盖判据全目录（静态不可判条目显式 BLOCKED 占位、仅人工条目标注不计入工具分母）；既有 8 条检测器语义不变、dimension 归属按 rubrics 原文修正。</statement>
+      <suite id="extended" name="扩展规则">
+        <case id="rule-map-anchored">
+          <given>src/Om.Depa/rubrics/rule-map.md</given>
+          <when>对照实现</when>
+          <then>每条实现/占位规则 SHALL 在映射表中有 catalog 出处与状态，反之 catalog 静态可判条目全部有规则 id</then>
+        </case>
+        <case id="batch1-detectors">
+          <given>为每条批次一规则构造的正/反 fixture</given>
+          <when>depa_scan</when>
+          <then>14 条规则 SHALL 正例 GAP（带 path:line）、反例不误报</then>
+        </case>
+        <case id="batch2-annotated">
+          <given>depa-map 声明 recoveryPaths/layers 的 fixture</given>
+          <when>depa_scan</when>
+          <then>V-S2a/b 与 V-P2 SHALL 依标注判定；未声明时 SHALL BLOCKED 而非猜测</then>
+        </case>
+        <case id="eight-dimensions">
+          <given>conformance 报告</given>
+          <when>查询</when>
+          <then>SHALL 含 8 维分组（新增 overdesign/vendor），V-F1/F2 归属与 rubrics 一致，coverage 分母为全目录口径</then>
+        </case>
+        <case id="rescan-honest">
+          <given>本仓全规则复扫</given>
+          <when>新规则命中</when>
+          <then>每条命中 SHALL 经人工裁真伪并记录（误报走标注/调优，不为清零弱化规则）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="add-dotnet-llm-wiki" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>archived</Status>
+    <Goal>基于当前 cozo-lib-dotnet 实现类似 GitNexus 核心能力的 C# LLM wiki 与 MCP stdio 入口</Goal>
+    <Description>对比 GitNexus-like 能力与现有 .NET OM 能力，补齐仓库扫描、索引、wiki 编译、MCP stdio、Tree-sitter 语义解析、Cozo 向量检索、随包分发的 all-MiniLM-L6-v2 ONNX embedding、可直接操作 repo DB 的 CLI tool 调用，以及构建 repo DB 时的 .gitignore 忽略规则。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>15</Revision>
+    <CreatedAt>2026-06-27T20:50:34Z</CreatedAt>
+    <UpdatedAt>2026-06-28T13:15:34Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki" name="add-dotnet-llm-wiki" version="1" cdt:child-mode="dag">
+    <Description>Dotnet LLM wiki mission.</Description>
+    <SubNodes>
+      <TaskGroup id="PLAN-A" name="GitNexus 与现有 C# 能力 gap 分析" status="DONE" order="0">
+        <Description>读取 GitNexus 参考、当前 cozo-lib-dotnet 能力，写 gap analysis。</Description>
+        <SubNodes>
+          <Task id="PLAN-A-T1" name="完成 GitNexus 与现有 C# 能力 gap 分析" status="DONE" order="0">
+            <Description>读取 GitNexus 参考、当前 cozo-lib-dotnet 能力，写 gap analysis。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="PLAN-B" name="包边界与 DEPA 设计收敛" status="DONE" order="1">
+        <Description>确定 packages 下多 project 结构、依赖方向与 MVP 查询/MCP 工具面。</Description>
+        <SubNodes>
+          <Task id="PLAN-B-T1" name="完成包边界与 DEPA 设计收敛" status="DONE" order="0">
+            <Description>确定 packages 下多 project 结构、依赖方向与 MVP 查询/MCP 工具面。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-1" name="创建并实现 add-dotnet-llm-wiki-mcp track" status="DONE" order="2">
+        <Description>创建 Codument track 并实现 scanner/indexer/wiki/MCP stdio 主入口。</Description>
+        <SubNodes>
+          <Task id="TRACK-1-T1" name="创建并实现 add-dotnet-llm-wiki-mcp track" status="DONE" order="0">
+            <Description>创建 Codument track 并实现 scanner/indexer/wiki/MCP stdio 主入口。</Description>
+            <cdt:TrackLink state="bound" id="add-dotnet-llm-wiki-mcp"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY" name="最终验证与 mission 收口" status="SUPERSEDED" order="3">
+        <Description>已被用户新增 Tree-sitter 语义解析和 Cozo 向量检索目标取代。</Description>
+        <SubNodes>
+          <Task id="VERIFY-T1" name="原始最终验证与 mission 收口" status="SUPERSEDED" order="0">
+            <Description>已被用户新增 Tree-sitter 语义解析和 Cozo 向量检索目标取代。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-2" name="引入 Tree-sitter 语义解析" status="DONE" order="4">
+        <Description>新增 Tree-sitter-only semantic parsing capsule；MVP 使用 tree-sitter CLI adapter，提供诊断和 MCP 工具。</Description>
+        <SubNodes>
+          <Task id="TRACK-2-T1" name="创建并实现 Tree-sitter 语义解析 track" status="DONE" order="0">
+            <Description>新增 Tree-sitter-only semantic parsing capsule；MVP 使用 tree-sitter CLI adapter，提供诊断和 MCP 工具。</Description>
+            <cdt:TrackLink state="bound" id="add-llm-wiki-semantic-parsing"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-3" name="实现 embedding/vector search" status="DONE" order="5">
+        <Description>基于 CozoDB 向量类型与相似度函数，新增 embedding provider 抽象、向量索引 relation 和 MCP semantic_search 工具。</Description>
+        <SubNodes>
+          <Task id="TRACK-3-T1" name="创建并实现 embedding/vector search track" status="DONE" order="0">
+            <Description>基于 CozoDB 向量类型与相似度函数，新增 embedding provider 抽象、向量索引 relation 和 MCP semantic_search 工具。</Description>
+            <cdt:TrackLink state="bound" id="add-llm-wiki-vector-search"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY-2" name="扩展能力最终验证" status="DONE" order="6">
+        <Description>运行 build/test/MCP smoke，确认 Tree-sitter diagnostics 与 vector search 工具可用。</Description>
+        <SubNodes>
+          <Task id="VERIFY-2-T1" name="完成扩展能力最终验证" status="DONE" order="0">
+            <Description>运行 build/test/MCP smoke，确认 Tree-sitter diagnostics 与 vector search 工具可用。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-4" name="引入 all-MiniLM-L6-v2 ONNX embedding" status="DONE" order="7">
+        <Description>新增随包分发的 sentence-transformers/all-MiniLM-L6-v2 ONNX embedding provider，并让 vector search 默认使用真实本地 embedding。</Description>
+        <SubNodes>
+          <Task id="TRACK-4-T1" name="创建并实现 all-MiniLM-L6-v2 ONNX embedding track" status="DONE" order="0">
+            <Description>新增随包分发的 sentence-transformers/all-MiniLM-L6-v2 ONNX embedding provider，并让 vector search 默认使用真实本地 embedding。</Description>
+            <cdt:TrackLink state="bound" id="add-llm-wiki-onnx-minilm-embedding"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY-3" name="ONNX embedding 最终验证" status="DONE" order="8">
+        <Description>运行 build/test，确认模型资产存在、ONNX provider 可加载并产出 384 维向量。</Description>
+        <SubNodes>
+          <Task id="VERIFY-3-T1" name="完成 ONNX embedding 最终验证" status="DONE" order="0">
+            <Description>运行 build/test，确认模型资产存在、ONNX provider 可加载并产出 384 维向量。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-5" name="增加 cozo-wiki 直接 CLI tools" status="DONE" order="9">
+        <Description>新增 tools/call 命令，让用户直接在命令行中操作 repo DB 并调用 MCP-equivalent tools。</Description>
+        <SubNodes>
+          <Task id="TRACK-5-T1" name="创建并实现 cozo-wiki 直接 CLI tools track" status="DONE" order="0">
+            <Description>新增 tools/call 命令，让用户直接在命令行中操作 repo DB 并调用 MCP-equivalent tools。</Description>
+            <cdt:TrackLink state="bound" id="add-cozo-wiki-cli-tools"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY-4" name="CLI tools 最终验证" status="DONE" order="10">
+        <Description>运行 build/test 和 CLI smoke，确认真实 work-dir sqlite DB 可被 CLI tools 调用。</Description>
+        <SubNodes>
+          <Task id="VERIFY-4-T1" name="完成 CLI tools 最终验证" status="DONE" order="0">
+            <Description>运行 build/test 和 CLI smoke，确认真实 work-dir sqlite DB 可被 CLI tools 调用。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-6" name="支持 .gitignore repo indexing" status="DONE" order="11">
+        <Description>构建 repo DB 时读取 work-dir 根目录 .gitignore，跳过匹配文件和目录。</Description>
+        <SubNodes>
+          <Task id="TRACK-6-T1" name="创建并实现 .gitignore indexing track" status="DONE" order="0">
+            <Description>构建 repo DB 时读取 work-dir 根目录 .gitignore，跳过匹配文件和目录。</Description>
+            <cdt:TrackLink state="bound" id="add-cozo-wiki-gitignore-indexing"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY-5" name=".gitignore indexing 最终验证" status="DONE" order="12">
+        <Description>运行 build/test 和 CLI/indexer smoke，确认 ignored 文件不会进入 repo DB。</Description>
+        <SubNodes>
+          <Task id="VERIFY-5-T1" name="完成 .gitignore indexing 最终验证" status="DONE" order="0">
+            <Description>运行 build/test 和 CLI/indexer smoke，确认 ignored 文件不会进入 repo DB。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="TRACK-7" name="优化 cozo-wiki 关系生成" status="DONE" order="13">
+        <Description>参考 GitNexus bounded graph/search 思路，避免 doc-symbol 全局弱文本匹配导致 repo DB 膨胀。</Description>
+        <SubNodes>
+          <Task id="TRACK-7-T1" name="创建并实现 cozo-wiki relation generation 优化 track" status="DONE" order="0">
+            <Description>默认将 documents 推断关系改为局部 top-k，并为 index_repo 暴露预算与模式参数。</Description>
+            <cdt:TrackLink state="bound" id="optimize-cozo-wiki-relation-generation"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY-6" name="关系生成优化最终验证" status="DONE" order="14">
+        <Description>运行 build/test，并在 eidolon-anchor 使用隔离 data folder 验证 relation count 与 DB size。</Description>
+        <SubNodes>
+          <Task id="VERIFY-6-T1" name="完成关系生成优化最终验证" status="DONE" order="0">
+            <Description>记录优化后真实仓库索引结果，确认不会覆盖原 2.2G DB。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add-dotnet-llm-wiki">
+      <Node id="PLAN-B">
+        <After ref="PLAN-A"/>
+      </Node>
+      <Node id="TRACK-1">
+        <After ref="PLAN-B"/>
+      </Node>
+      <Node id="VERIFY">
+        <After ref="TRACK-1"/>
+      </Node>
+      <Node id="TRACK-2">
+        <After ref="TRACK-1"/>
+      </Node>
+      <Node id="TRACK-3">
+        <After ref="TRACK-2"/>
+      </Node>
+      <Node id="VERIFY-2">
+        <After ref="TRACK-3"/>
+      </Node>
+      <Node id="TRACK-4">
+        <After ref="VERIFY-2"/>
+      </Node>
+      <Node id="VERIFY-3">
+        <After ref="TRACK-4"/>
+      </Node>
+      <Node id="TRACK-5">
+        <After ref="VERIFY-3"/>
+      </Node>
+      <Node id="VERIFY-4">
+        <After ref="TRACK-5"/>
+      </Node>
+      <Node id="TRACK-6">
+        <After ref="VERIFY-4"/>
+      </Node>
+      <Node id="VERIFY-5">
+        <After ref="TRACK-6"/>
+      </Node>
+      <Node id="TRACK-7">
+        <After ref="VERIFY-5"/>
+      </Node>
+      <Node id="VERIFY-6">
+        <After ref="TRACK-7"/>
+      </Node>
+    </Dag>
+  </Schedule>
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block"/>
+    </Hook>
+  </Hooks>
+</Mission>

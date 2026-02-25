@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="expand-llm-wiki-agent-tools" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>把 cozo-wiki 的 coding-agent MCP 工具面补齐到 GitNexus 水平：混合搜索、trace、detect_changes、深图化 context/impact、循环检测与 staleness</Goal>
+    <Description>P1 mission，硬依赖 P0（deepen-llm-wiki-code-graph）的 CALLS/confidence 深图。所有新工具走 LlmWikiToolRunner 单实现三入口（MCP/CLI/HTTP）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>8</Revision>
+    <CreatedAt>2026-07-04T18:29:44Z</CreatedAt>
+    <UpdatedAt>2026-07-05T17:55:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+  <TaskSpace id="space_expand-llm-wiki-agent-tools" name="expand-llm-wiki-agent-tools" version="1" cdt:child-mode="dag">
+    <Description>Agent 工具面补齐 mission。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="前置确认与工具契约收敛" status="DONE" order="0">
+        <SubNodes>
+          <Task id="G1-T1" name="确认 P0 深图产出可用（CALLS/confidence/Process）" status="DONE" order="0"/>
+          <Task id="G1-T2" name="收敛新工具清单、参数 schema 与分页/上限口径" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="混合搜索" status="DONE" order="1">
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行混合搜索 track（Cozo FTS + 向量 RRF）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-hybrid-search"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="图查询工具" status="DONE" order="2">
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 trace 与循环检测 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-trace-and-check"/>
+          </Task>
+          <Task id="G3-T2" name="创建并执行 context/impact 深图化 track" status="DONE" order="1">
+            <cdt:TrackLink state="bound" id="deepen-llm-wiki-context-impact"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="git 集成工具" status="DONE" order="3">
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 detect_changes 与 staleness track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-detect-changes"/>
+          </Task>
+          <Task id="G4-T2" name="评估 rename 建议工具是否纳入（决策后可挂新 track）" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="验证与收口" status="DONE" order="4">
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行工具面 E2E 验证 track（含 agent dogfood）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-llm-wiki-agent-tools-e2e"/>
+          </Task>
+          <Task id="G5-T2" name="mission 收口报告" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_expand-llm-wiki-agent-tools">
+      <Node id="G2"><After ref="G1"/></Node>
+      <Node id="G3"><After ref="G1"/></Node>
+      <Node id="G4"><After ref="G1"/></Node>
+      <Node id="G5"><After ref="G2"/><After ref="G3"/><After ref="G4"/></Node>
+    </Dag>
+  </Schedule>
+</Mission>

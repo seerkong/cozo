@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/mcp-wiki-mvp">
+    <requirement id="mcp-wiki-mvp">
+      <statement>系统 SHALL 在 cozo-lib-dotnet-llm-wiki/packages 下提供基于 Cozo OM 的 .NET LLM wiki 与 MCP stdio MVP。</statement>
+      <suite id="package-structure" name="包结构">
+        <case id="multiple-projects">
+          <given>开发者查看 cozo-lib-dotnet-llm-wiki/packages</given>
+          <when>track 实现完成</when>
+          <then>系统 SHALL 包含 Core、Indexing、Wiki、McpServer 多个独立 .NET project</then>
+        </case>
+      </suite>
+      <suite id="repo-indexing" name="仓库索引">
+        <case id="index-repo-to-codeknowledge">
+          <given>一个包含代码和 Markdown 文件的本地仓库路径</given>
+          <when>调用 index_repo 或 CLI index</when>
+          <then>系统 SHALL 将 repo/file/symbol/relation/doc facts 写入 Om.CodeKnowledge</then>
+        </case>
+      </suite>
+      <suite id="wiki" name="Wiki 编译">
+        <case id="build-markdown-wiki">
+          <given>CodeKnowledge 中已有文件、符号和文档 facts</given>
+          <when>调用 build_wiki</when>
+          <then>系统 SHALL 输出 Markdown wiki 页面和索引</then>
+        </case>
+      </suite>
+      <suite id="mcp" name="MCP stdio">
+        <case id="json-rpc-tools">
+          <given>McpServer 以 mcp --stdio 启动</given>
+          <when>客户端发送 initialize、tools/list 和 tools/call JSON-RPC 消息</when>
+          <then>系统 SHALL 返回符合 MCP tools 协议的 JSON-RPC 响应</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

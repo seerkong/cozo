@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-depa-ontology" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>DEPA OM 本体（11 Type/结构关系/5 ExistentialRule）+ effect 白名单与三通道标注 + ck_external_call 观测层 + depa_scan 标注/结构物化段</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G5 track。落地 G1-T2 映射设计 §6 顺序 1-2；红灯检测与工具归 G6。新建 Om.Depa capsule。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T17:30:36Z</CreatedAt>
+    <UpdatedAt>2026-07-06T06:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-depa"         domain="dotnet"   path="vfs://@/cozo-lib-dotnet/src/Om.Depa/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-depa-ontology" name="add-llm-wiki-depa-ontology" version="1">
+    <Description>本体 schema 与白名单 → 观测层与 scan 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="本体 schema 与白名单" status="DONE" order="0">
+        <Description>Om.Depa capsule：InitDepaOntologyAsync（Type/Relation/ExistentialRule）、内置白名单 + depa-effects.json、depa-map.json 模型与解析。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="本体与配置" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 init 幂等/白名单匹配/配置解析测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 schema init 与配置通道" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">init 幂等；白名单 glob 匹配（含用户覆盖/豁免）正确；depa_effect_api 实体物化；depa-map.json 解析模型齐全</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="观测层与 scan 收口" status="DONE" order="1">
+        <Description>ck_external_call 索引器落行；depa_scan 第一段（三通道标注 + 结构关系物化 + ExistentialRule Check）；dogfood；两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="观测层与 scan" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 external_call/标注/幂等/BLOCKED 测试（delta 6 case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现索引器落行与 depa_scan 段" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">delta 6 case 断言全过；本仓 dogfood：Om.Core 标注扫描产出可查询 depa 实体与 external_call 摘要（数字记 findings）；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

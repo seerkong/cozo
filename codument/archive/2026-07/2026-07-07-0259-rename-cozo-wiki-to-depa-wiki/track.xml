@@ -1,0 +1,55 @@
+<Track id="rename-cozo-wiki-to-depa-wiki" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>对外身份硬切换 cozo-wiki → depa-wiki（二进制/数据目录/hooks/skills/MCP 示例/文档）</Goal>
+    <Description>BREAKING 改名，无别名无回退（decisions #1-3 用户确认）；.NET 包名不动。P1 代码+测试，P2 文档同步+本机存量切换与实机复验。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T21:40:00Z</CreatedAt>
+    <UpdatedAt>2026-07-06T23:59:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="packages"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/"/>
+  </Ports>
+
+  <TaskSpace id="space_rename-cozo-wiki-to-depa-wiki" name="rename-cozo-wiki-to-depa-wiki" version="1">
+    <Description>代码改名 → 文档与存量切换收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="代码与测试改名" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="对外字符串层硬切换" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="测试先行：delta 5 case 断言改到新身份（先红）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现：AssemblyName/.depa-wiki/hooks 标记/skills 前缀/usage 全量替换" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">delta 前 4 case 全过；llm-wiki 套件全绿；源码/tests 无产出性 cozo-wiki 残留</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="文档同步与存量切换" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="文档/eval/gitignore 同步" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">手册/README/docs 分形树/eval 配置/.gitignore 全同步；no-legacy-emission grep 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="本机存量切换与实机复验（父层）" status="DONE" order="1" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">~/.local/bin/depa-wiki 生效；仓根 hooks 重装为 depa-wiki 条目；.depa-wiki 重建索引；hook augment/staleness 端到端通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

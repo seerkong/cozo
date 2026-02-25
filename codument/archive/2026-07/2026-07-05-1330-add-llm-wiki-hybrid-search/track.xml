@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-hybrid-search" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>混合检索：Cozo FTS(BM25) + 向量 RRF 融合（K=60），semantic_search 升级 mode=hybrid|vector|text，FTS 降级安全</Goal>
+    <Description>mission expand-llm-wiki-agent-tools 的 G2 track。检索投影表 ck_search_text + ::fts 索引；查询字面化防注入。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T06:09:08Z</CreatedAt>
+    <UpdatedAt>2026-07-05T10:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="vector-search"   domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.VectorSearch/"/>
+    <MaterialBundle role="output" name="tools"           domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-hybrid-search" name="add-llm-wiki-hybrid-search" version="1">
+    <Description>FTS 索引与文本检索 → RRF 融合与工具升级收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="FTS 索引与文本检索" status="DONE" order="0">
+        <Description>ck_search_text 投影表 + ::fts 索引（tokenizer 实测选择）+ 字面化查询 + 管线重建。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="FTS 基础" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 FTS 建索引/检索/中文样例/字面化测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现投影表、FTS ensure、文本检索" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">精确标识符文本命中；中文样例命中（tokenizer 结论记 findings）；语法字符查询不报错；索引管线重建幂等</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="RRF 融合与工具升级收口" status="DONE" order="1">
+        <Description>RRF 融合、semantic_search mode/rrfK 参数、降级安全、smoke 与两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="融合与工具升级" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写融合/mode/降级测试（delta 5 case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 RRF 与工具参数升级" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">delta 5 case 断言全过；两侧测试全绿；12 工具 smoke 不回归</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

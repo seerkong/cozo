@@ -1,0 +1,36 @@
+<behavior-patch capability="cozo-om" version="1">
+  <upsert selector="behavior://cozo-om/requirements/governance-api-parity">
+    <requirement id="governance-api-parity">
+      <statement>Bun OM SHALL expose public alias-definition and entity-deletion APIs with the same persisted-object semantics as the .NET OM kernel: alias definitions SHALL write the existing alias metadata relations, and entity deletion SHALL physically remove the target entity together with every temporal property row and every incoming or outgoing temporal edge row in one write transaction.</statement>
+      <suite id="alias-definition" name="Alias Definition APIs">
+        <case id="type-alias-authors-and-resolves">
+          <given>schema initialization has completed and type Employee exists</given>
+          <when>the caller invokes defineTypeAlias(runner, 'Staff', 'Employee')</when>
+          <then>resolveType(runner, 'Staff') SHALL return Employee and createEntity SHALL persist Employee as the entity type</then>
+        </case>
+        <case id="relation-and-attribute-aliases-author-and-resolve">
+          <given>schema definitions for Employee, Department, works_in, and org_unit exist</given>
+          <when>the caller defines aliases member_of to works_in and department to Employee.org_unit</when>
+          <then>linkEntities and setProperty through the aliases SHALL use the canonical stored names and canonical reads SHALL return the written values</then>
+        </case>
+        <case id="alias-upsert-and-resolution-cycle-behavior">
+          <given>an alias definition already exists</given>
+          <when>the caller redefines the same alias or creates an alias cycle through the public APIs</when>
+          <then>the latest definition SHALL be stored and resolution of the cycle SHALL reject with a cycle error</then>
+        </case>
+      </suite>
+      <suite id="entity-deletion" name="Entity Deletion">
+        <case id="cascade-deletes-temporal-facts">
+          <given>an entity has multiple property history rows and both incoming and outgoing edge history rows</given>
+          <when>the caller invokes deleteEntity(runner, entityId)</when>
+          <then>the entity, all of its property rows, and every edge touching it SHALL be absent from stored relations while unrelated graph facts remain</then>
+        </case>
+        <case id="missing-entity-is-idempotent">
+          <given>no entity has the requested id</given>
+          <when>the caller invokes deleteEntity(runner, entityId) repeatedly</when>
+          <then>each call SHALL succeed without changing unrelated facts</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,68 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/schema-v2">
+    <requirement id="schema-v2">
+      <statement>CodeKnowledge 存储 SHALL 使用 v2 图 schema：符号表带 sym_key/doc_id/parent_id/lang/resolver，单一边表 ck_edge 以 (from_id, to_id, kind, file_id, line) 为键并携带 confidence 与 resolver，另含 ck_meta、ck_entry_point、ck_community/ck_member、ck_process/ck_process_step 派生层专表。</statement>
+      <suite id="schema" name="schema 初始化">
+        <case id="init-creates-v2">
+          <given>一个空的 Cozo 数据库</given>
+          <when>调用 InitCodeKnowledgeAsync</when>
+          <then>系统 SHALL 创建全部 v2 relations 并将 ck_meta.schema_version 置为 2</then>
+        </case>
+        <case id="init-idempotent">
+          <given>已初始化 v2 schema 的数据库</given>
+          <when>再次调用 InitCodeKnowledgeAsync</when>
+          <then>调用 SHALL 幂等成功且不破坏既有数据</then>
+        </case>
+        <case id="detect-v1-requires-reindex">
+          <given>存在 v1 旧表（有 ck_relation 而无 ck_meta）的数据库</given>
+          <when>调用 InitCodeKnowledgeAsync</when>
+          <then>系统 SHALL 抛出带 reindex 指引的错误，且不静默混用两代 schema</then>
+        </case>
+        <case id="reindex-rebuilds">
+          <given>存在 v1 旧表的数据库</given>
+          <when>以 reindex 选项初始化</when>
+          <then>系统 SHALL 删除旧代 relations 并重建 v2 schema</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/edge-facts">
+    <requirement id="edge-facts">
+      <statement>批量索引 SHALL 支持写入带 confidence 与 resolver 的类型化边事实（CONTAINS/IMPORTS/EXTENDS/IMPLEMENTS/HAS_METHOD/HAS_PROPERTY/CALLS/ACCESSES/METHOD_OVERRIDES/DOC_LINKS/MENTIONS），同一 (from,to,kind) 的多个调用点按 (file_id, line) 区分保留。</statement>
+      <suite id="ingest" name="边事实写入">
+        <case id="edge-with-confidence">
+          <given>包含 kind=CALLS、confidence=0.3、resolver=regex 的边事实批次</given>
+          <when>调用 IndexCodeKnowledgeAsync</when>
+          <then>ck_edge SHALL 保存该边及其 confidence 与 resolver 字段</then>
+        </case>
+        <case id="callsite-granularity">
+          <given>同一 from/to 符号对在两个不同行位置的两条 CALLS 边</given>
+          <when>批量写入</when>
+          <then>两条边 SHALL 都被保留（键含 file_id 与 line）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/query-compat">
+    <requirement id="query-compat">
+      <statement>既有查询 API（FindSymbolContext/ImpactOfChange/ExplainRelation/DocsForCode 等）SHALL 基于 ck_edge 工作并保持结果契约兼容，且 SHALL 支持按最小 confidence 过滤；系统 SHALL 提供 call_graph/import_graph 的 Datalog 投影，供 Cozo 固定规则算法（Louvain/SCC/最短路）消费。</statement>
+      <suite id="query" name="查询兼容">
+        <case id="symbol-context-on-edges">
+          <given>已写入 v2 符号与边事实</given>
+          <when>调用 FindSymbolContextAsync</when>
+          <then>结果 SHALL 含该符号的 incoming/outgoing 边且与 v1 结果契约字段兼容</then>
+        </case>
+        <case id="impact-min-confidence">
+          <given>存在 confidence 分别为 0.3 与 1.0 的 CALLS 边</given>
+          <when>以 minConfidence=0.8 调用 ImpactOfChangeAsync</when>
+          <then>结果 SHALL 只含 confidence≥0.8 的路径</then>
+        </case>
+        <case id="louvain-projection">
+          <given>已写入含 CALLS/IMPORTS 边的图</given>
+          <when>以 cluster_input 投影调用 CommunityDetectionLouvain 固定规则</when>
+          <then>查询 SHALL 成功返回社群划分（本 track 仅验证投影可被固定规则消费）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,24 @@
+<behavior-patch capability="llm-wiki-pipeline" version="1">
+  <upsert selector="behavior://llm-wiki-pipeline/requirements/vision-e2e-quality">
+    <requirement id="vision-e2e-quality">
+      <statement>愿景层 SHALL 满足端到端质量门禁：真实仓库双分形产物通过 E-*+M-* 规范检查全集且跨进程确定；DEPA 判定对合规与违规样本给出可区分、逐条 path:line 的结论且 BLOCKED 永不伪装 PASS；全部工具 smoke 无回归。</statement>
+      <suite id="e2e" name="端到端门禁">
+        <case id="dual-fractal-clean">
+          <given>对本仓完成真实索引并离线生成双分形</given>
+          <when>运行 FractalSpecChecker 全集</when>
+          <then>[P] 违规 SHALL 为 0 且跨进程双跑逐字节一致</then>
+        </case>
+        <case id="depa-distinguishable">
+          <given>合规样本与故意违规样本</given>
+          <when>各自经 depa_conformance 工具判定</when>
+          <then>合规样本 effect 维 SHALL 零 GAP，违规样本 SHALL 逐条 GAP 带 path:line，两者可区分</then>
+        </case>
+        <case id="tools-regression">
+          <given>完整图与双分形产物</given>
+          <when>运行全部工具 smoke</when>
+          <then>SHALL 全部通过</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,39 @@
+<Track id="verify-llm-wiki-code-graph-e2e" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>语义代码图端到端验证：双仓全链路索引、30 条抽样 ≥90% 门禁、派生层有界性、12 工具回归、汇总验证报告</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G6 收口 track（验证性质，不新增功能）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T04:45:27Z</CreatedAt>
+    <UpdatedAt>2026-07-05T08:05:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="reports"         domain="track"    path="vfs://./reports/"/>
+  </Ports>
+
+  <TaskSpace id="space_verify-llm-wiki-code-graph-e2e" name="verify-llm-wiki-code-graph-e2e" version="1">
+    <Description>端到端验证与报告</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="端到端验证" status="DONE" order="0">
+        <Description>双仓真实引擎索引 → 抽样门禁 → 有界性 → 工具回归 → 报告。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="E2E 验证与报告" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">30 条 conf≥0.8 CALLS 抽样正确率 ≥90%（明细进报告）——实测 30/30 方向与目标正确（#7 caller 重载归属有保留，严格口径 29/30=96.7%），seed=20260705，池 1094 条（全部来自 C#，TS 侧无 ≥0.8 边，见报告 §5）</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">社群/执行流数量在预算内且抽样可解释；12 工具 smoke 全过；两侧测试全绿——csharp 32/32、65/65，ts 3/10、0/20；3+3 抽样评注可解释；12/12 工具经 runner 断言；llm-wiki 与 cozo-lib-dotnet 测试均通过</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">reports/verify-report.md 汇总 mission 成功判据逐条证据——判据 1/2/3 PASS，判据 4 PASS（待本 track 归档收尾）</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

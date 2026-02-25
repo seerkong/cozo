@@ -1,0 +1,19 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/shared-runner">
+    <requirement id="shared-runner">
+      <statement>cozo-wiki SHALL expose LLM wiki tool metadata, JSON argument binding, storage option parsing, and named tool execution through a reusable .NET library package that can be used by CLI, MCP stdio, and future HTTP server integrations.</statement>
+      <suite id="compatibility" name="CLI and MCP compatibility">
+        <case id="mcp-tools-list-compatible">
+          <given>The MCP stdio server is started</given>
+          <when>An MCP client requests tools/list</when>
+          <then>The server SHALL return the same tool names and input schemas as before the extraction</then>
+        </case>
+        <case id="cli-call-compatible">
+          <given>A user invokes cozo-wiki call with existing kebab-case tool options</given>
+          <when>The CLI binds options into tool arguments</when>
+          <then>The CLI SHALL call the shared tool runner with equivalent camelCase arguments and print the same JSON result shape</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

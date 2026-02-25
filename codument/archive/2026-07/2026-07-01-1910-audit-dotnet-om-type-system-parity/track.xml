@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="audit-dotnet-om-type-system-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>审计并修复 .NET OM 类型系统相对 Bun OM 的核心 parity 缺口</Goal>
+    <Description>补齐 mixin attribute、继承属性 override、Validity、alias fallback、DefineType preservation 与必要 type-system API，并生成验证证据。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-01T16:02:59Z</CreatedAt>
+    <UpdatedAt>2026-07-01T16:10:42Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="bun-reference" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_audit-dotnet-om-type-system-parity" name="audit-dotnet-om-type-system-parity" version="1">
+    <Description>Audit and repair .NET OM type-system parity.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Parity audit and tests" status="DONE" order="0">
+        <Description>Turn known Bun/.NET semantic differences into executable .NET parity tests.</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Add parity assertions" status="DONE" order="0" priority="P0">
+            <Description>Add tests for mixin attributes, inherited override safety, alias fallback, Validity, and parent preservation.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">.NET tests cover all P0 type-system parity gaps listed in analysis/findings.md</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Kernel repair" status="DONE" order="1">
+        <Description>Repair Om.Core logic while preserving DEPA boundaries.</Description>
+        <SubNodes>
+          <Task id="T2.1" name="Implement parity fixes" status="DONE" order="0" priority="P0">
+            <Description>Fix TypeLogic, EntityLogic, conversion helpers, and facade APIs.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">Mixin attributes are included in effective attributes</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">Unsafe inherited attribute overrides are rejected</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC3" checked="true">Alias fallback and Validity attributes work through public OM APIs</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="Verification and report" status="DONE" order="2">
+        <Description>Run build/tests and write mission-ready evidence.</Description>
+        <SubNodes>
+          <Task id="T3.1" name="Run verification" status="DONE" order="0" priority="P0">
+            <Description>Run dotnet build/tests and write final gap matrix.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">dotnet build passes</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">cozo-lib-dotnet tests pass</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule/>
+</Track>

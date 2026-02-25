@@ -1,0 +1,34 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/incremental-indexing">
+    <requirement id="incremental-indexing">
+      <statement>索引 SHALL 支持文件级增量模式（默认 auto：有既往索引且可计算差异时走增量，否则全量）：变更/删除文件的全部观测层事实按文件归属清除并重建，未变文件事实复用；增量索引后的库状态 SHALL 与全量重索引逐表一致（一致性校验）；摘要 SHALL 报告变更/删除/复用文件计数。</statement>
+      <suite id="incremental" name="增量索引">
+        <case id="single-file-change">
+          <given>已索引仓库中修改单个源文件</given>
+          <when>auto 模式重索引</when>
+          <then>SHALL 走增量路径且 ChangedFiles=1、ReusedFiles=其余全部</then>
+        </case>
+        <case id="file-removed">
+          <given>已索引仓库中删除一个源文件</given>
+          <when>增量重索引</when>
+          <then>该文件的 ck_symbol/ck_edge/ck_doc_block/ck_external_call/ck_entry_point 行 SHALL 全部清除</then>
+        </case>
+        <case id="consistency-gate">
+          <given>同一仓库状态</given>
+          <when>增量索引后与全新全量索引对比全部 ck_* 表</when>
+          <then>两者 SHALL 逐表一致（时间戳类字段除外）</then>
+        </case>
+        <case id="fallback-full">
+          <given>无既往索引或差异不可计算（非 git 仓且无 hash 基线）</given>
+          <when>auto 模式索引</when>
+          <then>SHALL 走全量路径且行为与现状一致</then>
+        </case>
+        <case id="derived-layers-fresh">
+          <given>增量索引完成</given>
+          <when>查询社群/执行流/检索投影</when>
+          <then>派生层 SHALL 反映增量后的最新图（全量重算）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-cozo-wiki-cli-tools" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-wiki 增加直接命令行调用 MCP tools 的 CLI 能力</Goal>
+    <Description>增加 tools/call 命令，复用 MCP tool 实现和 repo sqlite DB，用于人工测试和 CLI E2E。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T07:00:20Z</CreatedAt>
+    <UpdatedAt>2026-06-28T07:11:42Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="llm-wiki" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/"/>
+  </Ports>
+  <TaskSpace id="space_add-cozo-wiki-cli-tools" name="add-cozo-wiki-cli-tools" version="1">
+    <Description>Direct CLI tool invocation for cozo-wiki.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="CLI tool runner" status="DONE" order="0">
+        <Description>复用 MCP tool 实现，增加 tools/call 命令。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="提取共享 tool runner" status="DONE" order="0" priority="P0">
+            <Description>让 MCP 和 CLI 共用工具列表与执行逻辑。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">MCP tools/call 行为保持不变</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">CLI call 调用同一 runner</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 tools/call 命令" status="DONE" order="1" priority="P0">
+            <Description>支持 tools 列表和 call 参数解析。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">cozo-wiki tools 输出 JSON</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">cozo-wiki call semantic_search 可通过 --query 传参</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="文档与验证" status="DONE" order="1">
+        <Description>README 增加 CLI 使用说明，并跑 CLI E2E smoke。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="README CLI 文档" status="DONE" order="0" priority="P0">
+            <Description>说明如何用 work-dir 和 call 命令操作 repo DB。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">README 包含 CLI tools/call 示例</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="构建与 CLI smoke" status="DONE" order="1" priority="P0">
+            <Description>验证 build/test 和真实 CLI 调用。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">dotnet build/test 通过</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">CLI 使用临时 repo DB 能执行 index_repo 和 semantic_search</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

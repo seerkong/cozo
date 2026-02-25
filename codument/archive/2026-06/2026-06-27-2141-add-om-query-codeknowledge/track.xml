@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-om-query-codeknowledge" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 cozo-lib-dotnet/src/Om.Query 与 cozo-lib-dotnet/src/Om.CodeKnowledge 中实现基于 Portable Datalog、Om.Core 和 CozoDB 的 agent-oriented 查询与代码/文档知识图谱能力</Goal>
+    <Description>将 add-dotnet-viz-server 后形成的 Om.Core/Om.Batch/Om.Analytics 能力地图与 Datalog.Core/Datalog.Cozo 结合，提供 NamedQuery、Portable Datalog 执行、CodeKnowledge facts indexing、agent facade 与 wiki plan。</Description>
+    <CommitMode>manual</CommitMode>
+    <cdt:GapRound>2</cdt:GapRound>
+    <CreatedAt>2026-06-27T18:14:22Z</CreatedAt>
+    <UpdatedAt>2026-06-27T18:41:45Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-om-query-codeknowledge" name="add-om-query-codeknowledge" version="1">
+    <Description>Om.Query and Om.CodeKnowledge MVP</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Om.Query 查询层" status="DONE" order="0">
+        <Description>实现 NamedQuery registry、Portable Datalog 执行、Cozo relation mapping 和 table/graph result mapping。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Query models and registry" status="DONE" order="0" priority="P0">
+            <Description>新增 Om.Query models、NamedQueryDefinition、参数 schema、result shape、safety policy 和 registry。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">NamedQuery 可注册、查找、列出</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">模型不依赖 MCP/server/HTTP</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="Query engine" status="DONE" order="1" priority="P0">
+            <Description>实现基于 Datalog.Core、Datalog.Cozo 和 ICozoOmStore 的 NamedQuery/ad-hoc Portable Datalog 执行。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">合法查询可编译并通过 immutable store 执行</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">非法查询返回 diagnostics 且不执行 partial script</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">table 和 graph result shape 有测试覆盖</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P2" name="Om.CodeKnowledge 知识图谱层" status="DONE" order="1">
+        <Description>实现 CodeKnowledge schema、batch indexing、默认 NamedQueries 和 agent facade。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="CodeKnowledge schema and indexing" status="DONE" order="0" priority="P0">
+            <Description>新增 code/doc facts models、schema init 和 batch indexing API。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">可初始化 ck_* stored relations</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">可批量写入 repo/file/symbol/relation/doc block facts</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="Agent query facade and wiki plan" status="DONE" order="1" priority="P0">
+            <Description>实现 symbol context、impact、docs、concept trace、relation explanation 和 wiki plan API。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">facade 基于 Om.Query 默认 NamedQueries</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">wiki plan 返回 pages/missing docs/stale docs 结构化结果</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P3" name="测试、文档与收口" status="DONE" order="2">
+        <Description>补集成测试、README 说明和最终验证。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="Integration tests" status="DONE" order="0" priority="P0">
+            <Description>在 cozo-lib-dotnet/tests/Program.cs 中补 Om.Query 与 Om.CodeKnowledge happy path 和 error path。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">NamedQuery 查询测试通过</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">CodeKnowledge indexing/facade/wiki plan 测试通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="Docs and final verification" status="DONE" order="1" priority="P0">
+            <Description>新增/更新文档，并运行 build/test/codument validate。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">文档说明 Om.Query 与 Om.CodeKnowledge 边界和示例</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">dotnet build/test 通过</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC3" checked="true">codument validate add-om-query-codeknowledge --strict 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

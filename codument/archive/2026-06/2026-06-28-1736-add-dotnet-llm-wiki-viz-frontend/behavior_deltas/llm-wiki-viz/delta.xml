@@ -1,0 +1,34 @@
+<behavior-patch capability="llm-wiki-viz" version="1">
+  <upsert selector="behavior://llm-wiki-viz/requirements/workbench">
+    <requirement id="workbench">
+      <statement>The LLM wiki visualization frontend SHALL provide a local repo knowledge workbench for status, indexing, semantic search, graph visualization, wiki build, named query, and tool debugging workflows.</statement>
+      <suite id="core-workflows" name="Core workflows">
+        <case id="status-search-graph">
+          <given>The cozo-wiki server is running</given>
+          <when>A user opens the visualization frontend</when>
+          <then>The frontend SHALL show server status and allow semantic search results to be visualized as graph nodes</then>
+        </case>
+        <case id="readable-graph-labels">
+          <given>Graph data contains long CodeKnowledge ids, file paths, or embedding ids</given>
+          <when>The frontend renders the graph canvas</when>
+          <then>The canvas SHALL show compact semantic node labels, keep full ids and snippets in hover or selection details, and hide edge labels by default</then>
+        </case>
+        <case id="node-block-modal">
+          <given>A graph node maps to a code or document block with text content</given>
+          <when>A user selects the node and opens its block popup</when>
+          <then>The frontend SHALL show a large modal with the block content, full id, and available metadata</then>
+        </case>
+        <case id="semantic-search-projection">
+          <given>Semantic search returns embedding item ids and source ids</given>
+          <when>The frontend projects the result into graph data</when>
+          <then>The graph SHALL use a search/query root connected to source result nodes and SHALL NOT show embedding ids as visible graph nodes</then>
+        </case>
+        <case id="wiki-query-tools">
+          <given>The cozo-wiki server is running</given>
+          <when>A user uses Wiki, Named Query, or Tools tabs</when>
+          <then>The frontend SHALL call the corresponding server API and render structured JSON results</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

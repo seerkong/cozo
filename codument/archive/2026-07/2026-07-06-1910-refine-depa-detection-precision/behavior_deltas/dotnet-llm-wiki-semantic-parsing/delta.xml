@@ -1,0 +1,24 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/ambiguous-fallback-precision">
+    <requirement id="ambiguous-fallback-precision">
+      <statement>调用消解的仓内兜底匹配 SHALL 从候选集中剔除他文件的 private/protected 成员并校验实参 arity（同文件调用不受可见性剔除约束）；被剔除后无候选的调用点 SHALL 计入未消解而非降级乱连。</statement>
+      <suite id="fallback" name="兜底精度">
+        <case id="private-excluded-cross-file">
+          <given>调用点裸名与他文件某 private 方法同名（如 BCL 实例调用 GetString()）</given>
+          <when>兜底消解</when>
+          <then>该 private 方法 SHALL 不在候选集，调用点计入未消解（无仓内合法候选时）</then>
+        </case>
+        <case id="arity-checked">
+          <given>裸名命中两个候选：arity 匹配一个、不匹配一个</given>
+          <when>兜底消解</when>
+          <then>SHALL 只连 arity 匹配者（confidence 按唯一化规则）</then>
+        </case>
+        <case id="same-file-unrestricted">
+          <given>同文件内调用 private 方法</given>
+          <when>消解</when>
+          <then>SHALL 正常连边（可见性剔除仅限跨文件）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

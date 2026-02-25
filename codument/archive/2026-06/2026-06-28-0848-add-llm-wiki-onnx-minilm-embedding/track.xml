@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-llm-wiki-onnx-minilm-embedding" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 VectorSearch 引入随包分发的 all-MiniLM-L6-v2 ONNX embedding provider</Goal>
+    <Description>下载模型资产，新增 ONNX Runtime provider，输出 384 维真实语义 embedding。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T05:22:14Z</CreatedAt>
+    <UpdatedAt>2026-06-28T05:48:58Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-llm-wiki-onnx-minilm-embedding" name="add-llm-wiki-onnx-minilm-embedding" version="1">
+    <Description>all-MiniLM-L6-v2 ONNX embedding provider</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="模型资产与 provider" status="DONE" order="0">
+        <Description>下载模型资产并实现 ONNX provider。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="随包保存模型资产" status="DONE" order="0" priority="P0">
+            <Description>下载 all-MiniLM-L6-v2 的 ONNX/tokenizer/config 文件到 VectorSearch package。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">模型资产存在于 Models/all-MiniLM-L6-v2</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 ONNX embedding provider" status="DONE" order="1" priority="P0">
+            <Description>实现 tokenizer、ONNX inference、mean pooling 和 normalize。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">EmbedAsync 返回 384 维向量</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">向量已归一化</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="接入默认 VectorSearch 与验证" status="DONE" order="1">
+        <Description>让默认 VectorSearch 优先使用 ONNX provider，补测试和文档。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="默认 provider factory" status="DONE" order="0" priority="P0">
+            <Description>资产存在时默认使用 ONNX，缺失时回退 deterministic。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">CozoVectorSearchService 默认 provider 为 all-MiniLM-L6-v2</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="测试与文档" status="DONE" order="1" priority="P0">
+            <Description>补 smoke test 和 README。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">dotnet build/test 通过</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">codument validate add-llm-wiki-onnx-minilm-embedding --strict 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

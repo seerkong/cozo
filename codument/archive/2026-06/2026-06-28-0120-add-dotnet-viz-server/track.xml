@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-viz-server" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 cozo-lib-dotnet/src/ 下以 Om.Core 为核心补齐功能 capsule，并新增 cozo-lib-dotnet-viz-server 兼容 cozo-lib-bun-viz 前端后端契约</Goal>
+    <Description>分析 cozo-lib-bun-viz 中 reusable library capabilities 与 server/presentation 能力的边界，将原核心 Om 重命名为 Om.Core，并将 batch/analytics 等能力沉淀为依赖 Om.Core 的独立功能 capsule，创建 ASP.NET Core viz server 包实现对等 API。</Description>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-27T14:56:01Z</CreatedAt>
+    <UpdatedAt>2026-06-27T17:20:27Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="guidance" domain="doc" path="vfs://./guidance/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-dotnet-viz-server" name="add-dotnet-viz-server" version="1">
+    <Description>Om.Core-dependent functional capsules + .NET viz server parity</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Om.Core 与功能 capsule 补齐" status="DONE" order="0">
+        <Description>把 Bun viz server 依赖的可复用能力沉淀进 cozo-lib-dotnet/src/ 下的合适层级：原核心 Om 重命名为 Om.Core，核心治理能力进 Om.Core，batch/analytics 进依赖 Om.Core 的功能 capsule。</Description>
+        <SubNodes>
+          <Task id="T1.0" name="Rename core Om capsule to Om.Core" status="DONE" order="0" priority="P0">
+            <Description>将原 cozo-lib-dotnet/src/Om/ 核心本体 capsule 重命名为 cozo-lib-dotnet/src/Om.Core/，并同步项目引用、命名空间/程序集名与测试引用。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.0-AC1" checked="true">原核心本体代码位于 cozo-lib-dotnet/src/Om.Core/</cdt:Criterion>
+              <cdt:Criterion id="T1.0-AC2" checked="true">cozo-lib-dotnet solution/project references 和 tests 使用 Om.Core 新路径</cdt:Criterion>
+              <cdt:Criterion id="T1.0-AC3" checked="true">公共 API 迁移策略清晰，不把 Batch/Analytics 逻辑并入 Om.Core</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.1" name="Om.Batch ingestion capsule" status="DONE" order="1" priority="P0">
+            <Description>在 cozo-lib-dotnet/src/Om.Batch/（或等价功能 capsule）实现 typed batch input、IngestBatchAsync、required validation summary，并补测试。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">Om.Batch 可基于 Om.Core 从 batch 写入 entities/properties/edges</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">validateRequired 行为与 Node OM 可观测语义对齐</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">batch/workbook 中文表名解析不进入 Om.Core</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="Om.Analytics graph/tree/ranking capsule" status="DONE" order="2" priority="P0">
+            <Description>在 cozo-lib-dotnet/src/Om.Analytics/（或等价功能 capsule）实现 ImpactAnalysisAsync、OwnershipTreeAsync、RiskHotspotAsync 及 result models。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">impact analysis 返回 graph visual 与 stats</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">ownership tree 返回 tree visual 与 graph visual</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">risk hotspot 返回 ranking visual 与 evaluated/returned stats</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC4" checked="true">analytics APIs 依赖 Om.Core，不直接承载 server/demo concerns</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="Executable behavior pipeline" status="DONE" order="3" priority="P0">
+            <Description>补齐 action/mutation/interceptor delegate registry 和 ExecuteActionAsync，保持 metadata persisted + delegate in-memory 的事实源边界。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">action 可返回 mutation specs 并执行属性/边变更</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC2" checked="true">before/after interceptor 顺序与继承行为有测试覆盖</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC3" checked="true">delegate 不被误写为可恢复事实源</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.4" name="Schema migration 与 permission seed parity" status="DONE" order="4" priority="P1">
+            <Description>补齐 ApplySchemaMigrationAsync 可观测语义，并让 SeedPermissionMetadataAsync 接受 governance seed tables 规范化输入。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.4-AC1" checked="true">/api/schema/apply 所需 migration spec 可在 C# OM 执行</cdt:Criterion>
+              <cdt:Criterion id="T1.4-AC2" checked="true">permission seed 支持 actions/policies/pathRules/abacRules</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.5" name="ICozoOmStore transaction abstraction" status="DONE" order="5" priority="P0">
+            <Description>参考 cozo-lib-bun 的 multiTransact 语义，为 C ABI、CozoDb、ICozoOmStore 添加事务抽象与实现，并让 batch ingestion 与 action/mutation execution 在失败时 rollback。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.5-AC1" checked="true">cozo-lib-c 暴露 begin/run/commit/abort transaction ABI，.NET CozoDb 可创建 transaction object</cdt:Criterion>
+              <cdt:Criterion id="T1.5-AC2" checked="true">ICozoOmStore 提供 transaction abstraction，CozoDbOmStore 与 transaction store 均实现该抽象</cdt:Criterion>
+              <cdt:Criterion id="T1.5-AC3" checked="true">Om.Batch IngestBatchAsync 与 ExecuteActionAsync/ExecuteMutationsAsync 使用事务并在异常时 rollback</cdt:Criterion>
+              <cdt:Criterion id="T1.5-AC4" checked="true">新增 rollback tests 覆盖 batch 失败与 action/interceptor 失败不留下部分写入</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P2" name="新建 cozo-lib-dotnet-viz-server" status="DONE" order="1">
+        <Description>创建 ASP.NET Core server 包，接入 cozo-lib-dotnet OM，并实现 Bun viz server 的 API 契约。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="项目骨架与 host" status="DONE" order="0" priority="P0">
+            <Description>创建 cozo-lib-dotnet-viz-server 项目、Program/host、health endpoint、README 和运行命令。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">server 可本地启动并响应 GET /health</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">项目引用 cozo-lib-dotnet 且不依赖 Node/Bun runtime</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="Demo catalog 与 /api/demos /api/run" status="DONE" order="1" priority="P0">
+            <Description>移植 demo catalog、workbook parser、query runner 和 table/tree/graph/ranking response adapters。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">GET /api/demos response 与前端期望字段兼容</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">POST /api/run 支持 table/tree/graph/ranking 输出 envelope</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="Permission model demo endpoints" status="DONE" order="2" priority="P1">
+            <Description>移植 /api/permission/models 与 /api/permission/run 的 raw CozoScript demo 模型。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">permission models list 与 run response sections 兼容前端</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">raw CozoScript demo 代码留在 server 包，不进入 Om.Core</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.4" name="Schema/governance/integrity endpoints" status="DONE" order="3" priority="P0">
+            <Description>实现 /api/schema/*、/api/governance/*、/api/governance/integrity/*，保持 database lifecycle 与 response envelope。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.4-AC1" checked="true">schema state/versions/diff/apply/rollback endpoints 通过 contract tests</cdt:Criterion>
+              <cdt:Criterion id="T2.4-AC2" checked="true">governance seed/check/explain endpoints 通过 contract tests</cdt:Criterion>
+              <cdt:Criterion id="T2.4-AC3" checked="true">integrity rule list/check/apply endpoints 通过 contract tests</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.5" name="Migrate all six Bun demo catalogs" status="DONE" order="4" priority="P0">
+            <Description>将 Bun 侧六个 demo（procurement、hr、crm、it-asset、approval-flow、org-timeline）迁移到 cozo-lib-dotnet-viz-server，使 /api/demos 与 /api/run 覆盖前端需要的后端 demo 能力。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.5-AC1" checked="true">GET /api/demos 返回全部六个 Bun demo id</cdt:Criterion>
+              <cdt:Criterion id="T2.5-AC2" checked="true">POST /api/run 对六个 demo 的核心 table/tree/graph/ranking/action/temporal query 输出兼容 envelope</cdt:Criterion>
+              <cdt:Criterion id="T2.5-AC3" checked="true">.NET viz server contract tests 覆盖全部六个 demo id 与每个 demo 至少一个核心 query</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P3" name="Parity 测试与文档" status="DONE" order="2">
+        <Description>补充测试、README 和兼容性说明，确认前端可切换到 .NET server。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>.NET OM tests 通过</cdt:Criterion>
+          <cdt:Criterion>.NET viz server endpoint tests 通过</cdt:Criterion>
+          <cdt:Criterion>底层/server 边界审查通过</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T3.1" name="Endpoint contract tests" status="DONE" order="0" priority="P0">
+            <Description>移植 Bun server API tests 的核心断言到 .NET server tests。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">schema-governance happy path 测试通过</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">governance-integrity happy path 测试通过</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC3" checked="true">/api/demos 和 /api/run contract 测试通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="Docs 与运行说明" status="DONE" order="1" priority="P1">
+            <Description>补 README，说明如何启动 .NET server、如何让现有 frontend 指向它、底层/server 边界。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">README 包含启动命令和 VITE_API_BASE 示例</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">文档明确哪些能力在 cozo-lib-dotnet，哪些在 viz server</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.3" name="Final verification" status="DONE" order="2" priority="P0">
+            <Description>运行 build/test、codument validate，并审查 DEPA/分包边界。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.3-AC1" checked="true">dotnet build/test 通过</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC2" checked="true">codument validate add-dotnet-viz-server --strict 通过</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC3" checked="true">server-only concerns 未沉入 cozo-lib-dotnet</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

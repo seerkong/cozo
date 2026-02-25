@@ -1,0 +1,44 @@
+<Track id="verify-llm-wiki-agent-tools-e2e" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>agent 工具面端到端验证：15 工具真实仓回归、混合搜索质量取证、变更工作流 dogfood、mission 收口证据报告</Goal>
+    <Description>mission expand-llm-wiki-agent-tools 的 G5 收口 track（验证性质）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T10:59:50Z</CreatedAt>
+    <UpdatedAt>2026-07-05T13:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="reports"         domain="track"    path="vfs://./reports/"/>
+  </Ports>
+
+  <TaskSpace id="space_verify-llm-wiki-agent-tools-e2e" name="verify-llm-wiki-agent-tools-e2e" version="1">
+    <Description>端到端验证与报告</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="端到端验证" status="DONE" order="0">
+        <Description>真实仓工作流 dogfood → 混合搜索质量取证 → 15 工具回归 → 报告。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="E2E 验证与报告" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">15 工具真实仓全部可用；精确名查询 hybrid 前 3（10 样例对比数字记录）</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">变更工作流（detect_changes→impact→trace）真实改动场景可定位且有界；两侧测试全绿</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">reports/verify-report.md 汇总 mission 成功判据逐条证据与 P2/P3 交接清单</cdt:Criterion>
+            </cdt:Acceptance>
+            <cdt:Findings>
+              <cdt:Finding at="2026-07-05">15/15 工具真实仓（cozo-lib-dotnet/src 探针，sqlite）成功：697 symbols/2461 relations/34 communities/69 processes；embeddings 704×384（bundled ONNX MiniLM，非降级）。parser_status/parse_file 因本机无 tree-sitter CLI 走结构化降级（契约允许）。</cdt:Finding>
+              <cdt:Finding at="2026-07-05">混合搜索 10 样例：精确名 5/5 hybrid rank 1（判据要求前 3），rank-1 rrf 边际 ~2x、双通道确认；概念查询 hybrid 4/5 前 3（中文样例「调用图 置信度」语料缺词两模式均未命中，非工具缺陷；中文「边界」text 通道 rank 1 证明 Cangjie tokenizer 生效）。vector+ONNX 单通道在本语料同样强——hybrid 增益为证据强度与 text-only 降级托底。</cdt:Finding>
+              <cdt:Finding at="2026-07-05">变更工作流：AsString 一行未暂存改动 → detect_changes 精确映射 AsString@CodeGraphProjections.cs:634 + stale=false，impacted 7/processes 6/risk MEDIUM；commit 后 stale=true+staleHint；impact up 分层 5/2/1 全 truncated=0 带 file:line+conf；trace 3 hops 全 location+conf 1.0，歧义名返回有界候选。两侧测试全绿；未修改任何功能代码。</cdt:Finding>
+            </cdt:Findings>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

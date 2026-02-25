@@ -1,0 +1,56 @@
+<Track id="refine-depa-detection-precision" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>精度改进：CallResolver 兜底剔除跨文件 private + arity 校验（V-P2 误报根治）；V-F2 纯委托豁免（B-3）；复扫前后对比</Goal>
+    <Description>backlog 两条同主题证据充分项合并小 track。正确性优先：候选剔除可能增加 unresolved，如实计数不硬压。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T10:15:21Z</CreatedAt>
+    <UpdatedAt>2026-07-06T16:10:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+    <MaterialBundle role="output" name="om-depa"         domain="dotnet"   path="vfs://@/cozo-lib-dotnet/src/Om.Depa/"/>
+  </Ports>
+
+  <TaskSpace id="space_refine-depa-detection-precision" name="refine-depa-detection-precision" version="1">
+    <Description>CallResolver 兜底精度 → V-F2 豁免与复扫收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="CallResolver 兜底精度" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="兜底剔除与 arity 校验" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 3 case 测试（delta semantic-parsing 侧）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现兜底 tier 过滤" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">跨文件 private 剔除/arity 校验/同文件不受限 三 case 全过；增量一致性门禁与既有消解测试不回归</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="V-F2 豁免与复扫收口" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="豁免与复扫" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写豁免正/反 case 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现豁免 + 本仓复扫前后对比" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">纯委托豁免/真逻辑仍报 两 case 全过；rule-map V-F2 行更新</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">本仓复扫前后对比记 findings（ambiguous 边/V-P2/V-F2 变化 + unresolved 变化如实）；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

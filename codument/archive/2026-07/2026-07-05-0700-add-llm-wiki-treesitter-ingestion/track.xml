@@ -1,0 +1,93 @@
+<Track id="add-llm-wiki-treesitter-ingestion" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>tree-sitter 原生 P/Invoke 解析后端 + C#/TS extractor，符号与结构边入 v2 图，替换正则主路径（regex 降级 fallback）</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G3 track。spike 产物 /tmp/spike-treesitter-pinvoke 正式化；dylib 交付 osx-arm64（构建脚本留多平台接口）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-04T19:53:23Z</CreatedAt>
+    <UpdatedAt>2026-07-05T04:00:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="semantic-parsing" domain="dotnet"  path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.SemanticParsing/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"  path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-treesitter-ingestion" name="add-llm-wiki-treesitter-ingestion" version="1">
+    <Description>后端契约与原生绑定 → extractor → indexer 集成 → 回归收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="后端契约与原生绑定" status="DONE" order="0">
+        <Description>ISemanticParserBackend 契约、TreeSitterNative P/Invoke（SafeHandle/ABI 断言/DllImportResolver）、构建脚本与 osx-arm64 dylib 入库、CLI adapter 降级为契约实现。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="契约与原生绑定" status="DONE" order="0" priority="P0">
+            <Description>见 design.md §1/§2；spike 代码 /tmp/spike-treesitter-pinvoke/SpikeApp 可参考正式化；dylib 从 spike 产物复制或用脚本重建。</Description>
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 native 加载/ABI 断言/后端选择降级测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现契约、绑定、脚本与 dylib 入库" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">native 后端在 osx-arm64 加载成功并通过 ABI 断言；缺库/坏 ABI 时降级链生效且索引不失败</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">build-native-parsers.sh 可重建 dylib（pin commit）；runtimes/osx-arm64/native 三个 dylib 入库</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="per-language extractor" status="DONE" order="1">
+        <Description>C#/TS query 驱动 extractor：符号树（parent/visibility/exported/sym_key）与结构边（CONTAINS/HAS_METHOD/HAS_PROPERTY/EXTENDS/IMPLEMENTS/IMPORTS）。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="C# extractor" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 C# 固定样例符号/边断言" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 C# query 与 extractor" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">C# 样例（namespace/class 嵌套/interface/record/继承）符号与结构边断言全过，EXTENDS/IMPLEMENTS 启发式带降级 confidence</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="TS/JS extractor" status="DONE" order="1" priority="P0">
+            <SubNodes>
+              <Task id="T2.2.1" name="编写 TS 固定样例符号/边断言" status="DONE" order="0"/>
+              <Task id="T2.2.2" name="实现 TS query 与 extractor" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">TS 样例（class/interface/function/import）符号与 IMPORTS 边断言全过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="indexer 集成与 dogfood" status="DONE" order="2">
+        <Description>RepositoryIndexer 主路径切换（native→cli→regex 降级链）、import 边合并去重、id 兼容；dogfood 计数门禁。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="indexer 集成" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T3.1.1" name="编写集成测试（降级链/resolver 标注/id 兼容）" status="DONE" order="0"/>
+              <Task id="T3.1.2" name="实现主路径切换与合并" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">tree-sitter 主路径产出 resolver=treesitter 事实；无 grammar/失败文件走 regex；索引整体成功</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">dogfood：cozo-lib-dotnet C# 与 viz 前端 TS 索引符号数 ≥ regex 版基线（基线数字记录进 findings）</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P4" name="回归与收口" status="DONE" order="3">
+        <Description>两侧全量回归 + parser_status/parse_file 工具兼容确认。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="全量回归" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">cozo-lib-dotnet 与 llm-wiki 测试套件全绿；12 工具 smoke 不回归</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

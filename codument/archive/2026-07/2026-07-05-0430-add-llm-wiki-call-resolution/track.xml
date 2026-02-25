@@ -1,0 +1,69 @@
+<Track id="add-llm-wiki-call-resolution" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>tree-sitter 基线调用消解：调用点提取 + 注册表分层匹配 → 带分级 confidence 的 CALLS/ACCESSES/METHOD_OVERRIDES 边</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G4 第一 track。C# 语义级增强由 add-llm-wiki-roslyn-csharp-resolution 叠加。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-04T20:57:05Z</CreatedAt>
+    <UpdatedAt>2026-07-05T01:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="semantic-parsing" domain="dotnet"  path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.SemanticParsing/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"  path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-call-resolution" name="add-llm-wiki-call-resolution" version="1">
+    <Description>调用点提取 → 消解与语义边 → dogfood 回归收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="调用点提取" status="DONE" order="0">
+        <Description>ParsedCallSite 契约（add-only）+ C#/TS query 捕获调用点/构造/成员访问（含 receiver 文本、arity、accessMode）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="调用点提取" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写调用点捕获固定样例测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现契约扩展与 query 捕获" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">C#/TS 样例的 call/new/access 调用点齐全，含 caller 限定名、receiver 文本、arity、accessMode、line</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="消解与语义边" status="DONE" order="1">
+        <Description>符号注册表 + 分层消解流水 + METHOD_OVERRIDES/IMPLEMENTS 后处理 + ACCESSES 预算，全部 internal（design.md 最小公开面）。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="消解流水与语义边" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写消解用例测试（behavior delta 8 case）" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现注册表/消解/落图/summary 计数" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">同文件/跨文件/构造/this/歧义/未消解六类场景边与 confidence 符合 design §3 分级</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">OVERRIDES/IMPLEMENTS 边正确；ACCESSES 预算与开关生效</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="dogfood 与回归收口" status="DONE" order="2">
+        <Description>对本仓索引 CALLS 规模与抽样正确性报告；两侧全量回归。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="dogfood 与回归" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">本仓 dogfood：CALLS 边计数与 confidence 分布记入 findings；随机抽 20 条 conf≥0.7 边人工核对正确率记录</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">两侧测试套件全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

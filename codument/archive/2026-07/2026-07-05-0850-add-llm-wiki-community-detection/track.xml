@@ -1,0 +1,58 @@
+<Track id="add-llm-wiki-community-detection" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>社群检测正式化：Cozo Louvain 公开 API + 真实 cohesion/可解释 label + 确定性输出 + 预算 + 索引管线集成</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G5 第一 track。升级 G2 的 internal 预览（ED-1 约定 G5 正式化）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T03:38:12Z</CreatedAt>
+    <UpdatedAt>2026-07-05T05:50:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+    <MaterialBundle role="output" name="indexing"        domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-community-detection" name="add-llm-wiki-community-detection" version="1">
+    <Description>API 正式化与质量 → 管线集成与 dogfood 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="API 正式化与质量" status="DONE" order="0">
+        <Description>public API、cohesion 真实计算、label 启发式、确定性、预算（design §1–§3）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="正式化与质量" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写质量/确定性/预算测试（delta 前 5 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现正式化 API 与质量逻辑" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">双簇 cohesion=1.0、双跑确定性、公共前缀 label、min-size noise、预算截断 五类断言全过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="管线集成与 dogfood 收口" status="DONE" order="1">
+        <Description>索引尾部自动重算（开关）、失败安全、dogfood、两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="管线集成与 dogfood" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写管线开关/失败安全测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现集成 + dogfood 记录" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">ComputeCommunities 开关生效；检测失败不炸索引；Summary 计数透传</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">dogfood：本仓社群数/size 分布/label 清单记入 findings 且有界可解释；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

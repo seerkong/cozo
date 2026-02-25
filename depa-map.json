@@ -1,0 +1,7 @@
+{
+  "_comment": "DEPA annotation truth source for this repository (track fix-om-depa-conformance-gaps REC-4). Consumed by the depa_conformance/depa_scan tools: resolved from the scan workDirectory root, then its .codument/ fallback. Paths here are relative to the repo root — when indexing with workRoot=cozo-lib-dotnet/src, use the copy at cozo-lib-dotnet/src/depa-map.json instead. runtimeCarrierTypes declares the real runtime carriers via the config channel (confidence 1.0), suppressing the heuristic name-based V-F2 false positives on OmMutationContext.",
+  "runtimeCarrierTypes": ["CozoOmRuntime", "CozoOmOptions"],
+  "capsules": [
+    { "name": "Om.Core", "rootPath": "cozo-lib-dotnet/src/Om.Core" }
+  ]
+}

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="add-llm-wiki-depa-fractal-wiki" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>cozo-wiki 差异化愿景：LLM 驱动的分形文档生成（docs/modeling + docs/impl 两套分形）与 DEPA 健康度识别（effect 泄漏、runtime/config 归位、事实源分级）</Goal>
+    <Description>P2 mission，硬依赖 P0 深图。借 GitNexus wiki 管线骨架（图查询喂 LLM + git-diff 增量），目标 schema 换成 ai-codument 分形规范；DEPA 概念用 OM 本体建模，派生 depa_conformance/fact_grade_map/health_score 工具。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>9</Revision>
+    <CreatedAt>2026-07-04T18:29:44Z</CreatedAt>
+    <UpdatedAt>2026-07-06T13:00:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="om-core" domain="dotnet" path="vfs://@/cozo-lib-dotnet/src/"/>
+  </Ports>
+  <TaskSpace id="space_add-llm-wiki-depa-fractal-wiki" name="add-llm-wiki-depa-fractal-wiki" version="1" cdt:child-mode="dag">
+    <Description>分形 wiki 与 DEPA 健康度 mission（两条并行愿景线）。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="设计收敛" status="DONE" order="0">
+        <SubNodes>
+          <Task id="G1-T1" name="确认 P0 深图前置与分形规范夹具（folder-manifest/model-driven-docs 检查项）" status="DONE" order="0"/>
+          <Task id="G1-T2" name="DEPA 概念 → OM 本体映射设计（capsule/contract/reducer/projection/fact-grade）" status="DONE" order="1"/>
+          <Task id="G1-T3" name="LLM 后端契约与增量管线设计（借 GitNexus generator 骨架）" status="DONE" order="2"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="LLM wiki 管线基建" status="DONE" order="1">
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 LLM wiki 管线 track（多后端 + git-diff 增量）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-llm-pipeline"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="engineering 分形生成" status="DONE" order="2">
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 engineering 分形生成 track（overview/reference/code-map 优先）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-engineering-fractal"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="modeling 分形生成" status="DONE" order="3">
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 modeling 分形生成 track（context/objects/workflows）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-modeling-fractal"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="DEPA 本体与标注" status="DONE" order="4">
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 DEPA OM 本体与 effect API 标注 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-depa-ontology"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G6" name="DEPA 健康度工具" status="DONE" order="5">
+        <SubNodes>
+          <Task id="G6-T1" name="创建并执行 DEPA 判定工具 track（depa_conformance/fact_grade_map/health_score）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-depa-conformance-tools"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G7" name="验证与收口" status="DONE" order="6">
+        <SubNodes>
+          <Task id="G7-T1" name="创建并执行愿景层 E2E 验证 track（分形规范检查 + DEPA 样本回归）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-llm-wiki-depa-fractal-e2e"/>
+          </Task>
+          <Task id="G7-T2" name="mission 收口报告" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add-llm-wiki-depa-fractal-wiki">
+      <Node id="G2"><After ref="G1"/></Node>
+      <Node id="G3"><After ref="G2"/></Node>
+      <Node id="G4"><After ref="G3"/></Node>
+      <Node id="G5"><After ref="G1"/></Node>
+      <Node id="G6"><After ref="G5"/></Node>
+      <Node id="G7"><After ref="G4"/><After ref="G6"/></Node>
+    </Dag>
+  </Schedule>
+</Mission>

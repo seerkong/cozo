@@ -1,0 +1,70 @@
+<behavior-patch capability="cozo-dotnet-viz-server" version="1">
+  <upsert selector="behavior://cozo-dotnet-viz-server/requirements/backend-contract-parity">
+    <requirement id="backend-contract-parity">
+      <statement>系统 SHALL 提供一个 `cozo-lib-dotnet-viz-server` ASP.NET Core 后端，兼容 `cozo-lib-bun-viz` 前端当前依赖的后端 API 契约。</statement>
+      <suite id="frontend-api" name="Frontend API compatibility">
+        <case id="demos-list-contract">
+          <given>现有 Vue 前端请求 `GET /api/demos`</given>
+          <when>.NET viz server 运行</when>
+          <then>系统 SHALL 返回 `{ demos }`，其中 demo/query/table 字段名与 Bun server 兼容</then>
+        </case>
+        <case id="run-query-contract">
+          <given>前端提交 `POST /api/run`，携带 `demoId`、`queryId` 与 workbook tables</given>
+          <when>.NET viz server 执行 demo query</when>
+          <then>系统 SHALL 返回 `{ status: "ok", table|tree|graph }` 或 `{ status: "error", error }`，与 Bun server 响应 envelope 兼容</then>
+        </case>
+        <case id="schema-governance-contract">
+          <given>前端请求 schema/governance/integrity API</given>
+          <when>.NET viz server 处理这些 API</when>
+          <then>系统 SHALL 保持 `/api/schema/*`、`/api/governance/*` 与 `/api/governance/integrity/*` 的 JSON 契约兼容</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-viz-server/requirements/om-bottom-layer-sedimentation">
+    <requirement id="om-bottom-layer-sedimentation">
+      <statement>系统 SHALL 将 Bun viz server 中暴露出的可复用库能力沉淀到 `cozo-lib-dotnet/src/` 下合适的功能 capsule；原核心本体 capsule SHALL 从 `src/Om/` 重命名为 `src/Om.Core/`，且 batch ingestion 与 analytics template 不直接放入核心 `src/Om.Core/`。</statement>
+      <suite id="bottom-layer" name="Bottom-layer capability split">
+        <case id="core-om-renamed-to-om-core">
+          <given>先前 track 已在 `cozo-lib-dotnet/src/Om/` 创建 C# DEPA OM capsule</given>
+          <when>实现 .NET viz server 所需底层能力分包</when>
+          <then>系统 SHALL 将原核心本体 capsule 重命名为 `cozo-lib-dotnet/src/Om.Core/`，并让其他功能 capsule 依赖 Om.Core</then>
+        </case>
+        <case id="batch-ingestion-in-dotnet-om">
+          <given>Bun viz server 使用 `om.ingestBatch` 导入实体、属性与边</given>
+          <when>实现 .NET 对等能力</when>
+          <then>`cozo-lib-dotnet/src/Om.Batch/`（或等价功能 capsule）SHALL 依赖 `Om.Core` 并提供 typed batch ingestion API，server 只负责把 workbook tables 解析成 batch input</then>
+        </case>
+        <case id="template-queries-in-dotnet-om">
+          <given>Bun demos 调用 `impactAnalysis`、`ownershipTree`、`riskHotspot`</given>
+          <when>实现 .NET 对等能力</when>
+          <then>`cozo-lib-dotnet/src/Om.Analytics/`（或等价功能 capsule）SHALL 依赖 `Om.Core` 并提供这些 template query API 与 JSON-friendly result models</then>
+        </case>
+        <case id="behavior-pipeline-in-dotnet-om">
+          <given>Bun approval-flow demo 使用 executable action/mutation/interceptor handlers</given>
+          <when>实现 .NET 对等能力</when>
+          <then>`cozo-lib-dotnet` SHALL 支持进程内 delegate registry 与 `ExecuteActionAsync`，且 metadata rows 仍可持久化</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-viz-server/requirements/server-owned-demo-concerns">
+    <requirement id="server-owned-demo-concerns">
+      <statement>系统 SHALL 将 demo catalog、workbook table conventions、HTTP routing、response adapters 与 raw CozoScript permission demos 保留在 `cozo-lib-dotnet-viz-server`。</statement>
+      <suite id="server-split" name="Server-owned responsibilities">
+        <case id="workbook-parser-not-core-om">
+          <given>前端使用中文 workbook tables 编辑 demo 数据</given>
+          <when>.NET viz server 接收 `/api/run` 或 governance seed 请求</when>
+          <then>server SHALL 解析 workbook tables，并只把规范化后的 OM batch 或 permission seed 交给底层库</then>
+        </case>
+        <case id="permission-model-demo-stays-server">
+          <given>Bun permission demo 直接用 CozoScript relation 和 query</given>
+          <when>实现 .NET server parity</when>
+          <then>这些 demo-specific raw CozoScript models SHALL 由 viz server 承载，不沉入 `cozo-lib-dotnet` OM</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

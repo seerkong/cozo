@@ -1,0 +1,56 @@
+<Track id="add-llm-wiki-engineering-fractal" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>engineering 分形生成：根结构+六类目+职责块+受控 frontmatter，内置规范检查器，dogfood [P] 项 100% 通过</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G3 track。验收夹具 = analysis/fixtures.md（G1-T1 定稿）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T13:05:31Z</CreatedAt>
+    <UpdatedAt>2026-07-05T18:40:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="wiki"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Wiki/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-engineering-fractal" name="add-llm-wiki-engineering-fractal" version="1">
+    <Description>分形结构生成 → 检查器与 dogfood 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="分形结构生成" status="DONE" order="0">
+        <Description>页面注册表驱动的六类目/职责块/frontmatter/migration-map 生成（design §1/§2）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="engineering 全形生成" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写结构/职责块/frontmatter 测试（delta 前 4 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现页面集扩展与格式构造器" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">root-structure/six-categories/manifest-blocks/controlled-frontmatter 断言全过；增量哈希覆盖新页面</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="检查器与 dogfood 收口" status="DONE" order="1">
+        <Description>FractalSpecChecker（fixtures [P] 全集）+ 本仓 dogfood + [L] 抽样评注 + 两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="检查器与 dogfood" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="实现 checker 并编写 checker-gate 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="dogfood 与评注记录" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">本仓 dogfood 产出 checker [P] 项 100% 通过；[L] 抽样评注入 findings；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-portable-datalog-cozo" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>
+      在 cozo-lib-dotnet/packages/ 中新增独立 csproj：Datalog.Core 与 Datalog.Cozo，提供不依赖
+      Om 的 Portable Datalog 解析/校验/IR 与 CozoScript 编译层
+    </Goal>
+    <Description>
+      把 Portable Datalog 作为底层语言前端，将 CozoScript 作为 backend target，为后续
+      Om.Query、NamedQuery 和代码/文档知识图谱查询提供可治理的 Datalog-first 基础。
+    </Description>
+    <CommitMode>manual</CommitMode>
+    <cdt:GapRound>2</cdt:GapRound>
+    <CreatedAt>2026-06-27T15:59:32Z</CreatedAt>
+    <UpdatedAt>2026-06-27T16:34:20Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-portable-datalog-cozo" name="add-portable-datalog-cozo" version="1">
+    <Description>Portable Datalog core language layer and CozoScript backend compiler</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Datalog.Core 语言前端" status="DONE" order="0">
+        <Description>
+          新增 backend-neutral Portable Datalog
+          AST、lexer/parser、diagnostics，并用测试锁定 v1 profile 的语法边界。
+        </Description>
+        <SubNodes>
+          <Task id="T1.1" name="定义 AST 与 diagnostics" status="DONE" order="0" priority="P0">
+            <Description>
+              在 `cozo-lib-dotnet/packages/Datalog.Core/` 独立 csproj 中定义
+              program/rule/query/atom/term/literal/predicate AST，以及
+              severity/code/message/span diagnostics。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">AST 所在项目不引用 Cozo.DotNet.csproj、CozoDb、CozoScript 或 Om.Core 类型</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">Diagnostic model 可表达 parser、validator、backend capability 错误</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 lexer/parser" status="DONE" order="1" priority="P0">
+            <Description>实现 Portable Datalog v1 parser，支持规则、查询、变量、常量、参数、比较、注释与基本错误恢复。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">递归 reachability 示例可解析为 AST</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">语法错误返回结构化 diagnostic，不抛出未处理异常</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">parser golden tests 覆盖事实、规则、查询、参数和比较表达式</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="编写 Datalog.Core parser 测试" status="DONE" order="2" priority="P0">
+            <Description>为 parser 和 diagnostics 添加 focused tests，作为后续 validator/compiler 的输入基线。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">parser 正例和反例测试通过</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC2" checked="true">source span 或等价位置信息有测试覆盖</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after">
+            <cdt:AttractorCheck use="coding"/>
+          </Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Validator 与 Normalized IR" status="DONE" order="1">
+        <Description>
+          新增 Portable Datalog v1 validation、capability profile 和 backend-neutral
+          normalized IR。
+        </Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现 validator safety checks" status="DONE" order="0" priority="P0">
+            <Description>
+              检查 unsafe variables、query projection safety、unsupported
+              constructs、predicate naming 和基础递归合法性。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">head/query 变量未绑定时返回 diagnostic</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">v1 不支持 construct 被明确拒绝</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC3" checked="true">validator 不访问 Cozo relation metadata</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现 normalized IR" status="DONE" order="1" priority="P0">
+            <Description>将 AST 归一化为 backend-neutral IR，保留 source span 和参数引用，供 Datalog.Cozo 消费。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">validated program 可转换为 normalized IR</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">IR 不包含 Cozo-specific syntax</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC3" checked="true">IR tests 覆盖递归规则和参数化查询</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="补齐 validator 测试" status="DONE" order="2" priority="P0">
+            <Description>增加 safety、profile、normalization 的正反例测试。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">unsafe variable cases 均有测试</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">normalized IR shape 有稳定断言</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after">
+            <cdt:AttractorCheck use="coding"/>
+          </Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="Datalog.Cozo 编译层" status="DONE" order="2">
+        <Description>
+          新增 Cozo backend compiler，把 normalized Portable Datalog IR 编译为
+          parameterized CozoScript。
+        </Description>
+        <SubNodes>
+          <Task id="T3.1" name="定义 relation mapping 与 compile result" status="DONE" order="0" priority="P0">
+            <Description>
+              定义 portable predicate 到 Cozo stored relation/inline rule
+              的映射、编译选项、编译结果和 backend diagnostics。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">mapping 支持至少 named-field stored relation</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">compile result 包含 script、parameters、diagnostics</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC3" checked="true">Datalog.Cozo 只引用 Datalog.Core，不引用 Cozo.DotNet.csproj 或 Om.Core</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="实现 CozoScript compiler" status="DONE" order="1" priority="P0">
+            <Description>
+              将 rules/query/literals/terms 编译为 CozoScript，处理 stored relation
+              atoms、inline rules、参数绑定和 string escaping。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">recursive reachability query 可编译为 CozoScript</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">用户参数不被内联到 CozoScript 字符串</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC3" checked="true">unsupported backend feature 返回 diagnostic 且不输出 partial executable script</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.3" name="补齐 compiler 测试" status="DONE" order="2" priority="P0">
+            <Description>
+              增加 compiler snapshot、escaping、parameter binding、relation mapping
+              测试，必要时增加 in-memory Cozo smoke test。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.3-AC1" checked="true">compiler snapshot tests 覆盖递归查询和比较表达式</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC2" checked="true">escaping/parameter tests 覆盖引号、换行和特殊字符</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC3" checked="true">至少一个典型编译结果可由 Cozo 执行或通过等价 smoke check</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after">
+            <cdt:AttractorCheck use="coding"/>
+          </Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="收口、文档与验证" status="DONE" order="3">
+        <Description>补齐 public API 文档、README 示例和最终 build/test/validate，确认该 track 可作为后续 Om.Query 的底座。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="文档与示例" status="DONE" order="0" priority="P1">
+            <Description>
+              在合适 README 或 docs 中说明 Portable Datalog v1
+              profile、Datalog.Core/Datalog.Cozo 边界、示例输入输出。
+            </Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">文档明确 Datalog.Core 和 Datalog.Cozo 是 packages/ 下的独立 csproj，并说明依赖边界</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC2" checked="true">文档包含 Portable Datalog 到 CozoScript 的最小示例</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="最终验证" status="DONE" order="1" priority="P0">
+            <Description>运行 .NET build/test 和 codument validate，审查模块依赖边界。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">dotnet build/test 通过或失败原因记录在 analysis/findings.md</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">
+                codument validate add-portable-datalog-cozo --strict 通过或失败原因记录在
+                analysis/findings.md
+              </cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC3" checked="true">依赖检查确认 Datalog.Core 不依赖 Cozo/Om，Datalog.Cozo 只依赖 Datalog.Core</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after">
+            <cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/>
+          </Hook>
+          <Hook on="phase:after">
+            <cdt:AttractorCheck use="coding"/>
+          </Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

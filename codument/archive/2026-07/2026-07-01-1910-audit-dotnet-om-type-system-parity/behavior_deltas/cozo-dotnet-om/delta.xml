@@ -1,0 +1,38 @@
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/type-system-parity">
+    <requirement id="type-system-parity">
+      <statement>系统 SHALL keep the .NET OM type-system kernel semantically aligned with the Bun OM reference design for mixins, inherited attributes, aliases, validity values, and type queries.</statement>
+      <suite id="effective-attributes" name="Effective Attribute Definitions">
+        <case id="mixin-attributes-are-effective">
+          <given>A mixin defines attribute `created_by` and a type attaches that mixin</given>
+          <when>A caller sets `created_by` on an entity of that type</when>
+          <then>The .NET OM SHALL accept the property as a defined effective attribute</then>
+        </case>
+        <case id="inherited-attribute-override-is-safe">
+          <given>A parent type defines a required String attribute</given>
+          <when>A child type redefines that attribute as optional or as a different value type</when>
+          <then>The .NET OM SHALL reject the unsafe override</then>
+        </case>
+      </suite>
+      <suite id="rename-and-temporal-values" name="Rename And Temporal Values">
+        <case id="alias-stored-property-fallback">
+          <given>Legacy data stores a property under an attribute alias name</given>
+          <when>A caller reads or validates the canonical attribute</when>
+          <then>The .NET OM SHALL use alias fallback so renamed data remains observable</then>
+        </case>
+        <case id="validity-attribute-values">
+          <given>An attribute is defined with value type `Validity`</given>
+          <when>A caller sets the attribute with a supported validity-like input</when>
+          <then>The .NET OM SHALL store a Cozo validity value and pass validation</then>
+        </case>
+      </suite>
+      <suite id="relation-direction" name="Relation Direction">
+        <case id="undirected-relations-accept-reverse-endpoints">
+          <given>A relation is defined with `directed=false` from type A to type B</given>
+          <when>A caller links a B entity to an A entity through that relation</when>
+          <then>The .NET OM SHALL accept the link as an undirected relation endpoint match</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

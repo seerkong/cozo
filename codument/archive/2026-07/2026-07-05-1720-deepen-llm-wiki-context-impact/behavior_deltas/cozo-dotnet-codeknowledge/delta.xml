@@ -1,0 +1,39 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/deep-context-impact">
+    <requirement id="deep-context-impact">
+      <statement>符号上下文查询 SHALL 附带该符号参与的执行流与所属社群；影响分析 SHALL 支持按深度分层输出、方向选择（up=受影响方/down=依赖方）、minConfidence 过滤，并给出基于直接受影响数量与执行流参与度的风险评级（LOW/MEDIUM/HIGH/CRITICAL）与受影响执行流清单；每层输出 SHALL 有界并携带截断计数。调用边的 caller 归属 SHALL 按调用点行号落在符号行区间内定位（同名重载不串位）。</statement>
+      <suite id="deep" name="深图化">
+        <case id="context-with-processes">
+          <given>符号参与至少一条执行流且属于某社群</given>
+          <when>查询 symbol_context</when>
+          <then>结果 SHALL 含执行流列表与社群标识（add-only 字段）</then>
+        </case>
+        <case id="impact-layered">
+          <given>A←B←C 的调用链（C 调 B、B 调 A）</given>
+          <when>impact A（direction=up，maxDepth=2）</when>
+          <then>第 1 层 SHALL 只含 B、第 2 层只含 C</then>
+        </case>
+        <case id="impact-min-confidence">
+          <given>某受影响路径仅经 confidence 0.5 边</given>
+          <when>impact minConfidence=0.8</when>
+          <then>该路径 SHALL 被排除</then>
+        </case>
+        <case id="risk-rating">
+          <given>符号有 10+ 直接调用者且参与 ≥3 条执行流</given>
+          <when>impact</when>
+          <then>风险 SHALL 为 CRITICAL；直接调用者 2 个时 SHALL 为 LOW</then>
+        </case>
+        <case id="layer-bounded">
+          <given>某层受影响符号超过每层上限</given>
+          <when>impact</when>
+          <then>该层 SHALL 截断并携带截断计数</then>
+        </case>
+        <case id="overload-caller-attribution">
+          <given>类中存在同名两个重载方法且第二个重载内含调用点</given>
+          <when>索引后查询该调用边</when>
+          <then>caller SHALL 是包含该行的第二个重载符号（按行区间归属）</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

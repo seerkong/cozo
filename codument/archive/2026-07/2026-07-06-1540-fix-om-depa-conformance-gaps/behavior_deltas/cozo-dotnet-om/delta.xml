@@ -1,0 +1,24 @@
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/delete-entity">
+    <requirement id="delete-entity">
+      <statement>OM SHALL 提供 DeleteEntityAsync：在单事务内物理删除实体及其全部属性行与出入关系边，不留孤儿数据；删除不存在的实体 SHALL 无害幂等；外部代码不得绕过该 API 直删 om_* 存储行。</statement>
+      <suite id="delete" name="实体删除">
+        <case id="delete-cascades">
+          <given>实体带多个属性与出入边</given>
+          <when>DeleteEntityAsync</when>
+          <then>om_entity/om_property/om_edge 中该实体相关行 SHALL 全部清除且在同一事务内</then>
+        </case>
+        <case id="delete-idempotent">
+          <given>不存在的实体 id</given>
+          <when>DeleteEntityAsync</when>
+          <then>SHALL 无害返回（不抛错）</then>
+        </case>
+        <case id="depa-cleanup-no-orphans">
+          <given>DEPA scan 物化的 violation 在修复后过期</given>
+          <when>下一轮 scan 清理</when>
+          <then>清理 SHALL 经 DeleteEntityAsync 执行且 om_property 无孤儿残留</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

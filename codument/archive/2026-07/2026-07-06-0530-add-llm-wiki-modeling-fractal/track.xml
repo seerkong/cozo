@@ -1,0 +1,57 @@
+<Track id="add-llm-wiki-modeling-fractal" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>modeling 分形生成：确定性 context 发现（禁 #N）+ objects/workflows 叶子 + M-* 检查全集 + 共享增量体系</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G4 track。双分形的 canonical 半边；G3 交接的社群命名退化在 context 层解决。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T16:20:10Z</CreatedAt>
+    <UpdatedAt>2026-07-06T02:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="wiki"            domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Wiki/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-modeling-fractal" name="add-llm-wiki-modeling-fractal" version="1">
+    <Description>context 发现与骨架 → 叶子与 checker 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="context 发现与 modeling 骨架" status="DONE" order="0">
+        <Description>三级兜底 context 命名（禁 #N）、审查稿接入、modeling 页面注册表骨架（index/code-map/类目 index）并入增量体系。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="context 发现与骨架" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 context 命名/确定性/骨架结构测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现发现、注册表与骨架渲染" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">context 名无 #N 且双跑确定；骨架页（modeling/domain/contexts 层级 + 职责块 + context frontmatter）结构断言全过；增量并入（二跑 skip）</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="叶子与 checker 收口" status="DONE" order="1">
+        <Description>objects/workflows 叶子渲染（预算）、M-* 20 条 + mutations、本仓 dogfood、两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="叶子、M-* 与 dogfood" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写叶子/checker mutations 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现叶子渲染与 M-* 规则 + dogfood" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">objects/workflows 叶子断言全过（结构层零 LLM、file:line 链接、预算截断计数）；M-* 全集 + mutations 绿</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">本仓双分形 dogfood：checker E-*+M-* 0 违规；二跑全 skip；[L] 评注（context 命名）入 findings；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

@@ -894,6 +894,7 @@ dependencies = [
  "cbindgen",
  "cozo",
  "lazy_static",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="optimize-cozo-wiki-relation-generation" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>优化 cozo-wiki repo indexing 的推断关系生成，避免 doc-symbol 全局弱匹配导致 DB 膨胀</Goal>
+    <Description>参考 GitNexus 的 bounded graph/search 思路，将 documents 推断关系改为默认局部 top-k，并提供预算和显式模式配置。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-06-28T08:28:36Z</CreatedAt>
+    <UpdatedAt>2026-06-28T08:40:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="state" name="analysis" domain="track" path="vfs://./analysis/"/>
+    <MaterialBundle role="output" name="llm-wiki" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_optimize-cozo-wiki-relation-generation" name="optimize-cozo-wiki-relation-generation" version="1">
+    <Description>Bound cozo-wiki inferred relation generation.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="关系生成策略与配置" status="DONE" order="0">
+        <Description>新增 request 配置并替换 doc-symbol 全局匹配算法。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>默认索引不再生成 docBlocks × symbols 级别的 documents 关系</cdt:Criterion>
+          <cdt:Criterion>局部文档链接仍可被 docs_for_code 使用</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T1.1" name="新增索引预算配置" status="DONE" order="0" priority="P0">
+            <Description>在 RepositoryIndexRequest 增加 doc-symbol link mode 和预算字段。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">默认模式为 Local</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">默认每 doc link 上限和总推断关系上限存在</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 bounded local documents linking" status="DONE" order="1" priority="P0">
+            <Description>替换 LinkDocsToSymbols 为局部候选、名称过滤、top-k 与 budget 控制。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">大规模重复命名 fixture 不产生关系爆炸</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">同邻域文档提及 SampleService 时仍生成 documents 关系</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="CLI/MCP 与文档测试" status="DONE" order="1">
+        <Description>扩展 index_repo 参数、补测试/README，并在真实仓库隔离复测。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>dotnet build/test 通过</cdt:Criterion>
+          <cdt:Criterion>eidolon-anchor 隔离索引 DB 体积明显下降</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T2.1" name="暴露 index_repo 可选参数" status="DONE" order="0" priority="P0">
+            <Description>让 MCP/CLI index_repo 支持 doc-symbol-link-mode、max-doc-links-per-doc、max-inferred-relations。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">tool schema 包含新增参数</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">CLI call 能将参数传入 RepositoryIndexRequest</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="补测试与 README" status="DONE" order="1" priority="P0">
+            <Description>增加关系预算回归测试并说明默认策略。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">测试覆盖重复命名不会爆炸</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">README 说明新增参数</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="真实仓库隔离验证" status="DONE" order="2" priority="P0">
+            <Description>在 eidolon-anchor 使用隔离 data-folder-name 运行 index_repo，观察 relation count 与 DB size。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">不覆盖原 2.2G 默认 DB</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">记录优化后 relation count 和 DB size</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Git capsule (detect-changes track, decisions #1): internal by design; Tools and Indexing
+         are the only consumers, Tests cover the -U0 hunk parsing directly. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tools" />
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Indexing" />
+    <!-- Git-capsule reuse (llm-pipeline track T2.2): the wiki .meta fromCommit reads HEAD via TryGetHeadCommit. -->
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Wiki" />
+    <InternalsVisibleTo Include="Cozo.DotNet.LlmWiki.Tests" />
+  </ItemGroup>
+
+</Project>

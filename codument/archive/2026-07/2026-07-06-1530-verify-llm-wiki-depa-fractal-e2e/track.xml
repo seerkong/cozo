@@ -1,0 +1,39 @@
+<Track id="verify-llm-wiki-depa-fractal-e2e" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>愿景层 E2E 验证：双分形 0 违规+确定性+增量、DEPA 双样本可区分、18 工具回归、mission 判据汇总报告</Goal>
+    <Description>mission add-llm-wiki-depa-fractal-wiki 的 G7 收口 track（验证性质）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T20:19:49Z</CreatedAt>
+    <UpdatedAt>2026-07-06T12:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="reports"         domain="track"    path="vfs://./reports/"/>
+  </Ports>
+
+  <TaskSpace id="space_verify-llm-wiki-depa-fractal-e2e" name="verify-llm-wiki-depa-fractal-e2e" version="1">
+    <Description>端到端验证与报告</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="端到端验证" status="DONE" order="0">
+        <Description>双分形/DEPA/工具回归三线验证 → mission 判据报告。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="E2E 验证与报告" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">双分形 [P] 0 违规 + 跨进程一致 + 增量验证（明细进报告）</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">DEPA 双样本可区分（独立重跑）；本仓 dogfood 报告结构合理；18 工具 smoke + 两侧测试全绿</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">reports/verify-report.md 汇总 mission 三条成功判据逐条证据</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

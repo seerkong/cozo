@@ -12,22 +12,51 @@ use std::collections::BTreeMap;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
+use serde_json::{json, Value as JsonValue};
 
 use cozo::*;
 
 struct Handles {
     current: AtomicI32,
     dbs: Mutex<BTreeMap<i32, DbInstance>>,
+    current_tx: AtomicI32,
+    txs: Mutex<BTreeMap<i32, Arc<MultiTransaction>>>,
 }
 
 lazy_static! {
     static ref HANDLES: Handles = Handles {
         current: Default::default(),
-        dbs: Mutex::new(Default::default())
+        dbs: Mutex::new(Default::default()),
+        current_tx: Default::default(),
+        txs: Mutex::new(Default::default())
     };
+}
+
+fn params_from_json(params: &str) -> Result<BTreeMap<String, DataValue>, String> {
+    if params.is_empty() {
+        return Ok(BTreeMap::default());
+    }
+
+    serde_json::from_str::<BTreeMap<String, JsonValue>>(params)
+        .map(|map| {
+            map.into_iter()
+                .map(|(k, v)| (k, DataValue::from(v)))
+                .collect()
+        })
+        .map_err(|_| "params argument is not a JSON map".to_string())
+}
+
+fn ok_json() -> *mut c_char {
+    CString::new(r##"{"ok":true}"##).unwrap().into_raw()
+}
+
+fn message_error_json(message: impl AsRef<str>) -> *mut c_char {
+    CString::new(json!({"ok": false, "message": message.as_ref()}).to_string())
+        .unwrap()
+        .into_raw()
 }
 
 /// Open a database.
@@ -87,6 +116,136 @@ pub unsafe extern "C" fn cozo_close_db(db_id: i32) -> bool {
         dbs.remove(&db_id)
     };
     db.is_some()
+}
+
+/// Start a multi-statement transaction.
+///
+/// `db_id`: the ID representing the database.
+/// `write`: whether the transaction can write.
+/// `tx_id`: will contain the ID of the transaction opened.
+///
+/// When the function is successful, null pointer is returned,
+/// otherwise a pointer to a C-string containing the error message will be returned.
+/// The returned C-string must be freed with `cozo_free_str`.
+#[no_mangle]
+pub unsafe extern "C" fn cozo_multi_transact(
+    db_id: i32,
+    write: bool,
+    tx_id: &mut i32,
+) -> *mut c_char {
+    let db = {
+        let db_ref = {
+            let dbs = HANDLES.dbs.lock().unwrap();
+            dbs.get(&db_id).cloned()
+        };
+        match db_ref {
+            None => return CString::new("database closed").unwrap().into_raw(),
+            Some(db) => db,
+        }
+    };
+
+    let tx = db.multi_transaction(write);
+    let id = HANDLES.current_tx.fetch_add(1, Ordering::AcqRel);
+    HANDLES.txs.lock().unwrap().insert(id, Arc::new(tx));
+    *tx_id = id;
+    null_mut()
+}
+
+/// Run query against a multi-statement transaction.
+///
+/// `tx_id`:      the ID representing the transaction to run the query.
+/// `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
+/// `params_raw`: a UTF-8 encoded C-string for the params of the query in JSON map format.
+///
+/// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+/// The string contains the JSON return value of the query.
+#[no_mangle]
+pub unsafe extern "C" fn cozo_run_tx(
+    tx_id: i32,
+    script_raw: *const c_char,
+    params_raw: *const c_char,
+) -> *mut c_char {
+    #[cfg(not(target_arch = "wasm32"))]
+    let start = std::time::Instant::now();
+
+    let script = match CStr::from_ptr(script_raw).to_str() {
+        Ok(p) => p,
+        Err(_) => return message_error_json("script is not UTF-8 encoded"),
+    };
+    let params_str = match CStr::from_ptr(params_raw).to_str() {
+        Ok(p) => p,
+        Err(_) => return message_error_json("params argument is not UTF-8 encoded"),
+    };
+    let params = match params_from_json(params_str) {
+        Ok(params) => params,
+        Err(message) => return message_error_json(message),
+    };
+    let tx = {
+        let tx_ref = {
+            let txs = HANDLES.txs.lock().unwrap();
+            txs.get(&tx_id).cloned()
+        };
+        match tx_ref {
+            None => return message_error_json("transaction closed"),
+            Some(tx) => tx,
+        }
+    };
+
+    match tx.run_script(script, params) {
+        Ok(named_rows) => {
+            let mut j_val = named_rows.into_json();
+            let map = j_val.as_object_mut().unwrap();
+            map.insert("ok".to_string(), json!(true));
+            #[cfg(not(target_arch = "wasm32"))]
+            map.insert("took".to_string(), json!(start.elapsed().as_secs_f64()));
+            CString::new(j_val.to_string()).unwrap().into_raw()
+        }
+        Err(err) => CString::new(format_error_as_json(err, Some(script)).to_string())
+            .unwrap()
+            .into_raw(),
+    }
+}
+
+/// Commit a multi-statement transaction.
+///
+/// `tx_id`: the ID representing the transaction to commit.
+///
+/// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+#[no_mangle]
+pub unsafe extern "C" fn cozo_commit_tx(tx_id: i32) -> *mut c_char {
+    let tx = {
+        let mut txs = HANDLES.txs.lock().unwrap();
+        txs.remove(&tx_id)
+    };
+
+    match tx {
+        None => message_error_json("transaction closed"),
+        Some(tx) => match tx.commit() {
+            Ok(_) => ok_json(),
+            Err(err) => message_error_json(err.to_string()),
+        },
+    }
+}
+
+/// Abort a multi-statement transaction.
+///
+/// `tx_id`: the ID representing the transaction to abort.
+///
+/// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+#[no_mangle]
+pub unsafe extern "C" fn cozo_abort_tx(tx_id: i32) -> *mut c_char {
+    let tx = {
+        let mut txs = HANDLES.txs.lock().unwrap();
+        txs.remove(&tx_id)
+    };
+
+    match tx {
+        None => message_error_json("transaction closed"),
+        Some(tx) => match tx.abort() {
+            Ok(_) => ok_json(),
+            Err(err) => message_error_json(err.to_string()),
+        },
+    }
 }
 
 /// Run query against a database.

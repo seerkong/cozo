@@ -1,0 +1,19 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/f2-pure-delegate-exemption">
+    <requirement id="f2-pure-delegate-exemption">
+      <statement>V-F2（runtime 载体承载业务方法）检测 SHALL 豁免纯委托 facade 形态：方法出边仅单条 CALLS 且无写访问的成员不产 GAP（以低置信 INFO 形态留痕或不物化，实现口径记录于 rule-map），使无 runtimeCarrierTypes 标注的仓库不误伤该合规形态。</statement>
+      <suite id="exemption" name="纯委托豁免">
+        <case id="pure-delegate-exempt">
+          <given>heuristic 判定的 carrier 类型上的方法为单条 CALLS 委托转发且无写访问</given>
+          <when>V-F2 检测</when>
+          <then>SHALL 不产出 GAP violation</then>
+        </case>
+        <case id="real-logic-still-caught">
+          <given>carrier 方法含多条 CALLS 或写访问（真业务逻辑）</given>
+          <when>V-F2 检测</when>
+          <then>SHALL 仍产出 GAP</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

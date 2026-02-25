@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan>
+  <metadata>
+    <track_id>add-action-and-constraints</track_id>
+    <track_name>为 cozo-om 添加 Action/Mutation 行为层与复合约束引擎</track_name>
+    <goal>实现 Action/Mutation 模式、拦截器、三类复合约束、派生属性，并新增审批流 demo</goal>
+    <created_at>2026-02-28</created_at>
+    <status>completed</status>
+    <commit_mode>manual</commit_mode>
+  </metadata>
+
+  <phases>
+    <!-- Phase 1: Schema 扩展与内存注册表 -->
+    <phase id="P1" name="Schema 扩展与内存注册表基础设施">
+      <goal>扩展 initSchema 新增 5 张关系表，搭建内存注册表和 clearRegistry</goal>
+      <tasks>
+        <task id="T1.1" name="编写 Schema 扩展测试" status="DONE" priority="P0">
+          验证 initSchema 新增 om_action_def/om_mutation_def/om_interceptor_def/om_constraint_def/om_computed_def
+          <subtasks>
+            <subtask id="T1.1.1" name="编写测试：initSchema 创建 5 张新关系表" status="DONE"/>
+            <subtask id="T1.1.2" name="编写测试：向后兼容——现有 API 行为不变" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.2" name="实现 Schema 扩展" status="DONE" priority="P0">
+          修改 initSchema 创建新关系表，实现内存注册表和 clearRegistry
+          <subtasks>
+            <subtask id="T1.2.1" name="修改 initSchema：创建 5 张新关系表" status="DONE"/>
+            <subtask id="T1.2.2" name="实现内存注册表（5 个 Map）和 clearRegistry()" status="DONE"/>
+            <subtask id="T1.2.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 2: Mutation 定义与执行 -->
+    <phase id="P2" name="Mutation 定义与原子执行">
+      <goal>实现 defineMutation 和 Mutation 执行器，含补偿式回滚</goal>
+      <tasks>
+        <task id="T2.1" name="编写 Mutation 测试" status="DONE" priority="P0">
+          测试 Mutation 注册、执行、回滚
+          <subtasks>
+            <subtask id="T2.1.1" name="编写测试：defineMutation 注册并可查询" status="DONE"/>
+            <subtask id="T2.1.2" name="编写测试：Mutation 执行成功修改数据" status="DONE"/>
+            <subtask id="T2.1.3" name="编写测试：Mutation 执行失败时补偿回滚" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.2" name="实现 Mutation" status="DONE" priority="P0">
+          实现 defineMutation、Mutation executor、补偿回滚逻辑
+          <subtasks>
+            <subtask id="T2.2.1" name="实现 defineMutation（元数据写入 + 内存注册）" status="DONE"/>
+            <subtask id="T2.2.2" name="实现 Mutation 执行器（使用 multiTransact 提供原子性）" status="DONE"/>
+            <subtask id="T2.2.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 3: Action 定义、继承与执行 -->
+    <phase id="P3" name="Action 定义、继承与执行">
+      <goal>实现 defineAction、executeAction、callParentAction、Action 继承与覆盖</goal>
+      <tasks>
+        <task id="T3.1" name="编写 Action 基础测试" status="DONE" priority="P0">
+          测试 Action 注册、执行、不存在时报错
+          <subtasks>
+            <subtask id="T3.1.1" name="编写测试：defineAction 注册 Action" status="DONE"/>
+            <subtask id="T3.1.2" name="编写测试：executeAction 触发 handler 并执行 Mutation" status="DONE"/>
+            <subtask id="T3.1.3" name="编写测试：对不存在的 Action 执行报错" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.2" name="实现 Action 基础" status="DONE" priority="P0">
+          实现 defineAction、executeAction、ActionContext
+          <subtasks>
+            <subtask id="T3.2.1" name="实现 defineAction（元数据写入 + 内存注册）" status="DONE"/>
+            <subtask id="T3.2.2" name="实现 ActionContext 对象构建" status="DONE"/>
+            <subtask id="T3.2.3" name="实现 executeAction 主流程（MRO 解析 → handler → Mutation 执行）" status="DONE"/>
+            <subtask id="T3.2.4" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.3" name="编写 Action 继承与覆盖测试" status="DONE" priority="P0">
+          测试 Action 继承、子类型覆盖、callParentAction
+          <subtasks>
+            <subtask id="T3.3.1" name="编写测试：子类型继承父类型 Action" status="DONE"/>
+            <subtask id="T3.3.2" name="编写测试：子类型覆盖并通过 callParentAction 扩展" status="DONE"/>
+            <subtask id="T3.3.3" name="编写测试：未覆盖时使用最近祖先 Action（MRO）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.4" name="实现 Action 继承与覆盖" status="DONE" priority="P0">
+          实现 callParentAction、MRO 解析、Action 覆盖逻辑
+          <subtasks>
+            <subtask id="T3.4.1" name="实现 MRO 解析（复用 _getAncestorList）" status="DONE"/>
+            <subtask id="T3.4.2" name="实现 callParentAction" status="DONE"/>
+            <subtask id="T3.4.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 4: 拦截器 -->
+    <phase id="P4" name="拦截器（Interceptor）">
+      <goal>实现 addInterceptor，集成到 executeAction 流程</goal>
+      <tasks>
+        <task id="T4.1" name="编写拦截器测试" status="DONE" priority="P0">
+          测试 before/after 拦截器注册与执行
+          <subtasks>
+            <subtask id="T4.1.1" name="编写测试：before 拦截器阻止 Action 执行" status="DONE"/>
+            <subtask id="T4.1.2" name="编写测试：after 拦截器在 Mutation 完成后执行" status="DONE"/>
+            <subtask id="T4.1.3" name="编写测试：多个拦截器按注册顺序执行" status="DONE"/>
+            <subtask id="T4.1.4" name="编写测试：拦截器继承（父类型拦截器对子类型生效）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T4.2" name="实现拦截器" status="DONE" priority="P0">
+          实现 addInterceptor，集成到 executeAction 的 before/after 阶段
+          <subtasks>
+            <subtask id="T4.2.1" name="实现 addInterceptor（元数据写入 + 内存注册）" status="DONE"/>
+            <subtask id="T4.2.2" name="在 executeAction 中集成 before/after 拦截器链" status="DONE"/>
+            <subtask id="T4.2.3" name="实现拦截器继承解析" status="DONE"/>
+            <subtask id="T4.2.4" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 5: 条件约束与跨实体约束 -->
+    <phase id="P5" name="条件约束与跨实体约束">
+      <goal>实现 defineConstraint、validateConstraints，集成到 setProperty/linkEntities</goal>
+      <tasks>
+        <task id="T5.1" name="编写条件约束测试" status="DONE" priority="P0">
+          测试条件约束定义、校验通过/失败、写入时自动触发、skipConstraints
+          <subtasks>
+            <subtask id="T5.1.1" name="编写测试：defineConstraint 注册条件约束" status="DONE"/>
+            <subtask id="T5.1.2" name="编写测试：validateConstraints 校验通过" status="DONE"/>
+            <subtask id="T5.1.3" name="编写测试：validateConstraints 校验失败返回错误" status="DONE"/>
+            <subtask id="T5.1.4" name="编写测试：setProperty 自动触发条件约束" status="DONE"/>
+            <subtask id="T5.1.5" name="编写测试：skipConstraints 跳过校验" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.2" name="实现条件约束" status="DONE" priority="P0">
+          实现 defineConstraint（conditional）、validateConstraints、setProperty 集成
+          <subtasks>
+            <subtask id="T5.2.1" name="实现 defineConstraint（元数据写入 + 内存注册）" status="DONE"/>
+            <subtask id="T5.2.2" name="实现 ConstraintContext 对象" status="DONE"/>
+            <subtask id="T5.2.3" name="实现 validateConstraints（含继承链收集）" status="DONE"/>
+            <subtask id="T5.2.4" name="修改 setProperty：增加 options 参数，默认触发约束" status="DONE"/>
+            <subtask id="T5.2.5" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.3" name="编写跨实体约束测试" status="DONE" priority="P0">
+          测试跨实体约束定义、linkEntities 触发、显式校验
+          <subtasks>
+            <subtask id="T5.3.1" name="编写测试：defineConstraint 注册跨实体约束" status="DONE"/>
+            <subtask id="T5.3.2" name="编写测试：linkEntities 自动触发跨实体约束" status="DONE"/>
+            <subtask id="T5.3.3" name="编写测试：validateConstraints 校验跨实体约束" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.4" name="实现跨实体约束" status="DONE" priority="P0">
+          实现 cross-entity 约束类型，修改 linkEntities 集成
+          <subtasks>
+            <subtask id="T5.4.1" name="扩展 defineConstraint 支持 scope: 'cross-entity'" status="DONE"/>
+            <subtask id="T5.4.2" name="修改 linkEntities：增加 options 参数，默认触发约束" status="DONE"/>
+            <subtask id="T5.4.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.5" name="编写约束继承测试" status="DONE" priority="P0">
+          测试子类型继承父类型约束
+          <subtasks>
+            <subtask id="T5.5.1" name="编写测试：子类型继承父类型条件约束" status="DONE"/>
+            <subtask id="T5.5.2" name="编写测试：子类型继承父类型跨实体约束" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 6: 派生属性 -->
+    <phase id="P6" name="派生属性（Computed Property）">
+      <goal>实现 defineComputed，集成到 getProperty/getEntityView/setProperty</goal>
+      <tasks>
+        <task id="T6.1" name="编写派生属性测试" status="DONE" priority="P0">
+          测试 defineComputed、读取、禁止写入、用于约束、继承
+          <subtasks>
+            <subtask id="T6.1.1" name="编写测试：defineComputed 注册并通过 getProperty 读取" status="DONE"/>
+            <subtask id="T6.1.2" name="编写测试：getEntityView 包含派生属性" status="DONE"/>
+            <subtask id="T6.1.3" name="编写测试：setProperty 写入派生属性报错" status="DONE"/>
+            <subtask id="T6.1.4" name="编写测试：派生属性用于约束校验" status="DONE"/>
+            <subtask id="T6.1.5" name="编写测试：子类型继承/覆盖派生属性" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T6.2" name="实现派生属性" status="DONE" priority="P0">
+          实现 defineComputed，改造 getProperty/getEntityView/setProperty
+          <subtasks>
+            <subtask id="T6.2.1" name="实现 defineComputed（元数据写入 + 内存注册）" status="DONE"/>
+            <subtask id="T6.2.2" name="改造 getProperty：查询 computed 注册表" status="DONE"/>
+            <subtask id="T6.2.3" name="改造 getEntityView：追加 computed 属性" status="DONE"/>
+            <subtask id="T6.2.4" name="改造 setProperty：拒绝写入 computed 属性" status="DONE"/>
+            <subtask id="T6.2.5" name="实现 computed 继承解析" status="DONE"/>
+            <subtask id="T6.2.6" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 7: TypeScript 声明与导出 -->
+    <phase id="P7" name="TypeScript 声明与模块导出">
+      <goal>更新 cozo-om.d.ts 和 module.exports</goal>
+      <tasks>
+        <task id="T7.1" name="更新 cozo-om.d.ts" status="DONE" priority="P1">
+          新增所有函数的 TypeScript 类型声明
+          <subtasks>
+            <subtask id="T7.1.1" name="添加 Action/Mutation/Interceptor 相关类型和函数声明" status="DONE"/>
+            <subtask id="T7.1.2" name="添加 Constraint/Computed 相关类型和函数声明" status="DONE"/>
+            <subtask id="T7.1.3" name="更新 setProperty/linkEntities/getProperty/getEntityView 签名" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T7.2" name="更新 module.exports" status="DONE" priority="P1">
+          导出所有新增公共函数
+          <subtasks>
+            <subtask id="T7.2.1" name="在 module.exports 中添加新函数" status="DONE"/>
+            <subtask id="T7.2.2" name="编写导出完整性测试" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 8: 全量测试与覆盖率 -->
+    <phase id="P8" name="全量测试与覆盖率">
+      <goal>运行全部测试，确保覆盖率 >80%</goal>
+      <tasks>
+        <task id="T8.1" name="全量测试与覆盖率复核" status="DONE" priority="P0">
+          运行 bun test --coverage，补充不足的测试
+          <subtasks>
+            <subtask id="T8.1.1" name="运行 bun test --coverage" status="DONE"/>
+            <subtask id="T8.1.2" name="补充覆盖率不足的测试用例" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 9: 可视化 Demo -->
+    <phase id="P9" name="审批流可视化 Demo">
+      <goal>在 cozo-lib-bun-viz 中新增审批流 demo 展示 Action/Constraint/Computed</goal>
+      <tasks>
+        <task id="T9.1" name="创建审批流 demo 数据" status="DONE" priority="P1">
+          新增 server/src/demos/approval-flow.js
+          <subtasks>
+            <subtask id="T9.1.1" name="定义类型结构（ApprovalRequest/Approver/Department）" status="DONE"/>
+            <subtask id="T9.1.2" name="定义 Action（submit/approve/reject/escalate）和 Mutation" status="DONE"/>
+            <subtask id="T9.1.3" name="定义约束（条件约束 + 跨实体约束）和派生属性" status="DONE"/>
+            <subtask id="T9.1.4" name="创建 defaultTables 和示例数据" status="DONE"/>
+            <subtask id="T9.1.5" name="定义查询（Action 执行、约束校验、派生属性展示）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T9.2" name="注册 demo 并适配 server" status="DONE" priority="P1">
+          在 demos/index.js 注册，适配 server 端 Action/Constraint API
+          <subtasks>
+            <subtask id="T9.2.1" name="demos/index.js 注册 approval-flow demo" status="DONE"/>
+            <subtask id="T9.2.2" name="适配 /api/run 支持 Action 执行和约束校验查询" status="DONE"/>
+          </subtasks>
+        </task>
+
+        <task id="T9.3" name="在工作簿中展示行为层定义" status="DONE" priority="P1">
+          在 demo 的 defaultTables 中增加 Action/Mutation/Interceptor/Constraint/Computed 定义 sheet，按类别分 sheet 展示
+          <subtasks>
+            <subtask id="T9.3.1" name="添加 Action/Mutation/Interceptor 定义表" status="DONE"/>
+            <subtask id="T9.3.2" name="添加 Constraint/Computed 定义表" status="DONE"/>
+            <subtask id="T9.3.3" name="运行 viz e2e 验证 sheet 可展示" status="DONE"/>
+          </subtasks>
+        </task>
+
+        <task id="T9.4" name="审批流 demo 接入 CozoDB 时间轴能力" status="DONE" priority="P1">
+          submit 携带生效时间 effective_at；审批通过后将生效时间写入 time travel relation，并在结果区展示时间轴
+          <subtasks>
+            <subtask id="T9.4.1" name="添加 effective_at 属性并在 submit/approve 流程中使用" status="DONE"/>
+            <subtask id="T9.4.2" name="创建 time travel relation 并写入审批状态/决策历史" status="DONE"/>
+            <subtask id="T9.4.3" name="新增时间轴查询并在结果区展示（table 形式）" status="DONE"/>
+            <subtask id="T9.4.4" name="补充/更新 viz e2e 测试" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <confirm protocol="yield-human-confirm" when="after" status="DONE"/>
+    </phase>
+  </phases>
+</plan>

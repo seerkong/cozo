@@ -1,0 +1,147 @@
+<behaviors capability="llm-wiki-tools" version="1">
+  <requirement id="shared-runner">
+    <statement>cozo-wiki SHALL expose LLM wiki tool metadata, JSON argument binding, storage option parsing, and named tool execution through a reusable .NET library package that can be used by CLI, MCP stdio, and future HTTP server integrations.</statement>
+    <suite id="compatibility" name="CLI and MCP compatibility">
+      <case id="mcp-tools-list-compatible">
+        <given>The MCP stdio server is started</given>
+        <when>An MCP client requests tools/list</when>
+        <then>The server SHALL return the same tool names and input schemas as before the extraction</then>
+      </case>
+      <case id="cli-call-compatible">
+        <given>A user invokes cozo-wiki call with existing kebab-case tool options</given>
+        <when>The CLI binds options into tool arguments</when>
+        <then>The CLI SHALL call the shared tool runner with equivalent camelCase arguments and print the same JSON result shape</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="detect-changes">
+    <statement>系统 SHALL 提供 detect_changes 工具：按 scope（unstaged|staged|compare+baseRef）取 git diff，把改动行按文件与符号行区间映射到受影响符号，聚合有界的传递影响（DeepImpact up）、受影响执行流与总体风险评级；索引 SHALL 记录 indexed_commit，工具与 status SHALL 在 HEAD 与索引 commit 不一致时给出 stale 提示；非 git 目录或 git 不可用时 SHALL 返回明确诊断而不抛错。</statement>
+    <suite id="detect" name="变更检测">
+      <case id="unstaged-mapping">
+        <given>已索引的 git 仓中某方法体内出现未暂存修改</given>
+        <when>detect_changes scope=unstaged</when>
+        <then>changedSymbols SHALL 含该方法且带 file:line</then>
+      </case>
+      <case id="staged-vs-unstaged">
+        <given>一处改动已 stage、另一处未 stage</given>
+        <when>分别以 staged 与 unstaged 调用</when>
+        <then>两次结果 SHALL 各只含对应改动的符号</then>
+      </case>
+      <case id="compare-base">
+        <given>相对 baseRef 有一次已提交的修改</given>
+        <when>detect_changes scope=compare baseRef=&amp;amp;amp;amp;amp;lt;ref&amp;amp;amp;amp;amp;gt;</when>
+        <then>SHALL 映射该提交改动的符号</then>
+      </case>
+      <case id="impact-aggregation">
+        <given>被改符号有调用者并参与执行流</given>
+        <when>detect_changes</when>
+        <then>结果 SHALL 含去重有界的 impactedSymbols、affectedProcesses 与聚合风险</then>
+      </case>
+      <case id="stale-hint">
+        <given>索引后又有新 commit（HEAD ≠ indexed_commit）</given>
+        <when>detect_changes 或 api/status</when>
+        <then>SHALL 返回 stale=true 与 reindex 提示</then>
+      </case>
+      <case id="non-git-safe">
+        <given>work dir 不是 git 仓（或 git 不可用）</given>
+        <when>detect_changes</when>
+        <then>SHALL 返回明确诊断（不抛错），索引与其他工具不受影响</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="agent-tools-e2e-quality">
+    <statement>agent 工具面 SHALL 满足端到端质量门禁：对真实仓库索引后，15 个工具经统一 runner 全部可用；精确标识符查询在 hybrid 模式 SHALL 进入前 3 结果；trace/impact/detect_changes 构成的变更工作流 SHALL 在真实改动场景产出可定位（file:line）且有界的结果。</statement>
+    <suite id="quality" name="工具面质量">
+      <case id="fifteen-tools">
+        <given>真实仓库完整索引（含社群/执行流/FTS）</given>
+        <when>逐一调用 15 个工具</when>
+        <then>SHALL 全部成功返回结构化结果</then>
+      </case>
+      <case id="exact-search-top3">
+        <given>查询词为仓内真实符号精确名</given>
+        <when>hybrid 检索</when>
+        <then>该符号 SHALL 进前 3</then>
+      </case>
+      <case id="change-workflow">
+        <given>真实源文件方法体内一处未暂存改动</given>
+        <when>detect_changes → impact → trace 工作流</when>
+        <then>SHALL 定位被改符号并给出有界影响与可点击 file:line</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="agent-hooks">
+    <statement>CLI SHALL 提供 Claude Code hook 子命令：hook augment 读取 PostToolUse JSON 把搜索命中富化为有界图上下文（callers/callees/执行流，字符预算可配），hook staleness 在索引落后 HEAD 时输出提示；任何错误 SHALL 静默降级（空输出、exit 0）不阻塞 agent；hooks install/uninstall SHALL merge-safe 地管理目标仓 .claude/settings.json 且不触碰用户既有条目。</statement>
+    <suite id="hooks" name="agent hooks">
+      <case id="augment-enriches">
+        <given>已索引仓库与含符号命中的 Grep PostToolUse JSON</given>
+        <when>hook augment</when>
+        <then>输出 SHALL 含该符号的 callers/callees/执行流摘要且不超字符预算</then>
+      </case>
+      <case id="augment-budget">
+        <given>命中大量符号</given>
+        <when>hook augment（预算 2000 字符）</when>
+        <then>输出 SHALL 截断在预算内且标注截断</then>
+      </case>
+      <case id="silent-degrade">
+        <given>无索引库/损坏输入/查询异常</given>
+        <when>hook augment 或 staleness</when>
+        <then>SHALL 空 stdout、exit 0（诊断只进 stderr）</then>
+      </case>
+      <case id="staleness-hint">
+        <given>索引 commit 落后 HEAD</given>
+        <when>hook staleness</when>
+        <then>输出 SHALL 含落后提示与 reindex 指引；未落后时空输出</then>
+      </case>
+      <case id="install-merge-safe">
+        <given>目标仓已有用户自定义 hooks 的 .claude/settings.json</given>
+        <when>hooks install 后 uninstall</when>
+        <then>install SHALL 只追加自有条目且保留用户条目；uninstall SHALL 只移除自有条目</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="skills-generation">
+    <statement>CLI SHALL 提供 skills generate/clean/status：按确定性 context 划分生成有界的 per-context SKILL.md（frontmatter + 职责/关键符号 file:line/调用概览/执行流/工具调用示例）与通用工作流 skill；生成 SHALL 只写自有前缀目录、幂等覆盖、clean 只删自有；skill 内容 SHALL 结构层确定性（零 LLM）。</statement>
+    <suite id="skills" name="skills 生成">
+      <case id="per-context-skill">
+        <given>已索引仓库（含社群）</given>
+        <when>skills generate</when>
+        <then>每 context SHALL 产出 SKILL.md 含 frontmatter、关键符号 file:line 与工具调用示例，且无 #N 退化命名</then>
+      </case>
+      <case id="workflow-skills">
+        <given>同上</given>
+        <when>skills generate</when>
+        <then>SHALL 产出 exploring/impact/depa 三个通用工作流 skill</then>
+      </case>
+      <case id="own-prefix-only">
+        <given>目标 .claude/skills/ 下已有用户自建 skill 目录</given>
+        <when>generate 后 clean</when>
+        <then>generate SHALL 不触碰用户目录；clean SHALL 只删自有前缀目录</then>
+      </case>
+      <case id="deterministic-bounded">
+        <given>同一图数据</given>
+        <when>两次 generate</when>
+        <then>产物 SHALL 逐字节一致；skill 数与单 skill 字符数 SHALL 有界</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="eval-baseline">
+    <statement>项目 SHALL 提供轻量 eval 基准：≥20 题本仓任务集（含期望答案要素与建议工具序列）、加权要素评分器、oracle 模式（工具序列直答）；oracle 全集 must 要素命中率 SHALL ≥90%（证明任务集可被图回答）；运行器 SHALL 支持可插拔 agent 命令与 baseline/native 两模式模板。</statement>
+    <suite id="eval" name="eval 基准">
+      <case id="task-set-shape">
+        <given>eval/tasks.json</given>
+        <when>加载</when>
+        <then>SHALL ≥20 题且每题含 question/must 要素/工具序列/难度</then>
+      </case>
+      <case id="scorer-discriminates">
+        <given>一题的满分答案与空答案</given>
+        <when>评分</when>
+        <then>满分答案 SHALL 得满 must 分、空答案 SHALL 0 分</then>
+      </case>
+      <case id="oracle-gate">
+        <given>已索引本仓与全部任务</given>
+        <when>oracle 模式执行全集</when>
+        <then>must 要素命中率 SHALL ≥90%</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

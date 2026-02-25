@@ -1,0 +1,79 @@
+<Track id="expand-depa-detection-rules" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>DEPA 规则扩展：判据 rubrics 复制进项目真源 + 口径修正/8 维报告 + 批次一 14 条零标注检测器 + 批次二 3 条标注检测器 + 本仓复扫 + 全局 skill 反哺</Goal>
+    <Description>依据 analysis/gap-matrix.md（skill↔工具差距矩阵）。用户三问确认：全部 16 条、复制真源、改全局 skill。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T07:26:51Z</CreatedAt>
+    <UpdatedAt>2026-07-06T16:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input"  name="gap-matrix"      domain="analysis" path="vfs://./analysis/gap-matrix.md"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-depa"         domain="dotnet"   path="vfs://@/cozo-lib-dotnet/src/Om.Depa/"/>
+  </Ports>
+
+  <TaskSpace id="space_expand-depa-detection-rules" name="expand-depa-detection-rules" version="1">
+    <Description>真源与口径 → 批次一检测器 → 批次二与复扫 → skill 反哺收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="判据真源与口径修正" status="DONE" order="0">
+        <Description>rubrics 复制 + rule-map 三方映射 + dimension 修正（决策记录）+ 占位补全 + 8 维报告分组。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="真源与口径" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 rule-map/8 维/占位/dimension 测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="复制 rubrics + 实现口径修正" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">rubrics/ 与 rule-map 就位（映射双向完整）；8 维报告；V-F1/F2 归属修正有决策；占位全目录口径 coverage 诚实</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="批次一检测器（14 条零标注）" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="批次一实现" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 14 条正/反 fixture 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 14 条检测器" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">14 条正例 GAP 带 path:line、反例零误报；evidence/confidence 纪律沿用；测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="批次二与本仓复扫" status="DONE" order="2">
+        <SubNodes>
+          <Task id="T3.1" name="批次二 + 复扫" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T3.1.1" name="编写批次二/未声明 BLOCKED 测试" status="DONE" order="0"/>
+              <Task id="T3.1.2" name="实现 3 条 + 本仓全规则复扫真伪裁定" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">V-S2a/b、V-P2 依标注判定且未声明 BLOCKED；本仓复扫每条命中有真伪裁定记录（findings），不为清零弱化规则；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P4" name="全局 skill 反哺收口" status="DONE" order="3">
+        <Description>~/.claude/skills/depa-expert 吸收 4 条口径 + 工具辅助路径（仓外改动，findings 记 diff 摘要）。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="skill 反哺" status="DONE" order="0" priority="P1">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">4 条口径 + 工具辅助路径写入 skill（改动最小、不破坏其自包含结构）；diff 摘要记 findings</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

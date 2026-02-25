@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="harden-llm-wiki-engineering" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>cozo-wiki 工程化外围：增量索引、agent hooks（搜索图富化 + staleness）、skills 自动生成、轻量 eval 基准、per-repo 配置与多仓库</Goal>
+    <Description>P3 mission，依赖 P0/P1。各 TaskGroup 相对独立、按需启动，收口不要求全绿。对标 GitNexus 的 hooks/native_augment、skills 生成、SWE-bench eval、group/Contract Bridge。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>7</Revision>
+    <CreatedAt>2026-07-04T18:29:44Z</CreatedAt>
+    <UpdatedAt>2026-07-07T03:30:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+  <TaskSpace id="space_harden-llm-wiki-engineering" name="harden-llm-wiki-engineering" version="1" cdt:child-mode="dag">
+    <Description>工程化外围 mission（按需启动的独立工程线）。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="增量索引" status="DONE" order="0">
+        <SubNodes>
+          <Task id="G1-T1" name="创建并执行增量索引 track（git diff → 受影响重算 + 一致性校验）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-incremental-indexing"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="Agent hooks" status="DONE" order="1">
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 Claude Code hooks track（PreToolUse 图富化 + PostToolUse staleness）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-agent-hooks"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="Skills 生成" status="DONE" order="2">
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 skills 自动生成 track（按社群/context + 通用工作流）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-skills-generation"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="Eval 基准" status="DONE" order="3">
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行轻量 eval track（有/无工具对比基准）" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-llm-wiki-eval-baseline"/>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="配置与多仓库" status="DONE" order="4">
+        <SubNodes>
+          <Task id="G5-T1" name="评估 per-repo 配置与多仓库 group 需求，按需创建 track" status="DONE" order="0"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G6" name="收口" status="DONE" order="5">
+        <SubNodes>
+          <Task id="G6-T1" name="mission 收口报告（含未启动线的处置说明）" status="DONE" order="0"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_harden-llm-wiki-engineering">
+      <Node id="G2"><After ref="G1"/></Node>
+      <Node id="G4"><After ref="G2"/></Node>
+      <Node id="G6"><After ref="G1"/><After ref="G2"/><After ref="G3"/><After ref="G4"/><After ref="G5"/></Node>
+    </Dag>
+  </Schedule>
+</Mission>

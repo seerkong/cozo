@@ -1,0 +1,88 @@
+<Track id="redesign-codeknowledge-schema-v2" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>CodeKnowledge v2 图 schema（ck_edge+confidence/resolver、扩展 ck_symbol、派生层专表）与重建式迁移，既有 12 工具适配不回归</Goal>
+    <Description>mission deepen-llm-wiki-code-graph 的 G2 track。BREAKING：ck_relation → ck_edge；v1 库需 reindex。为 G3/G4/G5 的解析、调用消解、社群/执行流提供落点。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-04T18:57:47Z</CreatedAt>
+    <UpdatedAt>2026-07-04T21:05:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om-codeknowledge" domain="dotnet"  path="vfs://@/cozo-lib-dotnet/src/Om.CodeKnowledge/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+  </Ports>
+
+  <TaskSpace id="space_redesign-codeknowledge-schema-v2" name="redesign-codeknowledge-schema-v2" version="1">
+    <Description>v2 schema 与迁移 → 查询与工具适配 → 回归收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="v2 schema 与迁移" status="DONE" order="0">
+        <Description>v2 relations、模型、版本检查与 reindex，索引写入路径切换 ck_edge。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="v2 schema 初始化与迁移" status="DONE" order="0" priority="P0">
+            <Description>CodeKnowledgeSchema：v2 relations（design.md §2）、ck_meta 版本、v1 检测报错、reindex 重建。</Description>
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 schema 初始化/幂等/v1 检测/reindex 测试" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 v2 schema 与迁移逻辑" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">空库初始化建全 v2 relations 且 schema_version=2；重复初始化幂等</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">v1 旧表触发带指引错误；reindex 选项重建 v2</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="模型与批量写入路径" status="DONE" order="1" priority="P0">
+            <Description>CodeKnowledgeModels 扩展（符号新列、CodeEdgeFact 等）；IndexCodeKnowledgeAsync 写 ck_symbol v2 与 ck_edge；RepositoryIndexer（regex）喂新表（confidence=0.3/resolver=regex）。</Description>
+            <SubNodes>
+              <Task id="T1.2.1" name="编写边事实写入/调用点粒度测试" status="DONE" order="0"/>
+              <Task id="T1.2.2" name="实现模型扩展与写入路径" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">带 confidence/resolver 的边事实入库可查；同 (from,to,kind) 不同行的调用点均保留</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="查询与工具适配" status="DONE" order="1">
+        <Description>查询 API 迁到 ck_edge；固定规则投影；llm-wiki 工具链适配。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="查询 API 迁移与 minConfidence" status="DONE" order="0" priority="P0">
+            <Description>FindSymbolContext/ImpactOfChange/ExplainRelation/DocsForCode 等改读 ck_edge，Impact 支持 minConfidence；call_graph/import_graph/cluster_input Datalog 投影常量（验证 Louvain/SCC 固定规则可消费）。</Description>
+            <SubNodes>
+              <Task id="T2.1.1" name="编写查询兼容/过滤/固定规则投影测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现查询迁移与投影" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">symbol_context/impact 基于 ck_edge 且契约兼容；minConfidence 过滤生效</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">cluster_input 投影可被 CommunityDetectionLouvain 固定规则消费</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="llm-wiki 工具链适配" status="DONE" order="1" priority="P1">
+            <Description>LlmWikiToolRunner/Server/WikiCompiler 中涉及 ck_relation 的查询与 overview_graph 适配 ck_edge。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">12 个工具在 v2 schema 上全部可用</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="回归与收口" status="DONE" order="2">
+        <Description>两侧测试全量回归、行为核对、收口。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="全量回归" status="DONE" order="0" priority="P0">
+            <Description>cozo-lib-dotnet tests + cozo-lib-dotnet-llm-wiki tests/smoke 全量通过；修复回归。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">两侧测试套件全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

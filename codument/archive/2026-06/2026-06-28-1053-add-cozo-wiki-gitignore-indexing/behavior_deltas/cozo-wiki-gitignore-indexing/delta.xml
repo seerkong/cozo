@@ -1,0 +1,19 @@
+<behavior-patch capability="cozo-wiki-gitignore-indexing" version="1">
+  <upsert selector="behavior://cozo-wiki-gitignore-indexing/requirements/gitignore-index-filter">
+    <requirement id="gitignore-index-filter">
+      <statement>cozo-wiki SHALL read the root `.gitignore` file when building a repo DB and SHALL skip ignored files and directories.</statement>
+      <suite id="repo-indexing" name="Repo Indexing">
+        <case id="ignore-node-modules">
+          <given>The work-dir contains `.gitignore` with `node_modules/`</given>
+          <when>The user builds the repo DB with `cozo-wiki call index_repo --work-dir ... --repo-path ...`</when>
+          <then>Files under `node_modules/` SHALL NOT be indexed</then>
+        </case>
+        <case id="ignore-file-globs">
+          <given>The work-dir contains `.gitignore` with `*.log`</given>
+          <when>The user builds the repo DB</when>
+          <then>Matching log files SHALL NOT be indexed even if their extension is otherwise included</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

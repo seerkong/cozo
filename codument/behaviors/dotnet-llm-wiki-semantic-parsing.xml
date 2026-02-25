@@ -1,0 +1,169 @@
+<behaviors capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <requirement id="native-backend">
+    <statement>系统 SHALL 提供 tree-sitter 原生（P/Invoke）解析后端作为 C# 与 TypeScript/JavaScript 的主解析路径，启动时 SHALL 断言 grammar ABI 版本兼容，原生库缺失或加载失败时 SHALL 降级到 CLI 后端或 regex 路径而不中断索引。</statement>
+    <suite id="backend" name="后端选择与降级">
+      <case id="native-preferred">
+        <given>原生 dylib 可用且文件语言为 C# 或 TS/JS</given>
+        <when>索引该文件</when>
+        <then>解析 SHALL 走 native 后端且产出符号的 resolver 为 treesitter</then>
+      </case>
+      <case id="fallback-regex">
+        <given>文件语言无可用 grammar（或 native 初始化失败）</given>
+        <when>索引该文件</when>
+        <then>系统 SHALL 走 regex 路径（resolver=regex）且整体索引不失败</then>
+      </case>
+      <case id="abi-assert">
+        <given>加载的 grammar ABI 版本超出 runtime 支持区间</given>
+        <when>初始化 native 后端</when>
+        <then>初始化 SHALL 失败并给出含 ABI 版本信息的诊断，后端选择器降级</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="symbol-extraction">
+    <statement>native 后端 SHALL 通过 tree-sitter query 提取符号树（类型/成员/函数，含嵌套 parent、visibility、exported、signature、sym_key）与结构边（CONTAINS/HAS_METHOD/HAS_PROPERTY/EXTENDS/IMPLEMENTS/IMPORTS），并以 v2 事实模型（CodeSymbolFact/CodeEdgeFact）入图。</statement>
+    <suite id="extract" name="符号与结构边">
+      <case id="csharp-symbols">
+        <given>一个含 namespace、class（嵌套 method/property/field）、interface、record 的 C# 样例文件</given>
+        <when>native 后端解析并入图</when>
+        <then>ck_symbol SHALL 含全部符号且 parent_id 反映嵌套、kind 符合 v2 枚举、sym_key 含 arity</then>
+      </case>
+      <case id="csharp-structural-edges">
+        <given>C# 样例中 class 实现接口并继承基类</given>
+        <when>解析入图</when>
+        <then>ck_edge SHALL 含 CONTAINS/HAS_METHOD 与 EXTENDS/IMPLEMENTS 边，resolver=treesitter 且 confidence 反映启发式区分</then>
+      </case>
+      <case id="typescript-symbols">
+        <given>一个含 class/interface/function/method 与 import 语句的 TS 样例文件</given>
+        <when>解析入图</when>
+        <then>ck_symbol/ck_edge SHALL 含对应符号与 IMPORTS 结构边</then>
+      </case>
+      <case id="dogfood-coverage">
+        <given>对本仓 cozo-lib-dotnet 的 C# 源码执行索引</given>
+        <when>tree-sitter 主路径启用</when>
+        <then>提取符号数 SHALL 不少于 regex 路径的符号数</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="call-resolution">
+    <statement>索引 SHALL 在 tree-sitter 基线上提取调用点并做启发式消解，产出带分级 confidence 的 CALLS 边（0.9 唯一精确/0.7 仓内 name+arity 唯一/0.5 多候选，evidence 记录依据）；无法消解的调用点 SHALL 不落边并计入诊断计数；resolver 标注 treesitter。</statement>
+    <suite id="calls" name="调用消解">
+      <case id="same-file-call">
+        <given>同文件内方法 A 调用方法 B（唯一匹配）</given>
+        <when>索引该文件</when>
+        <then>ck_edge SHALL 含 A→B 的 CALLS 边，confidence≥0.9，file/line 指向调用点</then>
+      </case>
+      <case id="cross-file-import-call">
+        <given>文件 X import 文件 Y 的符号并调用之</given>
+        <when>索引仓库</when>
+        <then>SHALL 产出跨文件 CALLS 边且 confidence≥0.7</then>
+      </case>
+      <case id="constructor-call">
+        <given>代码含 new SomeType(...) 且 SomeType 在仓内</given>
+        <when>索引</when>
+        <then>SHALL 产出指向 SomeType 构造函数（或类型符号）的 CALLS 边</then>
+      </case>
+      <case id="ambiguous-degrades">
+        <given>被调名在仓内有多个同名候选且无法唯一化</given>
+        <when>索引</when>
+        <then>边 confidence SHALL 为 0.5 且 evidence 含 ambiguous 标注</then>
+      </case>
+      <case id="unresolved-no-edge">
+        <given>调用目标不在仓内（如 BCL API）</given>
+        <when>索引</when>
+        <then>SHALL 不落 CALLS 边且未消解计数出现在索引 summary/诊断中</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="overrides-and-accesses">
+    <statement>索引 SHALL 基于继承结构边与成员 name+arity 匹配产出 METHOD_OVERRIDES/METHOD_IMPLEMENTS 边；成员访问 SHALL 在接收者可消解时产出 ACCESSES 边（evidence 标注 read|write），受 per-file 预算上限约束且可整体关闭。</statement>
+    <suite id="derived" name="重写与访问">
+      <case id="override-edge">
+        <given>类 C 继承 B 并重写同名同参方法 m</given>
+        <when>索引</when>
+        <then>SHALL 产出 C.m→B.m 的 METHOD_OVERRIDES 边（接口场景为 METHOD_IMPLEMENTS）</then>
+      </case>
+      <case id="accesses-budget">
+        <given>ACCESSES 开启且某文件成员访问数超过 per-file 上限</given>
+        <when>索引</when>
+        <then>该文件落边数 SHALL 不超过上限且诊断记录截断</then>
+      </case>
+      <case id="accesses-off">
+        <given>ACCESSES 开关关闭</given>
+        <when>索引</when>
+        <then>SHALL 不产出任何 ACCESSES 边</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="roslyn-enhancement">
+    <statement>C# 索引 SHALL 支持 Roslyn 语义增强：轻量编译（无 MSBuildWorkspace）产出语义级调用边（confidence 1.0 语义命中 / 0.6 候选）与 DocId 符号富化，并与 tree-sitter 基线按 sym_key+位置归并（同调用点 Roslyn 覆盖，resolver=roslyn）；增强可经开关关闭且关闭时行为与基线完全一致。</statement>
+    <suite id="enhance" name="Roslyn 增强">
+      <case id="semantic-call-edge">
+        <given>C# 仓内方法 A 调用同仓方法 B 且 Roslyn 语义命中</given>
+        <when>索引（增强开启）</when>
+        <then>A→B 的 CALLS 边 SHALL 为 confidence 1.0、resolver=roslyn</then>
+      </case>
+      <case id="override-baseline">
+        <given>同一调用点 tree-sitter 基线已产出 0.5 歧义边而 Roslyn 语义命中另一目标</given>
+        <when>归并</when>
+        <then>该调用点 SHALL 只保留 Roslyn 边（正确目标、1.0），基线歧义边被覆盖</then>
+      </case>
+      <case id="docid-enrichment">
+        <given>tree-sitter 基线符号与 Roslyn 符号经 sym_key+行区间匹配</given>
+        <when>归并</when>
+        <then>ck_symbol 的 doc_id SHALL 填入 Roslyn DocumentationCommentId</then>
+      </case>
+      <case id="candidate-degrades">
+        <given>调用点 Roslyn 只有 CandidateSymbols（如部分编译歧义）</given>
+        <when>索引</when>
+        <then>边 confidence SHALL 为 0.6 且 evidence 含 CandidateReason</then>
+      </case>
+      <case id="switch-off-identical">
+        <given>EnableRoslynEnhancement=false</given>
+        <when>索引同一仓库</when>
+        <then>产出 SHALL 与 tree-sitter 基线完全一致（无 roslyn resolver 事实）</then>
+      </case>
+      <case id="repo-external-not-edged">
+        <given>调用目标为 BCL/仓外程序集符号</given>
+        <when>索引（增强开启）</when>
+        <then>SHALL 不落 CALLS 边，计入 Roslyn 外部调用计数</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="tree-sitter-parser">
+    <statement>系统 SHALL 提供 Tree-sitter-only 语义解析入口，并在 Tree-sitter 不可用时返回结构化诊断。</statement>
+    <suite id="parser-status" name="Parser status">
+      <case id="detect-cli">
+        <given>运行环境可能安装或未安装 tree-sitter CLI</given>
+        <when>调用 parser_status</when>
+        <then>系统 SHALL 返回 Tree-sitter 是否可用及版本/诊断信息</then>
+      </case>
+    </suite>
+    <suite id="parse-file" name="Parse file">
+      <case id="parse-via-tree-sitter">
+        <given>存在本地源文件路径</given>
+        <when>调用 parse_file</when>
+        <then>系统 SHALL 使用 Tree-sitter 解析文件，或在 CLI 缺失时返回 diagnostic 而不是静默 fallback</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="ambiguous-fallback-precision">
+    <statement>调用消解的仓内兜底匹配 SHALL 从候选集中剔除他文件的 private/protected 成员并校验实参 arity（同文件调用不受可见性剔除约束）；被剔除后无候选的调用点 SHALL 计入未消解而非降级乱连。</statement>
+    <suite id="fallback" name="兜底精度">
+      <case id="private-excluded-cross-file">
+        <given>调用点裸名与他文件某 private 方法同名（如 BCL 实例调用 GetString()）</given>
+        <when>兜底消解</when>
+        <then>该 private 方法 SHALL 不在候选集，调用点计入未消解（无仓内合法候选时）</then>
+      </case>
+      <case id="arity-checked">
+        <given>裸名命中两个候选：arity 匹配一个、不匹配一个</given>
+        <when>兜底消解</when>
+        <then>SHALL 只连 arity 匹配者（confidence 按唯一化规则）</then>
+      </case>
+      <case id="same-file-unrestricted">
+        <given>同文件内调用 private 方法</given>
+        <when>消解</when>
+        <then>SHALL 正常连边（可见性剔除仅限跨文件）</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

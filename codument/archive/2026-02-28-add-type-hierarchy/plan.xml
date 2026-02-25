@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plan>
+  <metadata>
+    <track_id>add-type-hierarchy</track_id>
+    <track_name>为 cozo-om 添加类型继承与多态支持</track_name>
+    <goal>实现单继承 + mixin 机制，支持属性/关系继承、多态查询、继承链可视化</goal>
+    <created_at>2026-02-28</created_at>
+    <status>completed</status>
+    <commit_mode>manual</commit_mode>
+  </metadata>
+
+  <phases>
+    <!-- Phase 1: 数据模型与测试基础设施 -->
+    <phase id="P1" name="数据模型扩展与测试基础设施">
+      <goal>扩展 om_type schema，搭建测试运行环境，验证向后兼容</goal>
+      <tasks>
+        <task id="T1.1" name="搭建测试基础设施" status="DONE" priority="P0">
+          在 cozo-lib-bun 中配置 bun test，创建 __tests__ 目录和测试辅助工具
+          <subtasks>
+            <subtask id="T1.1.1" name="package.json 添加 test script" status="DONE"/>
+            <subtask id="T1.1.2" name="创建 __tests__/helpers.js 测试辅助（创建临时 DB + initSchema）" status="DONE"/>
+            <subtask id="T1.1.3" name="创建 __tests__/om-backward-compat.test.js 验证现有 API 行为" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T1.2" name="扩展 om_type 数据模型" status="DONE" priority="P0">
+          om_type 新增 parent_type 列，新增 om_mixin 和 om_type_mixin 存储关系
+          <subtasks>
+            <subtask id="T1.2.1" name="编写 initSchema 扩展测试（验证新关系创建）" status="DONE"/>
+            <subtask id="T1.2.2" name="修改 initSchema：om_type 加 parent_type 列" status="DONE"/>
+            <subtask id="T1.2.3" name="修改 initSchema：创建 om_mixin 和 om_type_mixin" status="DONE"/>
+            <subtask id="T1.2.4" name="运行测试验证向后兼容 + 新 schema" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 2: 继承定义与链解析 -->
+    <phase id="P2" name="类型继承定义与继承链解析">
+      <goal>实现 defineType 扩展、defineMixin、继承链查询 API</goal>
+      <tasks>
+        <task id="T2.1" name="实现 defineType 继承支持" status="DONE" priority="P0">
+          扩展 defineType 签名，支持 parentType 和 mixins 选项
+          <subtasks>
+            <subtask id="T2.1.1" name="编写测试：单继承定义、父类型不存在、循环检测" status="DONE"/>
+            <subtask id="T2.1.2" name="实现 defineType options 参数解析与校验" status="DONE"/>
+            <subtask id="T2.1.3" name="实现循环继承检测逻辑" status="DONE"/>
+            <subtask id="T2.1.4" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.2" name="实现 defineMixin" status="DONE" priority="P0">
+          实现 mixin 定义与类型-mixin 关联
+          <subtasks>
+            <subtask id="T2.2.1" name="编写测试：mixin 定义、类型关联 mixin" status="DONE"/>
+            <subtask id="T2.2.2" name="实现 defineMixin 函数" status="DONE"/>
+            <subtask id="T2.2.3" name="实现 defineType 中 mixins 关联写入" status="DONE"/>
+            <subtask id="T2.2.4" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T2.3" name="实现继承链查询 API" status="DONE" priority="P0">
+          实现 getAncestors、getDescendants、isSubtypeOf、getTypeHierarchy
+          <subtasks>
+            <subtask id="T2.3.1" name="编写测试：祖先链、后代、子类型判断、完整层级树" status="DONE"/>
+            <subtask id="T2.3.2" name="实现 getAncestors（循环向上查询）" status="DONE"/>
+            <subtask id="T2.3.3" name="实现 getDescendants（BFS 向下收集）" status="DONE"/>
+            <subtask id="T2.3.4" name="实现 isSubtypeOf" status="DONE"/>
+            <subtask id="T2.3.5" name="实现 getTypeHierarchy" status="DONE"/>
+            <subtask id="T2.3.6" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 3: 属性与关系继承 -->
+    <phase id="P3" name="属性继承与关系继承">
+      <goal>实现属性定义的继承合并、收紧约束校验、关系继承校验</goal>
+      <tasks>
+        <task id="T3.1" name="实现属性继承" status="DONE" priority="P0">
+          改造 getAttributeDefinitions 支持继承链 + mixin 属性合并
+          <subtasks>
+            <subtask id="T3.1.1" name="编写测试：父类型属性继承、多层继承、mixin 属性合并" status="DONE"/>
+            <subtask id="T3.1.2" name="实现 getAttributeDefinitions 递归合并逻辑" status="DONE"/>
+            <subtask id="T3.1.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.2" name="实现属性收紧约束校验" status="DONE" priority="P0">
+          defineAttribute 增加继承属性的收紧校验
+          <subtasks>
+            <subtask id="T3.2.1" name="编写测试：收紧 required、禁止放宽、禁止改类型" status="DONE"/>
+            <subtask id="T3.2.2" name="实现 defineAttribute 中的继承属性校验" status="DONE"/>
+            <subtask id="T3.2.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T3.3" name="实现关系继承校验" status="DONE" priority="P0">
+          改造 validateRelation 递归检查类型继承链
+          <subtasks>
+            <subtask id="T3.3.1" name="编写测试：子类型出边继承、入边继承、非继承类型拒绝" status="DONE"/>
+            <subtask id="T3.3.2" name="实现 validateRelation 继承链匹配" status="DONE"/>
+            <subtask id="T3.3.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 4: 多态查询 -->
+    <phase id="P4" name="多态查询">
+      <goal>findByType 和 aggregateByType 支持多态，默认包含子类型实例</goal>
+      <tasks>
+        <task id="T4.1" name="实现 findByType 多态查询" status="DONE" priority="P0">
+          findByType 默认包含子类型实例，支持 exact 选项
+          <subtasks>
+            <subtask id="T4.1.1" name="编写测试：多态查询、精确查询、带 filter 的多态查询" status="DONE"/>
+            <subtask id="T4.1.2" name="实现 findByType 多态逻辑" status="DONE"/>
+            <subtask id="T4.1.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T4.2" name="实现 aggregateByType 多态聚合" status="DONE" priority="P0">
+          aggregateByType 默认包含子类型实例
+          <subtasks>
+            <subtask id="T4.2.1" name="编写测试：多态 sum/avg/count" status="DONE"/>
+            <subtask id="T4.2.2" name="实现 aggregateByType 多态逻辑" status="DONE"/>
+            <subtask id="T4.2.3" name="运行测试验证" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 5: TypeScript 声明与导出 -->
+    <phase id="P5" name="类型声明与模块导出">
+      <goal>更新 TypeScript 声明文件和模块导出</goal>
+      <tasks>
+        <task id="T5.1" name="更新 cozo-om.d.ts" status="DONE" priority="P1">
+          新增函数的 TypeScript 类型声明，更新 defineType 签名
+          <subtasks>
+            <subtask id="T5.1.1" name="添加新函数类型声明（defineMixin, getAncestors, getDescendants, isSubtypeOf, getTypeHierarchy）" status="DONE"/>
+            <subtask id="T5.1.2" name="更新 defineType 签名（options 参数）" status="DONE"/>
+            <subtask id="T5.1.3" name="更新 findByType 签名（options 参数）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T5.2" name="更新 module.exports" status="DONE" priority="P1">
+          cozo-om.js 导出新增的所有公共函数
+          <subtasks>
+            <subtask id="T5.2.1" name="在 module.exports 中添加新函数" status="DONE"/>
+            <subtask id="T5.2.2" name="编写导出完整性测试" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 6: 可视化 Demo -->
+    <phase id="P6" name="可视化 Demo">
+      <goal>在 cozo-lib-bun-viz 中新增 IT 资产管理继承 demo</goal>
+      <tasks>
+        <task id="T6.1" name="创建 IT 资产管理 demo 数据" status="DONE" priority="P1">
+          新增 server/src/demos/it-asset.js，定义类型继承结构和示例数据
+          <subtasks>
+            <subtask id="T6.1.1" name="定义类型继承结构（Asset→ITAsset→Server|Laptop, Asset→Vehicle）" status="DONE"/>
+            <subtask id="T6.1.2" name="定义 Auditable mixin 和属性" status="DONE"/>
+            <subtask id="T6.1.3" name="创建 defaultTables（6 sheets 含 parent_type 列）" status="DONE"/>
+            <subtask id="T6.1.4" name="定义 4 个查询（多态查询、影响分析、所有权树、风险热点）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T6.2" name="注册 demo 并适配 server" status="DONE" priority="P1">
+          在 demos/index.js 注册，适配 server 端 defineOntology 流程
+          <subtasks>
+            <subtask id="T6.2.1" name="demos/index.js 注册 it-asset demo" status="DONE"/>
+            <subtask id="T6.2.2" name="适配 /api/run 中 defineOntology 支持 parent_type" status="DONE"/>
+            <subtask id="T6.2.3" name="适配 parseSheetsIntoBatch 支持 parent_type 列" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T6.3" name="SchemaGraphView 继承边样式" status="DONE" priority="P1">
+          schema 图中用差异化样式展示继承关系
+          <subtasks>
+            <subtask id="T6.3.1" name="解析类型定义中的 parent_type 列" status="DONE"/>
+            <subtask id="T6.3.2" name="添加继承边（虚线 + 不同颜色）" status="DONE"/>
+            <subtask id="T6.3.3" name="手动验证 demo 页面展示效果" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 7: CLI Demo 与收尾 -->
+    <phase id="P7" name="CLI Demo 与收尾">
+      <goal>新增 CLI demo 脚本，运行全量测试，确保覆盖率达标</goal>
+      <tasks>
+        <task id="T7.1" name="创建 CLI 继承 demo" status="DONE" priority="P2">
+          新增 cozo-lib-bun/demo-it-asset.js 展示继承 API 用法
+          <subtasks>
+            <subtask id="T7.1.1" name="编写 seedOntology（含继承 + mixin）" status="DONE"/>
+            <subtask id="T7.1.2" name="编写 showAnalytics（多态查询 + 继承链查询）" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T7.2" name="全量测试与覆盖率" status="DONE" priority="P0">
+          运行全部测试，确保覆盖率 >80%
+          <subtasks>
+            <subtask id="T7.2.1" name="运行 bun test --coverage" status="DONE"/>
+            <subtask id="T7.2.2" name="补充覆盖率不足的测试用例" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+    </phase>
+
+    <!-- Phase 8: 描述字段与中文示例 -->
+    <phase id="P8" name="描述字段与中文示例">
+      <goal>为属性/关系定义增加可选 description 字段，并将新增示例中的描述改为中文</goal>
+      <tasks>
+        <task id="T8.1" name="增加属性/关系 description 存储" status="DONE" priority="P0">
+          通过新增存储关系保存 description，避免对既有 om_attr_def/om_rel_def 做 schema 迁移
+          <subtasks>
+            <subtask id="T8.1.1" name="编写测试：om_attr_desc / om_rel_desc 可创建与可写入" status="DONE"/>
+            <subtask id="T8.1.2" name="修改 initSchema：创建 om_attr_desc / om_rel_desc" status="DONE"/>
+            <subtask id="T8.1.3" name="修改 defineAttribute / defineRelation 支持 description 参数" status="DONE"/>
+            <subtask id="T8.1.4" name="更新 getAttributeDefinitions 返回 description 并保持继承优先级" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T8.2" name="更新可视化 demo 与 CLI demo 文案" status="DONE" priority="P1">
+          将新增 demo 的类型描述改为中文；属性/关系定义增加 description 字段并使用中文
+          <subtasks>
+            <subtask id="T8.2.1" name="更新 cozo-lib-bun/demo-it-asset.js（中文描述 + description 参数）" status="DONE"/>
+            <subtask id="T8.2.2" name="更新 cozo-lib-bun-viz it-asset demo 表结构（属性/关系 description 列）" status="DONE"/>
+            <subtask id="T8.2.3" name="更新 cozo-lib-bun-viz server defineOntologyFromTables 传递 description" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T8.3" name="更新类型声明与规范文档" status="DONE" priority="P1">
+          同步 TypeScript 声明与 codument 规范文件
+          <subtasks>
+            <subtask id="T8.3.1" name="更新 cozo-om.d.ts：defineAttribute/defineRelation 增加 description；AttributeDefinition 增加 description" status="DONE"/>
+            <subtask id="T8.3.2" name="更新 codument track 文档（spec/proposal/design/plan）记录新增需求" status="DONE"/>
+          </subtasks>
+        </task>
+        <task id="T8.4" name="全量测试与覆盖率复核" status="DONE" priority="P0">
+          运行 bun test 与 bun test --coverage，确保覆盖率 ≥80%
+          <subtasks>
+            <subtask id="T8.4.1" name="运行 bun test" status="DONE"/>
+            <subtask id="T8.4.2" name="运行 bun test --coverage" status="DONE"/>
+          </subtasks>
+        </task>
+
+        <task id="T8.5" name="统一采购/人力/CRM demo 描述列" status="DONE" priority="P1">
+          为采购、人力、CRM demo 的类型/属性/关系定义表统一增加 description 字段，并确保 description 为最后一列
+          <subtasks>
+            <subtask id="T8.5.1" name="更新 procurement/hr/crm demo defaultTables 列顺序（description 最后）" status="DONE"/>
+            <subtask id="T8.5.2" name="为属性定义与关系定义补充中文 description" status="DONE"/>
+            <subtask id="T8.5.3" name="验证 /api/demos 返回的三类 demo 表头一致" status="DONE"/>
+          </subtasks>
+        </task>
+      </tasks>
+      <confirm protocol="yield-human-confirm" when="after" status="DONE"/>
+    </phase>
+  </phases>
+</plan>

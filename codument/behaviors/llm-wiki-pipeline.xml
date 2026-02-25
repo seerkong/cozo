@@ -1,0 +1,169 @@
+<behaviors capability="llm-wiki-pipeline" version="1">
+  <requirement id="llm-client">
+    <statement>系统 SHALL 提供 LLM 客户端 capsule：统一 CompleteAsync 契约、OpenAI 兼容与 Anthropic 两类 provider（base-url/model/key 可配）、可用性一等公民（无 key/离线时 IsAvailable=false 且带原因，不抛错）。</statement>
+    <suite id="client" name="LLM 客户端">
+      <case id="openai-compatible">
+        <given>配置了 OpenAI 兼容 base-url 与 key（mock HTTP）</given>
+        <when>CompleteAsync</when>
+        <then>SHALL 发送正确请求结构并返回文本</then>
+      </case>
+      <case id="unavailable-graceful">
+        <given>无任何 provider 配置</given>
+        <when>查询可用性</when>
+        <then>IsAvailable SHALL 为 false 且 UnavailableReason 非空，CompleteAsync 不被调用方触发时不抛</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="pipeline">
+    <statement>wiki 生成 SHALL 按四阶段执行：确定性图结构收集、社群主导归组（LLM 仅命名与有界归并评审：merge/rename/flag，禁移动单文件）、页面生成为确定性骨架加显式标记的 LLM 叙述段、索引页汇总；LLM 不可用时 SHALL 完整产出结构层（code-map/overview 骨架），叙述段标记 pending；输出默认落 .cozo-wiki/docs-preview/ 镜像布局。</statement>
+    <suite id="pipeline" name="管线">
+      <case id="structure-without-llm">
+        <given>LLM 不可用</given>
+        <when>build wiki</when>
+        <then>SHALL 产出完整结构层页面（overview 骨架+code-map），叙述段标记 pending，退出成功</then>
+      </case>
+      <case id="grouping-community-led">
+        <given>已索引仓库含社群数据</given>
+        <when>Phase1 归组</when>
+        <then>归组 SHALL 以社群划分为基础；LLM 评审动作 SHALL 限于 merge/rename/flag</then>
+      </case>
+      <case id="narrative-marked">
+        <given>LLM 可用（mock）</given>
+        <when>生成页面</when>
+        <then>叙述内容 SHALL 位于显式 llm 标记段内，骨架部分与 LLM 不可用时逐字一致</then>
+      </case>
+      <case id="preview-layout">
+        <given>默认参数 build</given>
+        <when>落盘</when>
+        <then>输出 SHALL 在 .cozo-wiki/docs-preview/ 下镜像 docs/ 布局（index.md 等）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="incremental">
+    <statement>wiki 生成 SHALL 支持页级增量：.meta 记录 fromCommit 与每页 structureHash/narrativeInputsHash；重跑时结构未变页 SHALL 跳过重生成；force 参数 SHALL 强制全量。</statement>
+    <suite id="incr" name="增量">
+      <case id="unchanged-skipped">
+        <given>两次 build 之间无代码改动</given>
+        <when>第二次 build</when>
+        <then>所有页 SHALL 命中缓存跳过（计数为证）</then>
+      </case>
+      <case id="changed-page-rebuilt">
+        <given>某社群内文件发生改动并重索引</given>
+        <when>增量 build</when>
+        <then>仅受影响页 SHALL 重生成，其余跳过</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="engineering-fractal">
+    <statement>wiki 生成 SHALL 产出符合 docs-engineering-fractal 规范的 engineering 分形：根结构（index.md/migration-map.md/impl/）、plane→类目→主题递归、六类目（overview/howto/rules/examples/reference/troubleshooting）、每目录 index.md 携带 folder-manifest 职责块（叶类目精简型、plane 完整型）、受控 frontmatter（knowledge_plane/doc_role/status/last_verified，禁数组字段）；index 页 SHALL 只做导航；结构层 SHALL 在 LLM 不可用时完整产出。产出 SHALL 通过分形规范检查器的全部程序可断言项。</statement>
+    <suite id="fractal" name="engineering 分形">
+      <case id="root-structure">
+        <given>完成索引的仓库</given>
+        <when>fractal build</when>
+        <then>docs-preview SHALL 含 index.md、migration-map.md 与 impl/ 递归结构</then>
+      </case>
+      <case id="six-categories">
+        <given>同上</given>
+        <when>build</when>
+        <then>impl plane 下 SHALL 存在 overview/howto/rules/examples/reference/troubleshooting 六类目且各有带职责块的 index.md</then>
+      </case>
+      <case id="manifest-blocks">
+        <given>产出的每个类目 index.md</given>
+        <when>检查器扫描</when>
+        <then>职责块格式（holds/excludes/tier/⬆from/⬇to）SHALL 逐一匹配规范正则</then>
+      </case>
+      <case id="controlled-frontmatter">
+        <given>产出的每个 .md 页面</given>
+        <when>检查器扫描</when>
+        <then>frontmatter SHALL 只含受控字段且值域合法，无数组堆砌</then>
+      </case>
+      <case id="checker-gate">
+        <given>本仓 dogfood 产出</given>
+        <when>FractalSpecChecker 全量断言</when>
+        <then>程序可断言项 SHALL 100% 通过</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="modeling-fractal">
+    <statement>分形 wiki 管线 SHALL 生成 modeling 分形（domain canonical plane）：contexts 由社群与命名空间聚合确定性发现（禁止 #N 退化命名，LLM 归组审查稿可改名合并），每 context 含 objects/（类型页：成员/继承/code-map 链接）与 workflows/（执行流页：步骤链）类目与 code-map；frontmatter 含 context 与 doc_role=canonical；产物 SHALL 通过 M-* 规范检查全集并并入既有页级增量体系。</statement>
+    <suite id="modeling" name="modeling 分形">
+      <case id="context-discovery-no-degenerate">
+        <given>索引后的代码图（含社群）</given>
+        <when>生成 modeling 分形</when>
+        <then>全部 context 名 SHALL 无 #N 退化形式且确定性可复现</then>
+      </case>
+      <case id="objects-leaf">
+        <given>某 context 内的公开类型含成员与继承关系</given>
+        <when>生成</when>
+        <then>objects/&amp;amp;amp;lt;type&amp;amp;amp;gt;.md SHALL 含成员表、继承关系与 file:line code-map 链接（结构层零 LLM）</then>
+      </case>
+      <case id="workflows-leaf">
+        <given>某执行流入口属于该 context</given>
+        <when>生成</when>
+        <then>workflows/ SHALL 含该流页且步骤链与 ck_process_step 一致</then>
+      </case>
+      <case id="m-rules-pass">
+        <given>本仓 dogfood 产物</given>
+        <when>运行 FractalSpecChecker（含 M-* 全集）</when>
+        <then>[P] 违规 SHALL 为 0</then>
+      </case>
+      <case id="incremental-shared">
+        <given>已生成的双分形产物</given>
+        <when>无源变化二次生成</when>
+        <then>modeling 页 SHALL 全部 skip（与 impl 共用增量体系）</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="vision-e2e-quality">
+    <statement>愿景层 SHALL 满足端到端质量门禁：真实仓库双分形产物通过 E-*+M-* 规范检查全集且跨进程确定；DEPA 判定对合规与违规样本给出可区分、逐条 path:line 的结论且 BLOCKED 永不伪装 PASS；全部工具 smoke 无回归。</statement>
+    <suite id="e2e" name="端到端门禁">
+      <case id="dual-fractal-clean">
+        <given>对本仓完成真实索引并离线生成双分形</given>
+        <when>运行 FractalSpecChecker 全集</when>
+        <then>[P] 违规 SHALL 为 0 且跨进程双跑逐字节一致</then>
+      </case>
+      <case id="depa-distinguishable">
+        <given>合规样本与故意违规样本</given>
+        <when>各自经 depa_conformance 工具判定</when>
+        <then>合规样本 effect 维 SHALL 零 GAP，违规样本 SHALL 逐条 GAP 带 path:line，两者可区分</then>
+      </case>
+      <case id="tools-regression">
+        <given>完整图与双分形产物</given>
+        <when>运行全部工具 smoke</when>
+        <then>SHALL 全部通过</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="codument-fractal-entry">
+    <statement>cozo-wiki wiki 子命令 SHALL 提供分形管线一级入口，管线规范名为 codument-fractal；legacy 保持默认且行为不变。</statement>
+    <suite id="cli-entry" name="CLI 入口">
+      <case id="codument-fractal-runs-fractal">
+        <given>已索引仓库</given>
+        <when>执行 cozo-wiki wiki --repo &amp;lt;path&amp;gt; --out &amp;lt;dir&amp;gt; --pipeline codument-fractal</when>
+        <then>系统 SHALL 走 FractalWikiPipeline 产出双分形（modeling/impl）到 --out，结果 pipeline 字段回显 codument-fractal</then>
+      </case>
+      <case id="legacy-default-unchanged">
+        <given>不带 --pipeline 或 --pipeline legacy</given>
+        <when>执行 wiki 子命令</when>
+        <then>行为 SHALL 与既有 legacy WikiCompiler 完全一致</then>
+      </case>
+      <case id="invalid-pipeline-rejected">
+        <given>--pipeline 取未知值</given>
+        <when>执行 wiki 子命令</when>
+        <then>系统 SHALL 报错并列出合法取值（legacy、codument-fractal），不静默降级</then>
+      </case>
+    </suite>
+    <suite id="tool-alias" name="build_wiki 规范名与别名">
+      <case id="canonical-name-in-tool">
+        <given>build_wiki 工具</given>
+        <when>pipeline=codument-fractal 调用</when>
+        <then>SHALL 走分形管线；schema 描述 SHALL 以 codument-fractal 为规范名</then>
+      </case>
+      <case id="fractal-alias-compat">
+        <given>既有调用 pipeline=fractal</given>
+        <when>调用 build_wiki</when>
+        <then>SHALL 继续等效于 codument-fractal（静默别名），结果 pipeline 字段回显 codument-fractal</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

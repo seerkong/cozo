@@ -7,3 +7,11 @@ _test_db/
 build/
 native/
 .idea/
+
+# Node/Bun demo artifacts
+bun.lockb
+bun.lock
+dist/
+.env
+.env.*
+*.local

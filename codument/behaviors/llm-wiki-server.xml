@@ -1,0 +1,32 @@
+<behaviors capability="llm-wiki-server" version="1">
+  <requirement id="serve-mode">
+    <statement>cozo-wiki SHALL provide a local server mode through `--serve` that exposes LLM wiki repo DB tools over HTTP for the visualization frontend.</statement>
+    <suite id="server-startup" name="Server startup">
+      <case id="serve-localhost-default">
+        <given>A user runs `cozo-wiki --serve`</given>
+        <when>The server starts</when>
+        <then>The server SHALL bind to localhost by default and expose `GET /health`</then>
+      </case>
+      <case id="serve-storage-layout">
+        <given>A user passes existing storage options</given>
+        <when>The server opens CozoDB</when>
+        <then>The server SHALL use the same sqlite layout as MCP and CLI modes</then>
+      </case>
+    </suite>
+  </requirement>
+  <requirement id="http-tools-api">
+    <statement>The server SHALL expose typed repo knowledge endpoints and a generic tool bridge backed by the shared LLM wiki tool runner.</statement>
+    <suite id="api-contract" name="API contract">
+      <case id="tools-list">
+        <given>The server is running</given>
+        <when>A client requests `GET /api/tools`</when>
+        <then>The response SHALL include the same tool metadata exposed by MCP tools/list</then>
+      </case>
+      <case id="semantic-search-wrapper">
+        <given>The server is running</given>
+        <when>A client posts to `/api/search/semantic`</when>
+        <then>The server SHALL call the shared `semantic_search` tool</then>
+      </case>
+    </suite>
+  </requirement>
+</behaviors>

@@ -1,0 +1,113 @@
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/core-api-parity">
+    <requirement id="core-api-parity">
+      <statement>C# OM SHALL expose Bun OM core object-system parity APIs for historical entity views, property-filtered type search, and explicit validation/finalization helpers while preserving existing public methods.</statement>
+      <suite id="historical-entity-view" name="Historical Entity View">
+        <case id="entity-view-as-of-properties">
+          <given>An entity has multiple temporal versions of properties and outgoing edges</given>
+          <when>A caller invokes GetEntityViewAsOfAsync with a historical timestamp</when>
+          <then>C# OM SHALL return the entity id, canonical type, label, properties effective at that timestamp, and outgoing edges effective at that timestamp</then>
+        </case>
+        <case id="entity-view-as-of-computed">
+          <given>A computed property reads another property that changed over time</given>
+          <when>A caller invokes GetEntityViewAsOfAsync for an earlier timestamp</when>
+          <then>The computed property SHALL be evaluated through an as-of-aware context and reflect historical values</then>
+        </case>
+      </suite>
+      <suite id="type-search" name="Property Filtered Type Search">
+        <case id="find-by-type-filter-current-properties">
+          <given>Multiple entities of a type hierarchy have current properties</given>
+          <when>A caller searches by type with property equality filters</when>
+          <then>C# OM SHALL return only matching entities using canonical property names and the same exact/polymorphic type semantics as existing FindByTypeAsync</then>
+        </case>
+        <case id="find-by-type-return-properties">
+          <given>A caller requests property-filtered type search</given>
+          <when>The search returns matches</when>
+          <then>Each result SHALL include id, typeName, label, and current canonicalized properties without changing the existing lightweight FindByTypeAsync contract</then>
+        </case>
+      </suite>
+      <suite id="validation-facade" name="Validation Facade">
+        <case id="validate-property-type-public">
+          <given>A caller wants to preflight a property write</given>
+          <when>The caller invokes the public property type validation API</when>
+          <then>C# OM SHALL validate the effective attribute definition, aliases, and value type without writing the property</then>
+        </case>
+        <case id="validate-relation-public">
+          <given>A caller wants to preflight a relation write</given>
+          <when>The caller invokes the public relation validation API</when>
+          <then>C# OM SHALL validate canonical relation names, endpoint entity existence, subtype compatibility, and undirected reverse endpoint compatibility without writing an edge</then>
+        </case>
+        <case id="validate-required-properties-public">
+          <given>An entity is missing required inherited or mixin attributes</given>
+          <when>The caller invokes the public required-property validation API</when>
+          <then>C# OM SHALL return the missing canonical attribute names</then>
+        </case>
+        <case id="finalize-entity-public">
+          <given>An entity may be incomplete or violate constraints</given>
+          <when>The caller invokes FinalizeEntityAsync</when>
+          <then>C# OM SHALL run required-property, type, and runtime constraint validation and fail with diagnostics when the entity is not complete</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/behavior-layer-parity">
+    <requirement id="behavior-layer-parity">
+      <statement>C# OM SHALL align computed-property inheritance and runtime constraint scope semantics with the Bun OM reference for behavior-layer features adjacent to the core object system.</statement>
+      <suite id="computed-inheritance" name="Computed Property Inheritance">
+        <case id="computed-inherited-in-view">
+          <given>A parent type defines a computed property and a child type has an entity</given>
+          <when>The caller reads GetEntityViewAsync or GetEntityViewAsOfAsync for the child entity</when>
+          <then>The view SHALL include the inherited computed property when it is not shadowed by a child definition</then>
+        </case>
+        <case id="computed-child-override">
+          <given>A parent and child type define a computed property with the same attribute name</given>
+          <when>The caller reads the computed property or an entity view for the child entity</when>
+          <then>The child computed delegate SHALL take precedence over the parent delegate</then>
+        </case>
+      </suite>
+      <suite id="constraint-scopes" name="Runtime Constraint Scopes">
+        <case id="conditional-constraint">
+          <given>A conditional constraint has when and then delegates</given>
+          <when>ValidateEntityAsync, SetPropertyAsync, or FinalizeEntityAsync runs validation</when>
+          <then>C# OM SHALL evaluate when first, then evaluate then only when active, and include the constraint name and message on failure</then>
+        </case>
+        <case id="cross-entity-constraint">
+          <given>A cross-entity constraint inspects neighbors</given>
+          <when>LinkEntitiesAsync mutates graph state without SkipConstraints</when>
+          <then>C# OM SHALL validate the affected source entity and roll back the edge write if the constraint fails</then>
+        </case>
+        <case id="computed-dependent-constraint">
+          <given>A constraint depends on a computed property</given>
+          <when>ValidateEntityAsync runs</when>
+          <then>The validation context SHALL resolve computed properties through the same inherited computed lookup used by entity views</then>
+        </case>
+        <case id="constraint-inheritance">
+          <given>A parent type defines conditional or cross-entity constraints</given>
+          <when>A child entity is validated or mutated</when>
+          <then>C# OM SHALL apply inherited constraints with child overrides where names collide</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/parity-tests">
+    <requirement id="parity-tests">
+      <statement>The repository SHALL contain tests proving the C# OM parity additions and preserving the Bun OM reference behavior for the same object-system features.</statement>
+      <suite id="dotnet-tests" name=".NET Tests">
+        <case id="dotnet-core-parity-tests">
+          <given>The C# OM parity APIs are implemented</given>
+          <when>The .NET OM test suite runs</when>
+          <then>Tests SHALL cover historical entity views, filtered type search with returned properties, public validation helpers, finalize behavior, computed inheritance, and conditional/cross-entity/computed-dependent/inherited constraints</then>
+        </case>
+      </suite>
+      <suite id="bun-tests" name="Bun Reference Tests">
+        <case id="bun-reference-coverage">
+          <given>Bun already implements the reference behavior</given>
+          <when>The Bun OM test suite runs</when>
+          <then>Tests SHALL continue covering getEntityViewAsOf, findByType filters/properties, validation helper exports, computed inheritance, and constraint scopes so parity regressions are observable</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

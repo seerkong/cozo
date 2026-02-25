@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-portable-datalog" version="1">
+  <upsert selector="behavior://dotnet-portable-datalog/requirements/core-language">
+    <requirement id="core-language">
+      <statement>The .NET package SHALL provide a backend-neutral Portable Datalog core that parses, validates, and normalizes a v1 Datalog profile without depending on Cozo or Om.</statement>
+      <suite id="parse-validate-normalize" name="Parse, validate, normalize">
+        <case id="recursive-rule">
+          <given>A Portable Datalog program containing a base rule, a recursive rule, and a query</given>
+          <when>The program is parsed and validated by Datalog.Core</when>
+          <then>The system SHALL produce a normalized IR with no Cozo-specific dependency</then>
+        </case>
+        <case id="unsafe-variable">
+          <given>A rule whose head references a variable that is not bound in a positive body atom</given>
+          <when>The program is validated by Datalog.Core</when>
+          <then>The system SHALL return a structured diagnostic instead of producing executable IR</then>
+        </case>
+        <case id="source-diagnostics">
+          <given>A malformed Portable Datalog source string</given>
+          <when>The parser reports an error</when>
+          <then>The diagnostic SHALL include severity, code, message, and source span when available</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://dotnet-portable-datalog/requirements/cozo-compiler">
+    <requirement id="cozo-compiler">
+      <statement>The .NET package SHALL provide a Cozo backend compiler that converts Portable Datalog normalized IR to parameterized CozoScript without depending on Om.Core.</statement>
+      <suite id="compile-to-cozoscript" name="Compile to CozoScript">
+        <case id="recursive-query">
+          <given>A validated recursive Portable Datalog query and a relation mapping for stored Cozo relations</given>
+          <when>Datalog.Cozo compiles the query</when>
+          <then>The compiler SHALL return CozoScript rules plus a query entry rule equivalent to the Portable Datalog program</then>
+        </case>
+        <case id="parameter-binding">
+          <given>A Portable Datalog query containing parameter terms</given>
+          <when>Datalog.Cozo compiles the query</when>
+          <then>The compiler SHALL preserve values as parameters rather than inlining untrusted user input into CozoScript</then>
+        </case>
+        <case id="unsupported-capability">
+          <given>A valid Portable Datalog construct that the Cozo backend profile does not support</given>
+          <when>Datalog.Cozo checks backend capabilities</when>
+          <then>The compiler SHALL return a structured diagnostic and SHALL NOT emit partial executable CozoScript</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

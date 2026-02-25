@@ -1,0 +1,67 @@
+<Track id="fix-om-depa-conformance-gaps" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>Om 层 DEPA 整改：DeleteEntityAsync（修 Om.Depa 绕道直删+孤儿属性）、TimeProvider、scan 配置显式化、depa-map 标注压制误报、REC-5 known-exception 决策</Goal>
+    <Description>承接 P2/P3 mission 交接 + depa-expert 人工盘点（分析工作区在 analysis/depa-scan-workspace/）。V-F2 五条裁定误报；整改 4 条真 GAP + 1 条标注。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-06T06:00:23Z</CreatedAt>
+    <UpdatedAt>2026-07-06T12:40:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input"  name="depa-scan"       domain="analysis" path="vfs://./analysis/depa-scan-workspace/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="om"              domain="dotnet"   path="vfs://@/cozo-lib-dotnet/src/"/>
+  </Ports>
+
+  <TaskSpace id="space_fix-om-depa-conformance-gaps" name="fix-om-depa-conformance-gaps" version="1">
+    <Description>REC-1 删除 API → REC-3/2/4 显式化与标注 → 复扫验证收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="REC-1 删除 API 与清理改造" status="DONE" order="0">
+        <Description>EntityLogic.DeleteEntityAsync（单事务级联物理删）+ CozoOm facade + Om.Depa 清理段改调 + 孤儿回归测试。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="DeleteEntityAsync 与清理改造" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 delete 级联/幂等/孤儿清零测试（delta 3 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 API 与 Om.Depa 改调" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">级联删单事务、幂等、DEPA 清理无孤儿 om_property；grep 无绕道 :rm om_entity 残留</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="显式化与标注（REC-3/2/4/5）" status="DONE" order="1">
+        <Description>TimeProvider 一行、scan 配置上提入口、仓根 depa-map.json、REC-5 known-exception 决策记录。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="显式化与标注" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 config-at-entry/timeprovider 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 + depa-map.json + REC-5 决策" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">管线零文件读取（注入验证）；indexed_at 可测；depa-map.json 就位；REC-5 决策记录在 decisions.md</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="复扫验证收口" status="DONE" order="2">
+        <Description>depa_conformance 复扫（OmMutationContext 误报清零、无新 GAP）+ 两侧全量回归 + backlog 登记。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="复扫与回归" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">复扫 V-F2 对 OmMutationContext 零命中且整体无新 GAP（数字记 findings）；两侧测试全绿；backlog 5 条登记</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

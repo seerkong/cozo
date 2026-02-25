@@ -1,0 +1,56 @@
+<Track id="add-llm-wiki-agent-hooks" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>Claude Code hooks：hook augment（搜索命中→有界图上下文）+ hook staleness + merge-safe installer，任何错误静默降级</Goal>
+    <Description>mission harden-llm-wiki-engineering 的 G2 track。native_augment 模式对标；不默认开启（eval 先行纪律）。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-05T21:28:32Z</CreatedAt>
+    <UpdatedAt>2026-07-06T19:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input"  name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior"        domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="mcpserver"       domain="dotnet"   path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-llm-wiki-agent-hooks" name="add-llm-wiki-agent-hooks" version="1">
+    <Description>hook 子命令 → installer 与 E2E 收口</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="hook 子命令" status="DONE" order="0">
+        <Description>hook augment/staleness（stdin JSON、有界富化、静默降级）。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="hook 子命令" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 augment/budget/silent-degrade/staleness 测试（delta 前 4 case）" status="DONE" order="0"/>
+              <Task id="T1.1.2" name="实现 hook 子命令" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">augment 富化含 callers/callees/执行流且预算截断生效；staleness 落后提示/未落后空输出；三类错误场景空 stdout exit 0</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="installer 与 E2E 收口" status="DONE" order="1">
+        <Description>hooks install/uninstall/status（merge-safe）+ 子进程冒烟 + 本仓 dogfood 演示 + 两侧回归。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="installer 与收口" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写 install-merge-safe 测试" status="DONE" order="0"/>
+              <Task id="T2.1.2" name="实现 installer + dogfood 演示记录" status="DONE" order="1"/>
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">install/uninstall merge-safe（用户条目零触碰、幂等）；子进程冒烟真实 stdin→stdout 走通；dogfood 演示记 findings；两侧测试全绿</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

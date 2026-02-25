@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-llm-wiki-viz-overview-graph" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 cozo-wiki 可视化工作台新增搜索类别过滤与无需搜索的项目整体图加载能力</Goal>
+    <Description>扩展 semantic_search 的 code/docs 类别过滤，新增 bounded overview graph tool 和 HTTP endpoint，并让 Vue 工作台可直接加载项目宏观图结构。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-01T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-01T00:00:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="llm-wiki-packages" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/"/>
+    <MaterialBundle role="output" name="llm-wiki-viz" domain="frontend" path="vfs://@/cozo-lib-dotnet-llm-wiki-viz/"/>
+  </Ports>
+  <TaskSpace id="space_add-llm-wiki-viz-overview-graph" name="add-llm-wiki-viz-overview-graph" version="1">
+    <Description>Search category filtering and overview graph visualization.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="后端查询能力" status="DONE" order="0">
+        <Description>扩展 shared tools、vector search 和 server API。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="为 semantic_search 增加 source category filtering" status="DONE" order="0" priority="P0"/>
+          <Task id="T1.2" name="新增 bounded overview_graph tool" status="DONE" order="1" priority="P0"/>
+          <Task id="T1.3" name="新增 /api/graph/overview endpoint" status="DONE" order="2" priority="P0"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="前端交互" status="DONE" order="1">
+        <Description>让工作台支持 code/docs 类别选择和加载整体图。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="增加 category controls 并传给 search API" status="DONE" order="0" priority="P0"/>
+          <Task id="T2.2" name="增加 load overview graph action" status="DONE" order="1" priority="P0"/>
+          <Task id="T2.3" name="增强 graph payload normalization" status="DONE" order="2" priority="P1"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="验证与文档" status="DONE" order="2">
+        <Description>补测试、README，并运行 dotnet/frontend 验证。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="补充 category search 和 overview graph smoke tests" status="DONE" order="0" priority="P0"/>
+          <Task id="T3.2" name="更新 README 用法" status="DONE" order="1" priority="P1"/>
+          <Task id="T3.3" name="运行 dotnet tests 和 frontend build" status="DONE" order="2" priority="P0"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Hooks/>
+</Track>

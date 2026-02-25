@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-llm-wiki-vector-search" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-vector-search/requirements/embedding-vector-search">
+    <requirement id="embedding-vector-search">
+      <statement>系统 SHALL 基于 CozoDB 向量能力提供 embedding indexing 与 vector search。</statement>
+      <suite id="embedding-index" name="Embedding index">
+        <case id="index-codeknowledge-text">
+          <given>CodeKnowledge 中存在 symbols 或 doc blocks</given>
+          <when>调用 index_embeddings</when>
+          <then>系统 SHALL 将文本 embedding 写入 CozoDB 向量 relation</then>
+        </case>
+      </suite>
+      <suite id="semantic-search" name="Semantic search">
+        <case id="search-by-query">
+          <given>CozoDB 中存在 embedding vectors</given>
+          <when>调用 semantic_search</when>
+          <then>系统 SHALL 返回按向量距离排序的相似文本结果</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

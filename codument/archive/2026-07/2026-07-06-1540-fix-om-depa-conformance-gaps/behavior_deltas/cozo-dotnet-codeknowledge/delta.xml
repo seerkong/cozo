@@ -1,0 +1,24 @@
+<behavior-patch capability="cozo-dotnet-codeknowledge" version="1">
+  <upsert selector="behavior://cozo-dotnet-codeknowledge/requirements/depa-scan-explicitness">
+    <requirement id="depa-scan-explicitness">
+      <statement>DEPA scan 的配置文件读取 SHALL 只发生在公开入口层（core 管线接收已解析配置对象，不自发现文件依赖）；索引时间戳 SHALL 经 Runtime.Options.TimeProvider 获取（可测）；本仓 SHALL 提供 depa-map.json 标注真源使 runtime 载体经 config 通道声明（heuristic 误报被压制）。</statement>
+      <suite id="explicit" name="scan 显式化">
+        <case id="config-at-entry">
+          <given>以已解析配置对象调用 scan 管线</given>
+          <when>执行 scan</when>
+          <then>管线 SHALL 不做任何文件读取（可注入验证）</then>
+        </case>
+        <case id="timeprovider-indexed-at">
+          <given>注入固定 TimeProvider 的 OM</given>
+          <when>索引</when>
+          <then>ck_meta.indexed_at SHALL 等于注入时间</then>
+        </case>
+        <case id="carrier-false-positive-suppressed">
+          <given>仓根 depa-map.json 声明 runtimeCarrierTypes</given>
+          <when>对本仓 depa_conformance 复扫</when>
+          <then>OmMutationContext SHALL 不再产生 V-F2 violation</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

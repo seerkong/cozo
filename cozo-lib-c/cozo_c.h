@@ -45,6 +45,49 @@ char *cozo_open_db(const char *engine, const char *path, const char *options, in
 bool cozo_close_db(int32_t db_id);
 
 /**
+ * Start a multi-statement transaction.
+ *
+ * `db_id`: the ID representing the database.
+ * `write`: whether the transaction can write.
+ * `tx_id`: will contain the ID of the transaction opened.
+ *
+ * When the function is successful, null pointer is returned,
+ * otherwise a pointer to a C-string containing the error message will be returned.
+ * The returned C-string must be freed with `cozo_free_str`.
+ */
+char *cozo_multi_transact(int32_t db_id, bool write, int32_t *tx_id);
+
+/**
+ * Run query against a multi-statement transaction.
+ *
+ * `tx_id`:      the ID representing the transaction to run the query.
+ * `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
+ * `params_raw`: a UTF-8 encoded C-string for the params of the query in JSON map format.
+ *
+ * Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+ * The string contains the JSON return value of the query.
+ */
+char *cozo_run_tx(int32_t tx_id, const char *script_raw, const char *params_raw);
+
+/**
+ * Commit a multi-statement transaction.
+ *
+ * `tx_id`: the ID representing the transaction to commit.
+ *
+ * Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+ */
+char *cozo_commit_tx(int32_t tx_id);
+
+/**
+ * Abort a multi-statement transaction.
+ *
+ * `tx_id`: the ID representing the transaction to abort.
+ *
+ * Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
+ */
+char *cozo_abort_tx(int32_t tx_id);
+
+/**
  * Run query against a database.
  *
  * `db_id`:           the ID representing the database to run the query.

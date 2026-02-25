@@ -1,0 +1,82 @@
+<Track id="add-bun-om-governance-api-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>补齐 Bun OM 相对 .NET OM 缺失的 alias authoring 与级联实体删除 API。</Goal>
+    <Description>为 cozo-lib-bun 提供公开 alias 定义 API、事务级联 deleteEntity，并以 focused 测试锁定与 C# 一致的底层对象系统语义。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <gap-round>1</gap-round>
+    <CreatedAt>2026-07-12T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-12T00:45:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+
+  <TaskSpace id="space_add-bun-om-governance-api-parity" name="add-bun-om-governance-api-parity" version="1">
+    <Description>以测试先行方式补齐 Bun OM 的 alias metadata authoring 和实体物理级联删除能力。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="公开 Alias 定义 API" status="DONE" order="0">
+        <Description>新增类型、关系、属性 alias 的公开定义 API，并锁定写入、缓存和 resolve 语义。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>所有 P0 任务 DONE</cdt:Criterion>
+          <cdt:Criterion>Alias API focused tests pass</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T1.1" name="编写 Alias API 行为测试" status="DONE" order="0" priority="P0">
+            <Description>以现有 alias resolution tests 为基线，新增 public authoring、immediate cache invalidation、upsert 和 public-cycle setup 的失败测试。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">测试覆盖 type、relation、attribute alias 的公开 authoring 和实际对象操作</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">测试在实现前失败并能证明缺失 public API</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 Alias 定义 API" status="DONE" order="1" priority="P0">
+            <Description>实现三个 metadata upsert API、相关 cache invalidation 和 module exports，不改变现有 resolver 的 cycle semantics。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">三个 API 都经 module.exports 对调用方可见</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">Alias 写入同一 runner 后立即解析为最新 canonical 值</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">Alias focused tests pass</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+
+      <TaskGroup id="P2" name="级联实体删除 API" status="DONE" order="1">
+        <Description>以单一 write transaction 实现物理级联删除，并验证 temporal history 不留孤儿行。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>所有 P0 任务 DONE</cdt:Criterion>
+          <cdt:Criterion>Entity deletion focused tests pass</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T2.1" name="编写实体删除行为测试" status="DONE" order="0" priority="P0">
+            <Description>建立带多个 property/edge valid-time row 的图，并测试物理级联、入出边清理、无关事实保留和幂等删除。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">测试直接查询 stored relations 证明所有历史 row 已清理</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">测试在实现前失败并能证明 deleteEntity 缺失</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现事务级联 deleteEntity" status="DONE" order="1" priority="P0">
+            <Description>在现有 transaction helper 内删除 entity 的 property history、touching edge history 和 entity row，并导出 API。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">deleteEntity 使用单个 write transaction 并清理 entity/property/edge 三类 relation</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">删除不存在实体是无害幂等操作</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC3" checked="true">Entity deletion focused tests pass</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="5" on-exhausted="block" verify-round="false"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+
+  <Hooks/>
+</Track>

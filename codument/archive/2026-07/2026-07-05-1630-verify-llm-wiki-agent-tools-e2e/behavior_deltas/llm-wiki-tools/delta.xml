@@ -1,0 +1,24 @@
+<behavior-patch capability="llm-wiki-tools" version="1">
+  <upsert selector="behavior://llm-wiki-tools/requirements/agent-tools-e2e-quality">
+    <requirement id="agent-tools-e2e-quality">
+      <statement>agent 工具面 SHALL 满足端到端质量门禁：对真实仓库索引后，15 个工具经统一 runner 全部可用；精确标识符查询在 hybrid 模式 SHALL 进入前 3 结果；trace/impact/detect_changes 构成的变更工作流 SHALL 在真实改动场景产出可定位（file:line）且有界的结果。</statement>
+      <suite id="quality" name="工具面质量">
+        <case id="fifteen-tools">
+          <given>真实仓库完整索引（含社群/执行流/FTS）</given>
+          <when>逐一调用 15 个工具</when>
+          <then>SHALL 全部成功返回结构化结果</then>
+        </case>
+        <case id="exact-search-top3">
+          <given>查询词为仓内真实符号精确名</given>
+          <when>hybrid 检索</when>
+          <then>该符号 SHALL 进前 3</then>
+        </case>
+        <case id="change-workflow">
+          <given>真实源文件方法体内一处未暂存改动</given>
+          <when>detect_changes → impact → trace 工作流</when>
+          <then>SHALL 定位被改符号并给出有界影响与可点击 file:line</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>
