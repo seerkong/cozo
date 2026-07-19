@@ -1,0 +1,17 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/spring-semantic-derivation">
+    <requirement id="spring-semantic-derivation">
+      <statement>索引 SHALL 在 Java 语法事实之上独立派生有界 Spring 角色、路由、事务和 listener/handler/data-role 事实；每个事实 SHALL 携带 source symbol/file/line、evidence、resolver 和 confidence，命名推断不得冒充权威业务规则。</statement>
+      <suite id="roles" name="Spring 角色">
+        <case id="component-roles"><given>类含 Controller/Service/Component/Configuration/Repository 注解</given><when>SpringSemanticDeriver 执行</when><then>SHALL 产出对应 SPRING_ROLE edge 与 concept</then></case>
+        <case id="mapper-flavors"><given>MyBatis 与 MapStruct 都使用 @Mapper</given><when>结合 import 分类</when><then>MyBatis SHALL 为 repository+mapper，MapStruct SHALL 仅为 mapper，歧义 SHALL 诊断</then></case>
+        <case id="data-and-handler-roles"><given>类含 @Entity 或 DTO/VO/Handler 命名</given><when>派生</when><then>SHALL 产出 annotation 或低置信 naming evidence 的角色边</then></case>
+      </suite>
+      <suite id="entrypoints" name="Spring 入口与行为">
+        <case id="http-routes"><given>Controller 含 class/method mapping，覆盖 direct/value/array/RequestMethod 形式</given><when>派生</when><then>SHALL 合并路径和 HTTP method 为 http_route entry point；Feign mapping 不得成为 inbound route</then></case>
+        <case id="transactions"><given>类或方法含带参数 @Transactional</given><when>派生</when><then>SHALL 产出 SPRING_TRANSACTION edge 并保留参数 evidence</then></case>
+        <case id="listeners"><given>方法含 KafkaListener 或 EventListener</given><when>派生</when><then>SHALL 产出 listener role 与 entry point，metadata 保留 topic/factory/source</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,87 @@
+<behavior-patch capability="cozo-om" version="1">
+  <upsert selector="behavior://cozo-om/requirements/om-behavior-schema-versioning">
+    <requirement id="om-behavior-schema-versioning">
+      <statement>Bun OM SHALL 将五类 behavior definition 与 om_behavior_binding 作为 schema Data 纳入新 schema snapshot、deterministic keyed diff、migration snapshot 与 atomic rollback；runtime callback、function/script source 和 readiness MUST NOT 被持久化，legacy snapshot 缺少 behavior section 时 SHALL 默认结构化无副作用拒绝并只接受显式 preserve 或 clear 策略。</statement>
+      <suite id="snapshot" name="Behavior-aware snapshot">
+        <case id="snapshot-captures-definitions-and-bindings">
+          <given>数据库包含 constraint、computed、action、mutation、interceptor definition 与六类 callback slot 的 binding identity</given>
+          <when>写入并读取当前 schema snapshot</when>
+          <then>snapshot SHALL 在显式 behavior section 中确定性保存五类 definition 与 om_behavior_binding</then>
+          <and>snapshot MUST NOT 包含 callback function、closure、脚本源码或 readiness</and>
+        </case>
+        <case id="empty-section-is-explicit">
+          <given>当前 schema 没有 behavior definition 或 binding</given>
+          <when>系统生成新 snapshot</when>
+          <then>snapshot SHALL 仍包含 formatVersion=1 且六张关系均为空数组的 behavior section</then>
+        </case>
+      </suite>
+      <suite id="diff" name="Deterministic keyed diff">
+        <case id="keyed-relation-diff">
+          <given>两个 behavior-aware snapshot 分别包含 definition/binding 的增加、删除和 metadata 或 binding identity 更新</given>
+          <when>调用 diffSchemaVersions</when>
+          <then>系统 SHALL 按各关系持久主键返回稳定排序的 added、removed、updated</then>
+        </case>
+        <case id="legacy-diff-remains-unknown">
+          <given>diff 任一侧为缺少 behavior section 的 legacy snapshot</given>
+          <when>调用 diffSchemaVersions</when>
+          <then>系统 SHALL 显式报告 section presence 与不可比较诊断，不得把缺失解释为空集合</then>
+        </case>
+      </suite>
+      <suite id="migration" name="Migration snapshots">
+        <case id="migration-materializes-both-sides">
+          <given>来源版本尚无 snapshot 且当前 behavior Data 可能为空或非空</given>
+          <when>applySchemaMigration 原子生成来源和目标版本 snapshot</when>
+          <then>两个新 snapshot SHALL 均包含各自事务时点的显式 behavior section，并参与 checksum</then>
+        </case>
+      </suite>
+      <suite id="rollback" name="Atomic behavior rollback">
+        <case id="restore-present-section">
+          <given>目标 snapshot 显式记录六张 behavior 关系</given>
+          <when>rollbackSchema 成功回滚到目标版本</when>
+          <then>五类 definition、binding identity、其他 schema facts 与 schema state SHALL 在一个事务中恢复</then>
+        </case>
+        <case id="restore-explicit-empty">
+          <given>目标 snapshot 含显式空 behavior section</given>
+          <when>rollbackSchema 成功回滚</when>
+          <then>六张持久 behavior 关系 SHALL 被清空但 runtime callback registry SHALL 保持不变</then>
+        </case>
+        <case id="rollback-failure-is-atomic">
+          <given>behavior relation replace、schema validation、state write 或 commit 中任一步骤失败</given>
+          <when>rollbackSchema 返回失败</when>
+          <then>其他 schema facts、behavior definition、binding identity、schema state 与 runtime registry SHALL 全部保持 rollback 前状态</then>
+        </case>
+      </suite>
+      <suite id="legacy-policy" name="Legacy behavior-section policy">
+        <case id="default-rejects-without-effects">
+          <given>目标 legacy snapshot 缺少 behavior section 且调用者未提供 legacyBehaviorPolicy</given>
+          <when>调用 rollbackSchema</when>
+          <then>系统 SHALL 返回 ok=false 和 OMSV1001 结构化诊断</then>
+          <and>系统 MUST NOT 产生任何 persistent、cache 或 runtime effect</and>
+        </case>
+        <case id="explicit-preserve">
+          <given>目标 legacy snapshot 缺少 behavior section</given>
+          <when>调用者显式选择 legacyBehaviorPolicy=preserve</when>
+          <then>系统 SHALL 保留当前 definition 与 binding identity，同时原子回滚其他 schema facts并计算有效 checksum</then>
+        </case>
+        <case id="explicit-clear">
+          <given>目标 legacy snapshot 缺少 behavior section</given>
+          <when>调用者显式选择 legacyBehaviorPolicy=clear</when>
+          <then>系统 SHALL 在 rollback transaction 中清空六张持久 behavior 关系但不得清空 runtime registry</then>
+        </case>
+      </suite>
+      <suite id="runtime-observation" name="Runtime gate and readiness">
+        <case id="gate-exposes-only-pre-or-post-state">
+          <given>同一 runtime 的 rollback transaction 正在进行</given>
+          <when>catalog、execution scope capture 或 clearRegistry 同时开始</when>
+          <then>这些 observation SHALL 使用同一 runtime gate 等待，并且只观察完整 rollback 前态或后态</then>
+        </case>
+        <case id="readiness-is-recomputed">
+          <given>rollback 恢复了不同的 behavior definition 与 binding identity，而 runtime callback registry 保持当前值</given>
+          <when>rollback 后读取 catalog 或执行 behavior</when>
+          <then>readiness SHALL 从恢复后的 binding 与当前 runtime registry 重算为 unbound、unresolved 或 ready</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>
+

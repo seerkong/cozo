@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ontology id="ExampleCatalog.Ontology" version="v0">
+  <Description>Minimal valid IT record ontology example</Description>
+  <Modules>
+    <TypeModule href="vfs://./types/records.xml" />
+    <RelationModule href="vfs://./relations/core.xml" />
+    <LifecycleModule href="vfs://./lifecycles/record.xml" />
+    <RuleModule href="vfs://./rules/outbound.xml" />
+    <ImplementationMappingModule href="vfs://./mappings/backend.xml" />
+    <EvidenceModule href="vfs://./evidence/backend.xml" />
+  </Modules>
+</Ontology>

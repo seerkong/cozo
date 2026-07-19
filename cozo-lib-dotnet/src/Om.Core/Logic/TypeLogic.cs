@@ -12,18 +12,39 @@ public static class TypeLogic
     public static async Task DefineTypeAsync(CozoOmRuntime runtime, DefineTypeInput input, CancellationToken cancellationToken = default)
     {
         var name = OmConvert.RequireName(input.Name, nameof(input.Name));
-        string? parent;
-        if (string.IsNullOrWhiteSpace(input.ParentType))
-        {
-            parent = await TypeExistsAsync(runtime, name, cancellationToken)
+        var parent = string.IsNullOrWhiteSpace(input.ParentType)
+            ? await TypeExistsAsync(runtime, name, cancellationToken)
                 ? await GetParentTypeAsync(runtime, name, cancellationToken)
-                : null;
-        }
-        else
-        {
-            parent = await ResolveTypeAsync(runtime, input.ParentType!, cancellationToken);
-        }
+                : null
+            : await ResolveTypeAsync(runtime, input.ParentType!, cancellationToken);
+        await DefineTypeCoreAsync(runtime, name, input.Description, parent, input.Mixins, cancellationToken);
+    }
 
+    public static async Task DefineTypeAsync(CozoOmRuntime runtime, DefineTypePatchInput input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(input.Parent);
+        var name = OmConvert.RequireName(input.Name, nameof(input.Name));
+        var parent = input.Parent.Kind switch
+        {
+            TypeParentPatchKind.Keep => await TypeExistsAsync(runtime, name, cancellationToken)
+                ? await GetParentTypeAsync(runtime, name, cancellationToken)
+                : null,
+            TypeParentPatchKind.Set => await ResolveTypeAsync(runtime, input.Parent.ParentType!, cancellationToken),
+            TypeParentPatchKind.Clear => null,
+            _ => throw new ArgumentOutOfRangeException(nameof(input.Parent), input.Parent.Kind, "Unsupported parent patch"),
+        };
+        await DefineTypeCoreAsync(runtime, name, input.Description, parent, input.Mixins, cancellationToken);
+    }
+
+    private static async Task DefineTypeCoreAsync(
+        CozoOmRuntime runtime,
+        string name,
+        string description,
+        string? parent,
+        IReadOnlyList<string>? mixins,
+        CancellationToken cancellationToken)
+    {
         if (parent is not null)
         {
             if (!await TypeExistsAsync(runtime, parent, cancellationToken))
@@ -40,10 +61,10 @@ public static class TypeLogic
 
         await runtime.Store.RunAsync(
             CozoScriptBuilder.InputPut("om_type", ["name"], ["description", "parent_type"]),
-            LogicSupport.Params(("name", name), ("description", input.Description), ("parent_type", parent)),
+            LogicSupport.Params(("name", name), ("description", description), ("parent_type", parent)),
             cancellationToken: cancellationToken);
 
-        if (input.Mixins is not null)
+        if (mixins is not null)
         {
             var existing = await GetTypeMixinsAsync(runtime, name, cancellationToken);
             foreach (var mixin in existing)
@@ -57,9 +78,9 @@ public static class TypeLogic
                     cancellationToken: cancellationToken);
             }
 
-            foreach (var mixin in input.Mixins)
+            foreach (var mixin in mixins)
             {
-                var mixinName = OmConvert.RequireName(mixin, nameof(input.Mixins));
+                var mixinName = OmConvert.RequireName(mixin, nameof(mixins));
                 if (!await MixinExistsAsync(runtime, mixinName, cancellationToken))
                 {
                     throw new CozoException($"Mixin '{mixinName}' does not exist");

@@ -132,9 +132,13 @@ describe('OM-027: existential rules join schema snapshot/diff/rollback (T4.1)', 
       steps: [{ kind: 'addType', typeName: 'Invoice', description: 'Invoice' }],
     });
 
-    const result = await om.rollbackSchema(db, 1, { strict: false });
+    const result = await om.rollbackSchema(db, 1, {
+      strict: false,
+      legacyBehaviorPolicy: 'clear',
+    });
     expect(result.ok).toBe(true);
-    // Legacy snapshot has no rules section -> restored as empty set.
+    // Legacy snapshot has no rules section -> restored as empty set; behavior
+    // legacy omission is resolved explicitly by D8 policy.
     expect(await om.listExistentialRules(db)).toEqual([]);
   });
 });

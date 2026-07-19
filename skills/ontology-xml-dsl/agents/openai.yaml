@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ontology XML DSL"
+  short_description: "Author, evolve, and validate ontology XML"
+  default_prompt: "Use $ontology-xml-dsl to author or review a modular, evidence-backed XML ontology bundle and its schema evolution."

@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "repositories": [
+    {
+      "key": "backend",
+      "root": "source-root",
+      "revision": "fixture-revision"
+    }
+  ],
+  "requiredDomains": [
+    {
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-type",
+        "backend:record-name-rule",
+        "backend:record-state-write"
+      ],
+      "mappingRefs": [
+        "ExampleCatalog.Implementation.Record"
+      ],
+      "relationRefs": [
+        "ExampleCatalog.Relation.RelatedRecord"
+      ],
+      "ruleRefs": [
+        "ExampleCatalog.Rule.RecordNameRequired"
+      ],
+      "stateMachineRefs": [
+        "ExampleCatalog.Lifecycle.Record"
+      ],
+      "status": "covered",
+      "transitionRefs": [
+        "ExampleCatalog.Transition.ActivateRecord"
+      ],
+      "typeRefs": [
+        "ExampleCatalog.Record"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "candidateKey": "record-type",
+      "disposition": "mapped",
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-type"
+      ],
+      "family": "type",
+      "observationKeys": [
+        "backend|src/Record.java|1|java-type|example.Record"
+      ],
+      "ontologyRefs": [
+        "ExampleCatalog.Record"
+      ]
+    },
+    {
+      "candidateKey": "record-name-rule",
+      "disposition": "mapped",
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-name-rule"
+      ],
+      "family": "rule",
+      "observationKeys": [
+        "backend|src/RecordService.java|4|rule-signal|example.RecordService#create"
+      ],
+      "ontologyRefs": [
+        "ExampleCatalog.Rule.RecordNameRequired"
+      ]
+    },
+    {
+      "candidateKey": "record-relation",
+      "disposition": "mapped",
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-type"
+      ],
+      "family": "relation",
+      "observationKeys": [
+        "backend|src/Record.java|1|java-type|example.Record"
+      ],
+      "ontologyRefs": [
+        "ExampleCatalog.Relation.RelatedRecord"
+      ]
+    },
+    {
+      "candidateKey": "record-lifecycle",
+      "disposition": "mapped",
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-state-write"
+      ],
+      "family": "lifecycle",
+      "observationKeys": [
+        "backend|src/RecordService.java|8|lifecycle-signal|example.RecordService#create"
+      ],
+      "ontologyRefs": [
+        "ExampleCatalog.Lifecycle.Record"
+      ]
+    },
+    {
+      "candidateKey": "record-mapping",
+      "disposition": "mapped",
+      "domain": "record-register",
+      "evidenceRefs": [
+        "backend:record-type"
+      ],
+      "family": "mapping",
+      "observationKeys": [
+        "backend|src/Record.java|1|java-type|example.Record"
+      ],
+      "ontologyRefs": [
+        "ExampleCatalog.Implementation.Record"
+      ]
+    },
+    {
+      "candidateKey": "transport-noise",
+      "disposition": "rejected",
+      "domain": "record-register",
+      "family": "type",
+      "observationKeys": [
+        "backend|src/Record.java|1|java-type|example.Record"
+      ],
+      "reason": "Duplicate transport shape."
+    }
+  ],
+  "candidateTotals": {
+    "mapped": 5,
+    "rejected": 1,
+    "unresolved": 0
+  },
+  "signalDispositions": {
+    "lifecycles": [
+      {
+        "candidateRef": "record-lifecycle",
+        "disposition": "mapped",
+        "observationKey": "backend|src/RecordService.java|8|lifecycle-signal|example.RecordService#create",
+        "ontologyRef": "ExampleCatalog.Transition.ActivateRecord"
+      }
+    ],
+    "rules": [
+      {
+        "candidateRef": "record-name-rule",
+        "disposition": "mapped",
+        "observationKey": "backend|src/RecordService.java|4|rule-signal|example.RecordService#create",
+        "ontologyRef": "ExampleCatalog.Rule.RecordNameRequired"
+      }
+    ]
+  },
+  "completion": {
+    "allowUnresolved": false
+  },
+  "waivers": []
+}

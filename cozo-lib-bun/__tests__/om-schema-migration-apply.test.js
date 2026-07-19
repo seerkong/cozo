@@ -62,6 +62,14 @@ async function readAliasAttrCanonical(db, typeName, aliasAttr) {
   return String(rows[0][0] || '').trim();
 }
 
+async function typeExists(db, typeName) {
+  const result = await db.run(
+    '?[present] := *om_type{name: $type_name, description: _description, parent_type: _parent_type}, present = true\n:limit 1',
+    { type_name: typeName }
+  );
+  return Array.isArray(result?.rows) && result.rows.length === 1;
+}
+
 function isNonEmptySnapshot(value) {
   if (typeof value === 'string') return value.trim().length > 0;
   if (value && typeof value === 'object') return true;
@@ -207,6 +215,60 @@ describe('P2/WAVE-P2-01 (T2.1.1): applySchemaMigration', () => {
 
       const state = await om.getSchemaState(db);
       expect(state.currentVersion).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('omitted strict defaults to preflight and preserves the v1 schema state', async () => {
+    const { db, om } = await createTestDb();
+    try {
+      await om.defineType(db, 'DefaultStrictEmployee', 'Default strict employee');
+      await om.defineAttribute(db, 'DefaultStrictEmployee', 'code', 'String', false);
+      await om.createEntity(db, 'emp:default-strict-1', 'DefaultStrictEmployee', 'Alice');
+      await om.setProperty(db, 'emp:default-strict-1', 'code', 'not-a-number', {
+        validTime: '2000-01-01T00:00:00Z',
+      });
+
+      await expect(
+        om.applySchemaMigration(db, {
+          migrationId: 'm-default-strict',
+          fromVersion: 1,
+          toVersion: 2,
+          steps: [
+            {
+              kind: 'changeAttribute',
+              typeName: 'DefaultStrictEmployee',
+              attrName: 'code',
+              valueType: 'Number',
+            },
+          ],
+        })
+      ).rejects.toThrow(/value\s*type|valuetype|type\s*mismatch|mismatch|convert|cannot\s+change/i);
+
+      expect((await om.getSchemaState(db)).currentVersion).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('failed later step rolls back earlier schema writes', async () => {
+    const { db, om } = await createTestDb();
+    try {
+      await expect(
+        om.applySchemaMigration(db, {
+          migrationId: 'm-atomic-step-failure',
+          fromVersion: 1,
+          toVersion: 2,
+          steps: [
+            { kind: 'addType', typeName: 'AtomicFirstType', description: 'must roll back' },
+            { kind: 'unsupportedMigrationStep' },
+          ],
+        })
+      ).rejects.toThrow(/unsupported\s+migration\s+step/i);
+
+      expect(await typeExists(db, 'AtomicFirstType')).toBe(false);
+      expect((await om.getSchemaState(db)).currentVersion).toBe(1);
     } finally {
       db.close();
     }

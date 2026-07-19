@@ -1,0 +1,79 @@
+<Track id="unify-om-runtime-registry-lifecycle" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>统一 Bun 与 .NET OM 的 runtime-instance callback registry 生命周期。</Goal>
+    <Description>新增 Bun runtime carrier 与 legacy adapter、.NET gate-aware clear API，并以配对测试锁定实例隔离与 clear 语义。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-18T06:48:24Z</CreatedAt>
+    <UpdatedAt>2026-07-18T07:19:08Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="bun-om" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="tests" domain="source" path="vfs://@/cozo-lib-bun/__tests__/"/>
+    <MaterialBundle role="output" name="behaviors" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_unify-om-runtime-registry-lifecycle" name="unify-om-runtime-registry-lifecycle" version="1" cdt:child-mode="dag">
+    <Description>并行实现两侧实例级 registry 生命周期，再做配对验证。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name=".NET 实例级 Registry Clear" status="DONE" order="0">
+        <Description>通过 behavior gate 暴露 ClearRegistryAsync，并补齐隔离、持久事实与并发测试。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="实现并验证 .NET ClearRegistryAsync" status="DONE" order="0" priority="P0">
+            <Description>在 CozoOm facade 和 registry internals 中实现 gate-aware empty snapshot publication，补充 focused tests。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">ClearRegistryAsync 只清当前 CozoOm registry</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">持久化 definition 与 binding identity 保持，readiness 降为 unresolved</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">clear 与 in-flight execution/import 经 gate 保持 snapshot 一致</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC4" checked="true">.NET focused tests 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Bun Runtime Registry 隔离" status="DONE" order="1">
+        <Description>新增 runtime carrier、per-runtime registry snapshots、legacy adapter 与 clear 语义。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现并验证 Bun runtime-instance registry" status="DONE" order="0" priority="P0">
+            <Description>让 behavior 定义、解析、parent action、interceptor、mutation、constraint、computed 与 action execution 使用显式 resolution scope；补充实例隔离和 legacy tests。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">createOmRuntime 创建独立 registry owner，plain runner 走 legacy adapter</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">clearRegistry(runtime) 不影响其他 runtime，无参 clear 只影响 legacy runtime</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC3" checked="true">transaction runner 继续使用根 runtime registry snapshot</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC4" checked="true">in-flight behavior 使用一致 resolution snapshot</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC5" checked="true">Bun focused tests 通过且 legacy tests 保持</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="配对验证与收口" status="DONE" order="2">
+        <Description>核对两侧生命周期场景、公开 API、完整测试与行为增量。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="运行跨实现生命周期验证" status="DONE" order="0" priority="P0">
+            <Description>运行 focused/full tests，审查 legacy adapter、公开面、持久事实边界与 DEPA runtime carrier。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">Bun 与 .NET 配对场景全部通过</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">完整 Bun OM 与 .NET OM 测试通过</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC3" checked="true">codument strict validation 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_unify-om-runtime-registry-lifecycle">
+      <Node id="P3"><After ref="P1"/><After ref="P2"/></Node>
+    </Dag>
+    <Parallel max-concurrent="2" spot-check="true"/>
+  </Schedule>
+  <Hooks/>
+</Track>

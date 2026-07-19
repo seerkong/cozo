@@ -58,8 +58,14 @@ depa-wiki mcp --stdio --work-dir "$REPO"
 构建与测试：
 
 ```bash
-dotnet build cozo-lib-dotnet-llm-wiki/Cozo.DotNet.LlmWiki.slnx
-dotnet run --project cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj
+cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh build cozo-lib-dotnet-llm-wiki/Cozo.DotNet.LlmWiki.slnx
+cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh run --project cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj
 ```
+
+`scripts/dotnet-safe.sh` is required for finite local build/test automation: it disables
+MSBuild node reuse and shuts down build servers on exit. It deliberately rejects `dotnet watch`
+and long-lived application servers. The test CLI helper also has a 30-second timeout and kills
+its entire child process tree; do not replace its explicit `dotnet depa-wiki.dll` host with
+`Environment.ProcessPath`, which is the test apphost and would recursively start the suite.
 
 前端工作台开发见 `cozo-lib-dotnet-llm-wiki-viz/`（`VITE_API_BASE=http://127.0.0.1:4176 npm run dev`，或 `npm run build` 后用 `--serve --static-dir` 服务）。

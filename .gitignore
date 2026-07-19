@@ -19,10 +19,11 @@ bun.lock
 testdata/
 tui-debug.log
 .tmp/
-codument/tracks/**/analysis/
-codument/tracks/**/reports/
-codument/archive/**/analysis/
-codument/archive/**/reports/
+codument/**/analysis
+codument/**/reports
+
+logs
+reports
 
 /target
 ### Rust template
@@ -80,8 +81,7 @@ dist/
 cozo-lib-bun-viz/test-results/
 cozo-lib-bun-viz/playwright-report/
 cozo-lib-bun-viz/.playwright/
-codument/**/analysis
-codument/**/reports
+
 
 # .NET build artifacts
 **/bin/
@@ -90,3 +90,20 @@ codument/**/reports
 # depa-wiki local data
 .depa-wiki/
 **/.depa-wiki/
+
+# Generated evaluation and runtime logs
+**/eval/results/
+**/eval/logs/
+**/logs/
+
+# Deployment-specific Codument tracks: these manifests intentionally bind one local machine,
+# the is-asset repositories, or the external it-asset-ai-solution artifact workspace.
+/codument/tracks/add-agentic-business-ontology-reconstruction-skill/
+/codument/tracks/add-dotnet-llm-wiki-spring-semantic-derivation/
+/codument/tracks/add-onto-business-ontology-xml-export/
+/codument/tracks/add-onto-investigation-query-contracts/
+/codument/tracks/add-onto-semantic-business-understanding/
+/codument/tracks/add-ontology-diagnosis-and-candidate-export/
+/codument/tracks/add-ontology-semantic-experiments-v2-v3/
+/codument/tracks/verify-dotnet-llm-wiki-java-spring-indexing/
+/codument/tracks/verify-onto-business-ontology-projection/

@@ -6,12 +6,12 @@ describe('Phase 2 (track add-action-and-constraints): constraint inheritance', (
   test('subtype inherits conditional constraint and setProperty triggers it', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'ITAsset', 'ITAsset', { parentType: 'Asset' });
-      await om.defineAttribute(db, 'Asset', 'status', 'String', true);
-      await om.defineAttribute(db, 'Asset', 'end_date', 'String', false);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ExecutableResource', 'ExecutableResource', { parentType: 'Resource' });
+      await om.defineAttribute(db, 'Resource', 'status', 'String', true);
+      await om.defineAttribute(db, 'Resource', 'end_date', 'String', false);
 
-      await om.defineConstraint(db, 'Asset', 'active_has_no_end_date', {
+      await om.defineConstraint(db, 'Resource', 'active_has_no_end_date', {
         when: async (ctx) => (await ctx.getProperty('status')) === 'active',
         then: async (ctx) => {
           const v = await ctx.getProperty('end_date');
@@ -20,13 +20,13 @@ describe('Phase 2 (track add-action-and-constraints): constraint inheritance', (
         message: 'end_date must be empty when status=active',
       });
 
-      await om.createEntity(db, 'it:1', 'ITAsset', 'ITAsset #1');
-      await om.setProperty(db, 'it:1', 'status', 'active');
+      await om.createEntity(db, 'exec:1', 'ExecutableResource', 'ExecutableResource #1');
+      await om.setProperty(db, 'exec:1', 'status', 'active');
 
-      await expect(om.setProperty(db, 'it:1', 'end_date', '2026-12-31')).rejects.toThrow(
+      await expect(om.setProperty(db, 'exec:1', 'end_date', '2026-12-31')).rejects.toThrow(
         /active_has_no_end_date|end_date must be empty/i
       );
-      expect(await om.getProperty(db, 'it:1', 'end_date')).toBeUndefined();
+      expect(await om.getProperty(db, 'exec:1', 'end_date')).toBeUndefined();
     } finally {
       db.close();
     }

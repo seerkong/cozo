@@ -1,0 +1,38 @@
+<behavior-patch capability="cozo-om" version="1">
+  <upsert selector="behavior://cozo-om/requirements/om-runtime-registry-lifecycle">
+    <requirement id="om-runtime-registry-lifecycle">
+      <statement>Bun 与 .NET OM SHALL 以单个 OM runtime instance 作为 callback registry 生命周期 owner。系统 SHALL 提供实例级 clear/reset；该操作 SHALL 只清除目标 runtime 的进程内 callback，不得删除持久化 behavior definition 或 callback binding identity。</statement>
+      <suite id="instance-isolation" name="Runtime 实例隔离">
+        <case id="same-key-different-runtime">
+          <given>两个 OM runtime 在不同数据库上以相同 owner/type 与 behavior name 注册不同 callback</given>
+          <when>分别在两个 runtime 执行该 behavior</when>
+          <then>每个 runtime SHALL 只执行自身 callback，且不得观察到另一 runtime 的注册</then>
+        </case>
+        <case id="clear-one-runtime">
+          <given>两个 runtime 均有可执行 callback</given>
+          <when>清除其中一个 runtime 的 registry</when>
+          <then>目标 runtime SHALL 不再解析 callback，另一 runtime SHALL 保持可执行</then>
+        </case>
+      </suite>
+      <suite id="fact-boundary" name="持久事实边界">
+        <case id="clear-preserves-schema-facts">
+          <given>runtime 已持久化 behavior definition 与 callback binding identity</given>
+          <when>清除 runtime registry</when>
+          <then>definition 与 binding identity SHALL 保持不变，readiness SHALL 如实变为 unresolved</then>
+        </case>
+      </suite>
+      <suite id="compatibility-and-concurrency" name="兼容与并发">
+        <case id="bun-legacy-adapter">
+          <given>Bun 调用方继续把 plain runner 传给旧自由函数</given>
+          <when>定义、执行并无参调用 clearRegistry</when>
+          <then>调用 SHALL 通过显式 legacy runtime adapter 保持兼容，且不得清除显式 runtime 的 callback</then>
+        </case>
+        <case id="in-flight-resolution-snapshot">
+          <given>behavior command 已捕获一个 registry resolution snapshot</given>
+          <when>另一个调用并发 clear 或重新注册 callback</when>
+          <then>已开始命令 SHALL 在同一 snapshot 上完成，后续命令 SHALL 观察新 registry 状态</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

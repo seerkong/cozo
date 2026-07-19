@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/relation-member-normalization">
+    <requirement id="relation-member-normalization">
+      <statement>关系候选的成员名规范化 SHALL 仅移除技术 carrier/container 标识，不得移除普通业务词；特别是 `acceptanceRecordEntityList` SHALL 规范化为 `acceptanceRecord`，而不是 `acceptance`。</statement>
+      <suite id="relation-name" name="关系成员名">
+        <case id="ordinary-record-preserved"><given>关联字段名以普通业务词 Record 结尾且后接技术 Entity/List 后缀</given><when>生成 relation candidate</when><then>系统 SHALL 只移除 Entity/List，保留 Record</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -378,7 +378,7 @@ function prettyJson(v: any): string {
       <div class="help-title">使用说明</div>
       <div class="help-body">
         <div>
-          1) 先到“数据准备”初始化：写入一组最小演示数据（User/Asset、关系 owns、用户属性 role、以及一条 allow policy）。
+          1) 先到“数据准备”初始化：写入一组最小演示数据（User/Resource、关系 owns、用户属性 role、以及一条 allow policy）。
           初始化成功后，status 会显示 <code>Seeded</code>。
         </div>
         <div>
@@ -464,7 +464,7 @@ function prettyJson(v: any): string {
       </div>
       <div class="prep-hint">
         中文说明：存在规则表达「每个 X 必须存在一条 R 边指向某个 Y」。
-        「初始化演示数据」会定义规则 <code>asset_must_have_owner</code> 并加入两个没有 owner 的孤儿资产；
+        「初始化演示数据」会定义规则 <code>resource_must_have_owner</code> 并加入两个没有 owner 的未归属资源；
         「运行检测」列出违例；「一键物化」执行 Skolem chase，为每个违例确定性地生成占位 owner 并连边（重复执行不会产生重复对象）。
       </div>
 

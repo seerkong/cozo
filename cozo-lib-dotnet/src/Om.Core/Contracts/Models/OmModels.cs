@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 
 namespace Cozo.DotNet.Om.Contracts.Models;
@@ -32,6 +33,49 @@ public enum ExistentialRuleMode
 }
 
 public sealed record OmType(string Name, string Description, string? ParentType = null);
+
+/// <summary>
+/// Expresses parent changes without overloading null. The legacy nullable
+/// DefineTypeAsync overload continues to use null as "preserve".
+/// </summary>
+public enum TypeParentPatchKind
+{
+    Keep,
+    Set,
+    Clear,
+}
+
+public sealed record TypeParentPatch
+{
+    private TypeParentPatch(TypeParentPatchKind kind, string? parentType = null)
+    {
+        if (kind == TypeParentPatchKind.Set && string.IsNullOrWhiteSpace(parentType))
+        {
+            throw new ArgumentException("A Set parent patch requires a parent type", nameof(parentType));
+        }
+
+        if (kind != TypeParentPatchKind.Set && parentType is not null)
+        {
+            throw new ArgumentException("Only a Set parent patch may carry a parent type", nameof(parentType));
+        }
+
+        Kind = kind;
+        ParentType = parentType;
+    }
+
+    public TypeParentPatchKind Kind { get; }
+    public string? ParentType { get; }
+
+    public static TypeParentPatch Keep { get; } = new(TypeParentPatchKind.Keep);
+    public static TypeParentPatch Clear { get; } = new(TypeParentPatchKind.Clear);
+    public static TypeParentPatch Set(string parentType) => new(TypeParentPatchKind.Set, parentType);
+}
+
+public sealed record DefineTypePatchInput(
+    string Name,
+    string Description,
+    TypeParentPatch Parent,
+    IReadOnlyList<string>? Mixins = null);
 
 public sealed record OmMixin(string Name, string Description);
 
@@ -116,6 +160,169 @@ public sealed record SchemaSnapshot(
 
 public sealed record SchemaDiff(int FromVersion, int ToVersion, JsonElement Added, JsonElement Removed, JsonElement Changed);
 
+public enum SchemaDiagnosticSeverity
+{
+    Info,
+    Warning,
+    Error,
+}
+
+public enum SchemaLegacyHandling
+{
+    DetectOnly,
+    Upgrade,
+}
+
+public sealed record SchemaInitializationOptions(SchemaLegacyHandling LegacyHandling = SchemaLegacyHandling.DetectOnly)
+{
+    public static SchemaInitializationOptions Default { get; } = new();
+}
+
+public sealed record SchemaMigrationV2Options(bool Strict = true)
+{
+    public static SchemaMigrationV2Options Default { get; } = new();
+}
+
+public sealed record SchemaRollbackV2Options(bool Strict = true, bool Force = false)
+{
+    public static SchemaRollbackV2Options Default { get; } = new();
+}
+
+public sealed record SchemaDiagnostic(
+    string Code,
+    SchemaDiagnosticSeverity Severity,
+    string Message,
+    string? DefinitionKind = null,
+    string? DefinitionKey = null,
+    string? EntityId = null);
+
+public sealed record SchemaDefinitionChange(JsonElement Before, JsonElement After);
+
+public sealed record SchemaDefinitionDiff
+{
+    public SchemaDefinitionDiff(
+        IEnumerable<KeyValuePair<string, JsonElement>>? added = null,
+        IEnumerable<KeyValuePair<string, JsonElement>>? removed = null,
+        IEnumerable<KeyValuePair<string, SchemaDefinitionChange>>? changed = null)
+    {
+        Added = CopyElements(added);
+        Removed = CopyElements(removed);
+        Changed = changed?.ToImmutableDictionary(
+            pair => pair.Key,
+            pair => new SchemaDefinitionChange(pair.Value.Before.Clone(), pair.Value.After.Clone()),
+            StringComparer.Ordinal)
+            ?? ImmutableDictionary<string, SchemaDefinitionChange>.Empty.WithComparers(StringComparer.Ordinal);
+    }
+
+    public ImmutableDictionary<string, JsonElement> Added { get; }
+    public ImmutableDictionary<string, JsonElement> Removed { get; }
+    public ImmutableDictionary<string, SchemaDefinitionChange> Changed { get; }
+
+    private static ImmutableDictionary<string, JsonElement> CopyElements(
+        IEnumerable<KeyValuePair<string, JsonElement>>? entries) =>
+        entries?.ToImmutableDictionary(
+            pair => pair.Key,
+            pair => pair.Value.Clone(),
+            StringComparer.Ordinal)
+        ?? ImmutableDictionary<string, JsonElement>.Empty.WithComparers(StringComparer.Ordinal);
+}
+
+public sealed record SchemaKeyedDiff
+{
+    public SchemaKeyedDiff(
+        int fromVersion,
+        int toVersion,
+        IEnumerable<KeyValuePair<string, SchemaDefinitionDiff>>? definitions = null)
+    {
+        FromVersion = fromVersion;
+        ToVersion = toVersion;
+        Definitions = definitions?.ToImmutableDictionary(
+            pair => pair.Key,
+            pair => pair.Value,
+            StringComparer.Ordinal)
+            ?? ImmutableDictionary<string, SchemaDefinitionDiff>.Empty.WithComparers(StringComparer.Ordinal);
+    }
+
+    public int FromVersion { get; }
+    public int ToVersion { get; }
+    public ImmutableDictionary<string, SchemaDefinitionDiff> Definitions { get; }
+}
+
+public sealed record SchemaInitializationResult
+{
+    public SchemaInitializationResult(
+        bool initialized,
+        SchemaLegacyHandling legacyHandling,
+        bool legacySchemaDetected,
+        IEnumerable<SchemaDiagnostic>? diagnostics = null)
+    {
+        Initialized = initialized;
+        LegacyHandling = legacyHandling;
+        LegacySchemaDetected = legacySchemaDetected;
+        Diagnostics = diagnostics?.ToImmutableArray() ?? ImmutableArray<SchemaDiagnostic>.Empty;
+    }
+
+    public bool Initialized { get; }
+    public SchemaLegacyHandling LegacyHandling { get; }
+    public bool LegacySchemaDetected { get; }
+    public ImmutableArray<SchemaDiagnostic> Diagnostics { get; }
+}
+
+public sealed record SchemaMigrationV2Result
+{
+    public SchemaMigrationV2Result(
+        string migrationId,
+        int fromVersion,
+        int toVersion,
+        bool applied,
+        bool strict,
+        IEnumerable<SchemaDiagnostic>? diagnostics = null,
+        SchemaKeyedDiff? diff = null)
+    {
+        MigrationId = migrationId;
+        FromVersion = fromVersion;
+        ToVersion = toVersion;
+        Applied = applied;
+        Strict = strict;
+        Diagnostics = diagnostics?.ToImmutableArray() ?? ImmutableArray<SchemaDiagnostic>.Empty;
+        Diff = diff;
+    }
+
+    public string MigrationId { get; }
+    public int FromVersion { get; }
+    public int ToVersion { get; }
+    public bool Applied { get; }
+    public bool Strict { get; }
+    public ImmutableArray<SchemaDiagnostic> Diagnostics { get; }
+    public SchemaKeyedDiff? Diff { get; }
+}
+
+public sealed record SchemaRollbackV2Result
+{
+    public SchemaRollbackV2Result(
+        int fromVersion,
+        int targetVersion,
+        bool applied,
+        bool strict,
+        bool forced,
+        IEnumerable<SchemaDiagnostic>? diagnostics = null)
+    {
+        FromVersion = fromVersion;
+        TargetVersion = targetVersion;
+        Applied = applied;
+        Strict = strict;
+        Forced = forced;
+        Diagnostics = diagnostics?.ToImmutableArray() ?? ImmutableArray<SchemaDiagnostic>.Empty;
+    }
+
+    public int FromVersion { get; }
+    public int TargetVersion { get; }
+    public bool Applied { get; }
+    public bool Strict { get; }
+    public bool Forced { get; }
+    public ImmutableArray<SchemaDiagnostic> Diagnostics { get; }
+}
+
 public sealed record ExistentialWhereCondition(string Attr, string Op, JsonElement Value);
 
 public sealed record ExistentialForEachSpec(string Type, IReadOnlyList<ExistentialWhereCondition>? Where = null);
@@ -160,7 +367,56 @@ public sealed record ExistentialChaseResult(
 
 public sealed record CheckAccessInput(string SubjectId, string Action, string ResourceId, string? AsOf = null, string? FieldName = null);
 
-public sealed record CheckAccessResult(bool Allow, JsonElement Explanation);
+public enum PermissionFieldVisibility
+{
+    Visible,
+    Hidden,
+}
+
+public enum PermissionEvaluationStatus
+{
+    Matched,
+    Unmatched,
+    Invalid,
+    NotEvaluated,
+}
+
+public sealed record PermissionWitnessHop(string FromId, string RelName, string ToId);
+
+public sealed record PermissionWitnessDiagnostic(
+    PermissionEvaluationStatus Status,
+    ImmutableArray<string> DeclaredPaths,
+    ImmutableArray<PermissionWitnessHop> Hops,
+    ImmutableArray<string> Diagnostics);
+
+public sealed record PermissionAbacDiagnostic(
+    string LeftRef,
+    string Operator,
+    string RightRef,
+    PermissionEvaluationStatus Status,
+    string? Detail = null);
+
+public sealed record PermissionPolicyEvaluation(
+    string PolicyId,
+    string Effect,
+    string Action,
+    string ResourceType,
+    PermissionEvaluationStatus Status,
+    PermissionWitnessDiagnostic Witness,
+    ImmutableArray<PermissionAbacDiagnostic> AbacDiagnostics,
+    ImmutableArray<string> Diagnostics);
+
+public sealed record CheckAccessResult(bool Allow, JsonElement Explanation)
+{
+    public string? AsOf { get; init; }
+
+    public ImmutableDictionary<string, PermissionFieldVisibility> FieldVisibility { get; init; } =
+        ImmutableDictionary<string, PermissionFieldVisibility>.Empty.WithComparers(StringComparer.Ordinal);
+
+    public ImmutableArray<PermissionPolicyEvaluation> PolicyEvaluations { get; init; } = [];
+
+    public ImmutableArray<string> Diagnostics { get; init; } = [];
+}
 
 public sealed record SchemaMigrationResult(
     string MigrationId,

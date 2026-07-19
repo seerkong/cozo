@@ -9,7 +9,8 @@ namespace Cozo.DotNet.LlmWiki.SemanticParsing;
 /// each grammar's ABI version against the runtime's supported window; on any failure
 /// it returns null with diagnostics so ParserBackendSelector can degrade (cli → none).
 /// Symbol/edge extraction is delegated to the per-language extractors (P2):
-/// CSharpExtractor for csharp, TypeScriptExtractor for typescript/javascript.
+/// CSharpExtractor for csharp, TypeScriptExtractor for typescript/javascript,
+/// and JavaExtractor for java.
 /// </summary>
 public sealed class TreeSitterNativeBackend : ISemanticParserBackend
 {
@@ -65,6 +66,7 @@ public sealed class TreeSitterNativeBackend : ISemanticParserBackend
         var grammars = new Dictionary<string, TreeSitterGrammar>(StringComparer.OrdinalIgnoreCase);
         InitializeGrammar("csharp", TreeSitterNative.CSharpLibrary, ["csharp"], probeDirectories, grammars, collected);
         InitializeGrammar("typescript", TreeSitterNative.TypeScriptLibrary, ["typescript", "javascript"], probeDirectories, grammars, collected);
+        InitializeGrammar("java", TreeSitterNative.JavaLibrary, ["java"], probeDirectories, grammars, collected);
 
         if (grammars.Count == 0)
         {
@@ -155,10 +157,29 @@ public sealed class TreeSitterNativeBackend : ISemanticParserBackend
                 (symbols, edges, callSites) = TypeScriptExtractor.Extract(path, query.ExecuteMatchesOnRoot(root, bytes));
             }
         }
+        else if (grammar.GrammarName == "java")
+        {
+            var query = GetOrCompileExtractionQuery(grammar, JavaExtractor.QuerySource, diagnostics);
+            if (query is not null)
+            {
+                (symbols, edges, callSites) = JavaExtractor.Extract(path, bytes.Length, query.ExecuteMatchesOnRoot(root, bytes));
+            }
+        }
+
+        ParsedJavaSourceSyntax? javaSourceSyntax = null;
+        if (grammar.GrammarName == "java")
+        {
+            var query = GetOrCompileExtractionQuery(grammar, JavaSourceSyntaxExtractor.QuerySource, diagnostics);
+            if (query is not null)
+            {
+                javaSourceSyntax = JavaSourceSyntaxExtractor.Extract(query.ExecuteMatchesOnRoot(root, bytes));
+            }
+        }
 
         return new ParsedFileResult(true, path, normalized, Name, hasErrors, symbols, edges, diagnostics)
         {
             CallSites = callSites,
+            JavaSourceSyntax = javaSourceSyntax,
         };
     }
 
@@ -170,11 +191,12 @@ public sealed class TreeSitterNativeBackend : ISemanticParserBackend
         (TreeSitterQuery? Query, SemanticDiagnostic? Diagnostic) entry;
         lock (_extractionQueryGate)
         {
-            if (!_extractionQueries.TryGetValue(grammar.GrammarName, out entry))
+            var key = $"{grammar.GrammarName}\n{querySource}";
+            if (!_extractionQueries.TryGetValue(key, out entry))
             {
                 var query = TreeSitterQuery.TryCompile(grammar, querySource, out var diagnostic);
                 entry = (query, diagnostic);
-                _extractionQueries[grammar.GrammarName] = entry;
+                _extractionQueries[key] = entry;
             }
         }
 
@@ -223,6 +245,7 @@ public sealed class TreeSitterNativeBackend : ISemanticParserBackend
             {
                 "csharp" => TreeSitterNative.tree_sitter_c_sharp(),
                 "typescript" => TreeSitterNative.tree_sitter_typescript(),
+                "java" => TreeSitterNative.tree_sitter_java(),
                 _ => IntPtr.Zero,
             };
         }

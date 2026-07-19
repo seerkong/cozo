@@ -186,6 +186,14 @@ public static class EntityLogic
         return await GetPropertyAtAsync(runtime, entityId, attrName, "$as_of", timestamp, cancellationToken);
     }
 
+    internal static Task<JsonElement?> GetPropertyAtNormalizedAsOfAsync(
+        CozoOmRuntime runtime,
+        string entityId,
+        string attrName,
+        string normalizedAsOf,
+        CancellationToken cancellationToken = default) =>
+        GetPropertyAtAsync(runtime, entityId, attrName, "$as_of", normalizedAsOf, cancellationToken);
+
     public static async Task<IReadOnlyList<PropertyHistoryEntry>> GetPropertyHistoryAsync(
         CozoOmRuntime runtime,
         string entityId,
@@ -299,10 +307,31 @@ public static class EntityLogic
             ? await GetAllPropertiesAsync(runtime, id, cancellationToken)
             : await GetAllPropertiesAsOfAsync(runtime, id, typeName, asOf, cancellationToken);
 
-        foreach (var (computed, ownerType) in await ListEffectiveComputedAttrsAsync(runtime, typeName, cancellationToken))
+        var computedCallbacks = await runtime.BehaviorGate.ResolveAsync(
+            runtime,
+            async (resolution, token) =>
+            {
+                var resolved = new List<(string AttrName, Func<OmComputedContext, ValueTask<object?>> Compute)>();
+                foreach (var (computed, ownerType) in await ListEffectiveComputedAttrsAsync(runtime, typeName, token))
+                {
+                    var compute = await ResolveComputedCallbackAsync(
+                        runtime,
+                        resolution,
+                        ownerType,
+                        computed,
+                        token);
+                    if (!properties.ContainsKey(computed) && compute is not null)
+                    {
+                        resolved.Add((computed, compute));
+                    }
+                }
+
+                return resolved;
+            },
+            cancellationToken);
+
+        foreach (var (computed, compute) in computedCallbacks)
         {
-            if (properties.ContainsKey(computed)) continue;
-            if (!runtime.Registry.TryGetComputed(ownerType, computed, out var compute)) continue;
             var value = await compute(new OmComputedContext(runtime, id, typeName, asOf));
             properties = properties
                 .Concat([new KeyValuePair<string, JsonElement>(computed, OmConvert.CloneToElement(value))])
@@ -464,29 +493,46 @@ public static class EntityLogic
             ":limit 1",
             parameters,
             cancellationToken: cancellationToken);
-        if (result.Rows.Count > 0)
-        {
-            return JsonRows.ElementAt(result.Rows[0], 0);
-        }
+        JsonElement? storedValue = result.Rows.Count > 0
+            ? JsonRows.ElementAt(result.Rows[0], 0)
+            : null;
 
-        foreach (var alias in await TypeLogic.GetAttributeAliasesForCanonicalAsync(runtime, typeName, canonicalAttr, cancellationToken))
+        if (storedValue is null)
         {
-            var aliasResult = await runtime.Store.RunAsync(
-                "?[value] :=\n" +
-                $"  *om_property{{ entity_id: $entity_id, attr_name: $attr_name, value @ {atExpression} }}\n" +
-                ":limit 1",
-                asOf is null
-                    ? LogicSupport.Params(("entity_id", id), ("attr_name", alias))
-                    : LogicSupport.Params(("entity_id", id), ("attr_name", alias), ("as_of", asOf)),
-                cancellationToken: cancellationToken);
-            if (aliasResult.Rows.Count > 0)
+            foreach (var alias in await TypeLogic.GetAttributeAliasesForCanonicalAsync(runtime, typeName, canonicalAttr, cancellationToken))
             {
-                return JsonRows.ElementAt(aliasResult.Rows[0], 0);
+                var aliasResult = await runtime.Store.RunAsync(
+                    "?[value] :=\n" +
+                    $"  *om_property{{ entity_id: $entity_id, attr_name: $attr_name, value @ {atExpression} }}\n" +
+                    ":limit 1",
+                    asOf is null
+                        ? LogicSupport.Params(("entity_id", id), ("attr_name", alias))
+                        : LogicSupport.Params(("entity_id", id), ("attr_name", alias), ("as_of", asOf)),
+                    cancellationToken: cancellationToken);
+                if (aliasResult.Rows.Count > 0)
+                {
+                    storedValue = JsonRows.ElementAt(aliasResult.Rows[0], 0);
+                    break;
+                }
             }
         }
 
-        var computedOwner = await ResolveComputedOwnerAsync(runtime, typeName, canonicalAttr, cancellationToken);
-        if (computedOwner is not null && runtime.Registry.TryGetComputed(computedOwner, canonicalAttr, out var compute))
+        var compute = await runtime.BehaviorGate.ResolveAsync(
+            runtime,
+            async (resolution, token) =>
+            {
+                var computedOwner = await ResolveComputedOwnerAsync(runtime, typeName, canonicalAttr, token);
+                return computedOwner is null
+                    ? null
+                    : await ResolveComputedCallbackAsync(runtime, resolution, computedOwner, canonicalAttr, token);
+            },
+            cancellationToken);
+        if (storedValue is not null)
+        {
+            return storedValue;
+        }
+
+        if (compute is not null)
         {
             return OmConvert.CloneToElement(await compute(new OmComputedContext(runtime, id, typeName, asOf)));
         }
@@ -556,6 +602,26 @@ public static class EntityLogic
         }
 
         return null;
+    }
+
+    private static async Task<Func<OmComputedContext, ValueTask<object?>>?> ResolveComputedCallbackAsync(
+        CozoOmRuntime runtime,
+        BehaviorResolutionScope resolution,
+        string ownerType,
+        string attrName,
+        CancellationToken cancellationToken)
+    {
+        var key = new BehaviorBindingKey(
+            BehaviorKind.Computed,
+            ownerType,
+            attrName,
+            BehaviorCallbackSlot.Compute,
+            BehaviorBindingLogic.NonInterceptorPhase,
+            BehaviorBindingLogic.NonInterceptorSeq);
+        await BehaviorReadinessLogic.EnsureReadyIfBoundAsync(runtime, resolution, key, cancellationToken);
+        return resolution.RegistrySnapshot.Computed.TryGetValue((ownerType, attrName), out var registration)
+            ? registration.Callback
+            : null;
     }
 
     private static async Task<IReadOnlyDictionary<string, JsonElement>> NormalizeFindFilterAsync(

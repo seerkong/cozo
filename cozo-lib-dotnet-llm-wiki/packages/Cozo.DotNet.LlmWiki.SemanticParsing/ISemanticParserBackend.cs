@@ -34,7 +34,72 @@ public sealed record ParsedFileResult(
     /// (cli backend, regex fallback). Resolution to symbols is a later indexing stage.
     /// </summary>
     public IReadOnlyList<ParsedCallSite> CallSites { get; init; } = [];
+
+    /// <summary>
+    /// Java declaration/assignment syntax retained for higher-level framework derivation.
+    /// The parser reports syntax only; ontology or framework meaning belongs to Indexing.
+    /// Null means the selected backend cannot provide the required syntax contract.
+    /// </summary>
+    public ParsedJavaSourceSyntax? JavaSourceSyntax { get; init; }
 }
+
+public sealed record ParsedJavaSourceSyntax(
+    IReadOnlyList<ParsedJavaMemberSyntax> Members,
+    IReadOnlyList<ParsedJavaEnumConstantSyntax> EnumConstants,
+    IReadOnlyList<ParsedJavaAssignmentSyntax> Assignments)
+{
+    public IReadOnlyList<ParsedJavaTypeUseSyntax> TypeUses { get; init; } = [];
+    public IReadOnlyList<ParsedJavaGuardSyntax> Guards { get; init; } = [];
+    public IReadOnlyList<ParsedJavaStateMutationSyntax> StateMutations { get; init; } = [];
+}
+
+public sealed record ParsedJavaMemberSyntax(
+    string MemberKind,
+    string Name,
+    string TypeText,
+    string DeclarationText,
+    string OwnerName,
+    int StartLine,
+    int EndLine);
+
+public sealed record ParsedJavaEnumConstantSyntax(
+    string Name,
+    string DeclarationText,
+    int StartLine,
+    int EndLine);
+
+public sealed record ParsedJavaAssignmentSyntax(
+    string LeftText,
+    string RightText,
+    string ExpressionText,
+    int StartLine,
+    int EndLine);
+
+public sealed record ParsedJavaStateMutationSyntax(
+    string MutationKind,
+    string ReceiverText,
+    string PropertyName,
+    string ValueText,
+    string ExpressionText,
+    int StartLine,
+    int EndLine);
+
+public sealed record ParsedJavaTypeUseSyntax(
+    string UsageKind,
+    string Name,
+    string TypeText,
+    string DeclarationText,
+    string DeclaringName,
+    int DeclaringArity,
+    int StartLine,
+    int EndLine);
+
+public sealed record ParsedJavaGuardSyntax(
+    string ConditionText,
+    string ConsequenceText,
+    string StatementText,
+    int StartLine,
+    int EndLine);
 
 /// <summary>
 /// One unresolved call/construction/member-access site (design.md §1).

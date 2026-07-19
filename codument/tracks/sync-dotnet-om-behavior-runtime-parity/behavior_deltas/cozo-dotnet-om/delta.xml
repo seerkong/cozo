@@ -1,0 +1,114 @@
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/behavior-runtime-inheritance">
+    <requirement id="behavior-runtime-inheritance">
+      <statement>C# OM SHALL provide Bun-compatible action, mutation, and interceptor inheritance while preserving the C# transactional execution boundary.</statement>
+      <suite id="action-dispatch" name="Action Inheritance And Parent Dispatch">
+        <case id="nearest-owner-action">
+          <given>A concrete entity type inherits an action from an ancestor</given>
+          <when>The caller executes the action on the concrete entity</when>
+          <then>C# OM SHALL invoke the nearest ancestor action registration inside the current action transaction</then>
+        </case>
+        <case id="override-calls-parent">
+          <given>A child action overrides an ancestor action and calls CallParentActionAsync</given>
+          <when>The child composes the returned parent mutations with its own mutations</when>
+          <then>C# OM SHALL resolve the next ancestor action above ActionOwnerType and execute the combined mutations once</then>
+        </case>
+        <case id="multi-level-parent-chain">
+          <given>Three type levels override the same action</given>
+          <when>Each override calls its parent action</when>
+          <then>C# OM SHALL advance the action owner at each call and compose the chain without recursion to the same registration</then>
+        </case>
+        <case id="parent-action-not-found">
+          <given>The current action owner has no ancestor definition for the requested action</given>
+          <when>CallParentActionAsync is invoked</when>
+          <then>C# OM SHALL throw InvalidOperationException with a diagnostic identifying the requested action and current action owner, and SHALL roll back the outer action transaction</then>
+        </case>
+        <case id="parent-mutations-rollback">
+          <given>A child action composes parent mutations and a later mutation or after interceptor fails</given>
+          <when>The action transaction aborts</when>
+          <then>C# OM SHALL roll back both parent and child mutation effects</then>
+        </case>
+      </suite>
+      <suite id="mutation-inheritance" name="Mutation Inheritance">
+        <case id="nearest-owner-mutation">
+          <given>A child action returns a mutation defined only on an ancestor</given>
+          <when>The action executes its mutation list</when>
+          <then>C# OM SHALL resolve and execute the nearest ancestor mutation registration</then>
+        </case>
+      </suite>
+      <suite id="interceptor-inheritance" name="Interceptor Inheritance">
+        <case id="ancestor-to-child-order">
+          <given>Parent and child types each register multiple before and after interceptors with owner-local sequence numbers</given>
+          <when>A child entity executes the action</when>
+          <then>C# OM SHALL run each phase ancestor-to-child while preserving registration order within each owner</then>
+        </case>
+        <case id="inherited-before-blocks">
+          <given>An ancestor before interceptor rejects execution</given>
+          <when>A child entity executes the action</when>
+          <then>C# OM SHALL skip the action and mutations and leave no committed effects</then>
+        </case>
+        <case id="inherited-after-rolls-back">
+          <given>An ancestor or child after interceptor fails after mutations ran</given>
+          <when>The action transaction aborts</when>
+          <then>C# OM SHALL roll back all mutation effects</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/behavior-definition-guardrails">
+    <requirement id="behavior-definition-guardrails">
+      <statement>C# OM SHALL validate behavior definitions before changing persistent metadata or executable callback registration state.</statement>
+      <suite id="definition-validation" name="Behavior Definition Validation">
+        <case id="owner-type-must-exist">
+          <given>A constraint, computed property, action, mutation, or interceptor references a missing owner type</given>
+          <when>The caller defines the behavior</when>
+          <then>C# OM SHALL reject the definition before metadata or callback registry state changes</then>
+        </case>
+        <case id="constraint-scope-must-be-known">
+          <given>A constraint definition uses a scope other than conditional, cross-entity, computed-dep, or custom</given>
+          <when>The caller defines the constraint</when>
+          <then>C# OM SHALL reject the scope without persisting metadata or registering callbacks</then>
+        </case>
+        <case id="interceptor-phase-must-be-known">
+          <given>An interceptor definition uses a phase other than before or after</given>
+          <when>The caller registers the interceptor</when>
+          <then>C# OM SHALL reject the phase without persisting metadata or registering a before interceptor fallback</then>
+        </case>
+        <case id="callback-must-be-present">
+          <given>A callback overload receives a null executable callback</given>
+          <when>The caller defines the behavior</when>
+          <then>C# OM SHALL reject the callback before persistent metadata is written</then>
+        </case>
+        <case id="persistent-failure-leaves-no-ghost">
+          <given>Persistent interceptor metadata validation or storage fails</given>
+          <when>The callback overload returns an error</when>
+          <then>C# OM SHALL leave no executable interceptor registered in memory</then>
+        </case>
+        <case id="registry-failure-leaves-no-metadata">
+          <given>Validated interceptor metadata is written but executable callback registration fails</given>
+          <when>The callback overload returns an error</when>
+          <then>C# OM SHALL remove the newly written interceptor metadata so persistent definitions and registry state remain consistent</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+
+  <upsert selector="behavior://cozo-dotnet-om/requirements/behavior-runtime-parity-tests">
+    <requirement id="behavior-runtime-parity-tests">
+      <statement>The repository SHALL keep corresponding C# and Bun tests for shared behavior-runtime inheritance and guardrail contracts.</statement>
+      <suite id="paired-tests" name="Paired Runtime Tests">
+        <case id="dotnet-runtime-cases">
+          <given>The C# behavior runtime parity implementation is present</given>
+          <when>The C# OM tests run</when>
+          <then>The tests SHALL cover parent action composition, inherited mutations, exact parent-child interceptor order, guardrail failures, and transaction rollback</then>
+        </case>
+        <case id="bun-reference-cases">
+          <given>Bun is the behavior reference</given>
+          <when>The Bun OM tests run</when>
+          <then>The tests SHALL cover the corresponding parent action, inherited mutation, and inherited interceptor ordering scenarios</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

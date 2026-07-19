@@ -29,7 +29,7 @@ codument/behaviors/
 ```
 
 - `<behaviors capability version>` 根；`<requirement id>` + `<statement>` + 可嵌套 `<suite>/<case>`。
-- 行为状态/适用性等元信息走属性；行为本体是事实真源，**不**复述实现细节（实现真源在代码 + docs/impl）。
+- 行为状态/适用性等元信息走属性；行为本体是事实真源，**不**复述实现细节（实现真源在代码 + codument/engineering）。
 
 ## 应用 delta（归档时）
 

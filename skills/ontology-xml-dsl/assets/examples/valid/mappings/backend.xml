@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ImplementationMappingModule id="ExampleCatalog.Mappings.Backend">
+  <Mappings>
+    <ImplementationMapping id="ExampleCatalog.Implementation.OutboundOrder" conceptRef="ExampleCatalog.OutboundOrder">
+      <ImplementedBy>
+        <CodeRef repository="source-repository" language="java" kind="service" symbol="java:com.kuaishou.is.record.service.RecordOutboundService#0" />
+      </ImplementedBy>
+      <Enforces><RuleRef ref="ExampleCatalog.Rule.OutboundRequiresAvailableRecord" /></Enforces>
+      <EvidenceRefs><EvidenceRef ref="backend:record-outbound-validation" /></EvidenceRefs>
+    </ImplementationMapping>
+  </Mappings>
+</ImplementationMappingModule>

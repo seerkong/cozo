@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="verify-dotnet-om-bun-capability-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>Independently verify G01-G14 observable capability parity across Bun and .NET OM.</Goal>
+    <Description>Run both runtimes, audit every evidence row, and produce archive-ready mission closure evidence.</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <GapRound>2</GapRound>
+    <CreatedAt>2026-07-18T03:47:18Z</CreatedAt>
+    <UpdatedAt>2026-07-18T05:12:08Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="mission" domain="mission" path="vfs://@/codument/missions/active/converge-dotnet-om-bun-capability-parity/"/>
+    <MaterialBundle role="input" name="linked-tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="input" name="bun-runtime" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="input" name="dotnet-runtime" domain="source" path="vfs://@/cozo-lib-dotnet/"/>
+    <MaterialBundle role="output" name="verification-reports" domain="codument" path="vfs://./reports/"/>
+  </Ports>
+  <TaskSpace id="space_verify-dotnet-om-bun-capability-parity" name="verify-dotnet-om-bun-capability-parity" version="1">
+    <Description>Build the evidence contract, execute both runtimes, and audit mission closure.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Build evidence contract" status="DONE" order="0">
+        <Description>Map G01-G14 to implementation tracks, tests, and frozen decisions.</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Create G01-G14 evidence inventory" ownerAccount="agent:verify" status="DONE" order="0" priority="P0">
+            <Description>Resolve each gap to Bun/.NET source, paired tests, linked track reports, and decisions.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">Every G01-G14 item has desired, actual, test, decision, and evidence fields.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="Close missing paired verification cases" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>Add only missing tests or decision-free fixes required to make every shared contract executable.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">No evidence row relies solely on prose when executable behavior is available.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Execute cross-runtime gates" status="DONE" order="1">
+        <Description>Run Bun, .NET, focused parity, and Codument validation gates.</Description>
+        <SubNodes>
+          <Task id="T2.1" name="Run Bun OM verification" ownerAccount="agent:verify" status="DONE" order="0" priority="P0">
+            <Description>Run the Bun full suite and focused governance/behavior/schema/existential/public cases.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">Bun full and focused suites pass with recorded counts.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="Run .NET OM verification" ownerAccount="agent:verify" status="DONE" order="1" priority="P0">
+            <Description>Build and run the .NET full OM harness plus focused parity fixtures and optional-package contracts.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">.NET build, full harness, focused fixtures, portability, YAML, and Jint contracts pass.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="Validate linked Codument controls" ownerAccount="agent:verify" status="DONE" order="2" priority="P0">
+            <Description>Resolve every bound TrackLink and run strict/XML validation over linked tracks.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">All bound tracks exist, are completed, and pass structural validation.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="Audit and publish closure evidence" status="DONE" order="2">
+        <Description>Independently judge every row and publish archive-ready mission evidence.</Description>
+        <SubNodes>
+          <Task id="T3.1" name="Publish final G01-G14 matrix" ownerAccount="agent:verify" status="DONE" order="0" priority="P0">
+            <Description>Produce issues-first final evidence with explicit intentional differences and residual risk.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">All fourteen rows have fresh evidence and PASS, or the track is BLOCKED with a precise gap.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="Verify archive readiness" ownerAccount="agent:verify" status="DONE" order="1" priority="P0">
+            <Description>Run final source, test, XML, strict, report-consistency, and working-tree boundary checks.</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">The verification track and mission evidence are internally consistent and archive-ready.</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks/>
+</Track>

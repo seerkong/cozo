@@ -41,7 +41,7 @@
 
 ## 2. 标准文件夹 vs 自定义文件夹
 
-- **标准文件夹**（分形默认类目：modeling 的 `objects/policies/workflows`、impl 的 `overview/howto/rules/...` 等）：职责可**继承分形默认**，职责块写一行即可（甚至只写与默认的差异）。
+- **标准文件夹**（分形默认类目：modeling 的 `objects/policies/workflows`、engineering 的 `overview/howto/rules/...` 等）：职责可**继承分形默认**，职责块写一行即可（甚至只写与默认的差异）。
 - **自定义文件夹**（某业务领域自己长出来的类目，如 `sources/ transforms/ sinks/`、`runbooks/ slas/`）：分形规范**无法预知**，所以**必须**自带完整型职责块——这正是"允许在某个文件独立进行说明配置"的落点。
 
 > 规则：**任何不在分形默认词汇表内的目录，其 `index.md` 必须有职责块**；否则视为未声明，补齐机制会标记。

@@ -36,6 +36,132 @@ export interface CozoDbLike extends CozoRunner {
   multiTransact(write?: boolean): CozoRunner & { commit(): void; abort(): void };
 }
 
+declare const omRuntimeBrand: unique symbol;
+
+export interface OmRuntime<TRunner extends CozoRunner = CozoRunner> {
+  readonly runner: TRunner;
+  readonly [omRuntimeBrand]: true;
+}
+
+export type OmRunner = CozoRunner | OmRuntime;
+export type OmDbLike = CozoDbLike | OmRuntime<CozoDbLike>;
+
+export type BehaviorCatalogKind =
+  | 'constraint'
+  | 'computed'
+  | 'action'
+  | 'mutation'
+  | 'interceptor';
+
+export type BehaviorCatalogCallbackSlot =
+  | 'when'
+  | 'then'
+  | 'validator'
+  | 'compute'
+  | 'handler'
+  | 'executor';
+
+export type BehaviorReadiness = 'unbound' | 'unresolved' | 'ready';
+
+export interface BehaviorCallbackBinding {
+  readonly slot: BehaviorCatalogCallbackSlot;
+  readonly bindingId: string | null;
+  readonly readiness: BehaviorReadiness;
+}
+
+export interface BehaviorCatalogEntry {
+  readonly kind: BehaviorCatalogKind;
+  readonly ownerType: string;
+  readonly name: string;
+  readonly constraintType: string | null;
+  readonly message: string | null;
+  readonly description: string | null;
+  readonly interceptorPhase: 'before' | 'after' | null;
+  readonly interceptorSeq: number | null;
+  readonly callbacks: readonly BehaviorCallbackBinding[];
+}
+
+export interface BehaviorCatalog {
+  readonly behaviors: readonly BehaviorCatalogEntry[];
+}
+
+export interface BehaviorManifestDiagnostic {
+  readonly code: string;
+  readonly path: string;
+  readonly message: string;
+}
+
+export interface BehaviorManifestDecodeResult {
+  readonly catalog: BehaviorCatalog | null;
+  readonly diagnostics: readonly BehaviorManifestDiagnostic[];
+  readonly success: boolean;
+}
+
+export interface BehaviorImportDiagnostic extends BehaviorManifestDiagnostic {
+  readonly kind: BehaviorCatalogKind | null;
+  readonly ownerType: string | null;
+  readonly behaviorName: string | null;
+  readonly slot: BehaviorCatalogCallbackSlot | null;
+  readonly bindingId: string | null;
+  readonly interceptorPhase: 'before' | 'after' | null;
+  readonly interceptorSeq: number | null;
+}
+
+export interface BehaviorTypedCallbackBinding<TCallback extends Function> {
+  readonly bindingId: string;
+  readonly callback: TCallback;
+}
+
+export interface BehaviorCallbackBindingSet {
+  readonly constraints?: readonly BehaviorTypedCallbackBinding<
+    (ctx: ConstraintContext) => Promise<boolean> | boolean
+  >[];
+  readonly validators?: readonly BehaviorTypedCallbackBinding<ConstraintValidator>[];
+  readonly computed?: readonly BehaviorTypedCallbackBinding<ComputedFn>[];
+  readonly actions?: readonly BehaviorTypedCallbackBinding<ActionHandler>[];
+  readonly mutations?: readonly BehaviorTypedCallbackBinding<MutationExecutor>[];
+  readonly interceptors?: readonly BehaviorTypedCallbackBinding<InterceptorHandler>[];
+}
+
+export interface BehaviorImportOptions {
+  readonly requireReady?: boolean;
+}
+
+export interface BehaviorImportResult {
+  readonly applied: boolean;
+  readonly diagnostics: readonly BehaviorImportDiagnostic[];
+  readonly unresolved: readonly BehaviorUnresolvedDiagnostic[];
+}
+
+export interface BehaviorUnresolvedDiagnostic {
+  readonly code: 'OMR1001';
+  readonly kind: BehaviorCatalogKind;
+  readonly ownerType: string;
+  readonly behaviorKey: string;
+  readonly slot: BehaviorCatalogCallbackSlot;
+  readonly bindingId: string;
+  readonly interceptorPhase: 'before' | 'after' | null;
+  readonly interceptorSeq: number | null;
+}
+
+export class BehaviorUnresolvedError extends Error {
+  readonly diagnostic: BehaviorUnresolvedDiagnostic;
+  readonly code: 'OMR1001';
+  readonly kind: BehaviorCatalogKind;
+  readonly ownerType: string;
+  readonly behaviorKey: string;
+  readonly slot: BehaviorCatalogCallbackSlot;
+  readonly bindingId: string;
+  readonly interceptorPhase: 'before' | 'after' | null;
+  readonly interceptorSeq: number | null;
+  constructor(diagnostic: BehaviorUnresolvedDiagnostic);
+}
+
+export class BehaviorImportError extends Error {
+  readonly originalFailure: unknown;
+  readonly compensationFailures: readonly unknown[];
+}
+
 export interface EntityInput {
   id: string;
   typeName: string;
@@ -93,6 +219,7 @@ export interface MutationSpec {
 
 export interface MutationContext {
   runner: CozoRunner;
+  runtime: OmRuntime;
   entityId: string;
   typeName: string;
   getProperty(attrName: string, options?: { asOf?: string }): Promise<any | undefined>;
@@ -113,21 +240,33 @@ export type InterceptorHandler = (ctx: ActionContext) => Promise<void> | void;
 
 export interface ConstraintContext {
   runner: CozoRunner;
+  runtime: OmRuntime;
   entityId: string;
   typeName: string;
   getProperty(attrName: string): Promise<any | undefined>;
   getNeighbors(relName?: string, direction?: 'outgoing' | 'incoming' | 'both'): Promise<NeighborResult>;
 }
 
-export interface ConstraintDefinition {
-  scope?: 'conditional' | 'cross-entity' | 'computed-dep' | string;
+export interface ScopedConstraintDefinition {
+  scope?: 'conditional' | 'cross-entity' | 'computed-dep';
   message?: string;
   when(ctx: ConstraintContext): Promise<boolean> | boolean;
   then(ctx: ConstraintContext): Promise<boolean> | boolean;
 }
 
+export interface CustomConstraintDefinition {
+  scope: 'custom';
+  message?: string;
+  validator(ctx: ConstraintContext): Promise<string | null> | string | null;
+}
+
+export type ConstraintDefinition = ScopedConstraintDefinition | CustomConstraintDefinition;
+export type ConstraintValidator =
+  (ctx: ConstraintContext) => Promise<string | null> | string | null;
+
 export interface ComputedContext {
   runner: CozoRunner;
+  runtime: OmRuntime;
   entityId: string;
   typeName: string;
   asOf?: string;
@@ -209,16 +348,204 @@ export interface SchemaState {
   checksum: string | null;
 }
 
+export type BehaviorConstraintSnapshotRow = readonly [
+  typeName: string,
+  constraintName: string,
+  constraintType: string,
+  message: string,
+];
+
+export type BehaviorComputedSnapshotRow = readonly [
+  typeName: string,
+  attrName: string,
+  description: string,
+];
+
+export type BehaviorActionSnapshotRow = readonly [
+  typeName: string,
+  actionName: string,
+  description: string,
+];
+
+export type BehaviorMutationSnapshotRow = readonly [
+  typeName: string,
+  mutationName: string,
+  description: string,
+];
+
+export type BehaviorInterceptorSnapshotRow = readonly [
+  typeName: string,
+  actionName: string,
+  phase: 'before' | 'after',
+  seq: number,
+  description: string,
+];
+
+export type BehaviorBindingSnapshotRow = readonly [
+  behaviorKind: BehaviorCatalogKind,
+  ownerType: string,
+  behaviorName: string,
+  callbackSlot: BehaviorCatalogCallbackSlot,
+  phase: '' | 'before' | 'after',
+  seq: number,
+  bindingId: string,
+];
+
+export interface BehaviorSnapshotV1 {
+  readonly formatVersion: 1;
+  readonly om_constraint_def: readonly BehaviorConstraintSnapshotRow[];
+  readonly om_computed_def: readonly BehaviorComputedSnapshotRow[];
+  readonly om_action_def: readonly BehaviorActionSnapshotRow[];
+  readonly om_mutation_def: readonly BehaviorMutationSnapshotRow[];
+  readonly om_interceptor_def: readonly BehaviorInterceptorSnapshotRow[];
+  readonly om_behavior_binding: readonly BehaviorBindingSnapshotRow[];
+}
+
 export interface SchemaSnapshot {
   version: number;
   createdAt: string;
   schema: any;
+  behavior?: BehaviorSnapshotV1;
   checksum?: string | null;
+}
+
+export type BehaviorSnapshotPresence = 'present' | 'missing';
+
+export type BehaviorSnapshotRelationName =
+  | 'om_constraint_def'
+  | 'om_computed_def'
+  | 'om_action_def'
+  | 'om_mutation_def'
+  | 'om_interceptor_def'
+  | 'om_behavior_binding';
+
+export interface SchemaVersioningDiagnostic {
+  readonly code: 'OMSV1001' | 'OMSV1002' | 'OMSV1003' | 'OMSV1004' | string;
+  readonly path: string;
+  readonly message: string;
+  readonly allowedPolicies?: readonly ('preserve' | 'clear')[];
+  readonly side?: 'from' | 'to';
+  readonly relation?: BehaviorSnapshotRelationName;
+  readonly key?: Readonly<Record<string, unknown>>;
+  readonly expectedColumns?: number;
+  readonly actualColumns?: number | null;
+  readonly expectedFormatVersion?: number;
+  readonly actualFormatVersion?: unknown;
+}
+
+export interface BehaviorConstraintSnapshotValue {
+  readonly type_name: string;
+  readonly constraint_name: string;
+  readonly constraint_type: string;
+  readonly message: string;
+}
+
+export interface BehaviorComputedSnapshotValue {
+  readonly type_name: string;
+  readonly attr_name: string;
+  readonly description: string;
+}
+
+export interface BehaviorActionSnapshotValue {
+  readonly type_name: string;
+  readonly action_name: string;
+  readonly description: string;
+}
+
+export interface BehaviorMutationSnapshotValue {
+  readonly type_name: string;
+  readonly mutation_name: string;
+  readonly description: string;
+}
+
+export interface BehaviorInterceptorSnapshotValue {
+  readonly type_name: string;
+  readonly action_name: string;
+  readonly phase: 'before' | 'after';
+  readonly seq: number;
+  readonly description: string;
+}
+
+export interface BehaviorBindingSnapshotValue {
+  readonly behavior_kind: BehaviorCatalogKind;
+  readonly owner_type: string;
+  readonly behavior_name: string;
+  readonly callback_slot: BehaviorCatalogCallbackSlot;
+  readonly phase: '' | 'before' | 'after';
+  readonly seq: number;
+  readonly binding_id: string;
+}
+
+export type BehaviorConstraintSnapshotKey =
+  Pick<BehaviorConstraintSnapshotValue, 'type_name' | 'constraint_name'>;
+export type BehaviorComputedSnapshotKey =
+  Pick<BehaviorComputedSnapshotValue, 'type_name' | 'attr_name'>;
+export type BehaviorActionSnapshotKey =
+  Pick<BehaviorActionSnapshotValue, 'type_name' | 'action_name'>;
+export type BehaviorMutationSnapshotKey =
+  Pick<BehaviorMutationSnapshotValue, 'type_name' | 'mutation_name'>;
+export type BehaviorInterceptorSnapshotKey =
+  Pick<BehaviorInterceptorSnapshotValue, 'type_name' | 'action_name' | 'phase' | 'seq'>;
+export type BehaviorBindingSnapshotKey =
+  Pick<
+    BehaviorBindingSnapshotValue,
+    'behavior_kind' | 'owner_type' | 'behavior_name' | 'callback_slot' | 'phase' | 'seq'
+  >;
+
+export interface BehaviorRelationUpdate<Row, Key> {
+  readonly key: Key;
+  readonly from: Row;
+  readonly to: Row;
+}
+
+export interface BehaviorRelationDiff<Row, Key> {
+  readonly added: readonly Row[];
+  readonly removed: readonly Row[];
+  readonly updated: readonly BehaviorRelationUpdate<Row, Key>[];
+}
+
+export interface BehaviorSchemaDiffRelations {
+  readonly om_constraint_def: BehaviorRelationDiff<
+    BehaviorConstraintSnapshotValue,
+    BehaviorConstraintSnapshotKey
+  >;
+  readonly om_computed_def: BehaviorRelationDiff<
+    BehaviorComputedSnapshotValue,
+    BehaviorComputedSnapshotKey
+  >;
+  readonly om_action_def: BehaviorRelationDiff<
+    BehaviorActionSnapshotValue,
+    BehaviorActionSnapshotKey
+  >;
+  readonly om_mutation_def: BehaviorRelationDiff<
+    BehaviorMutationSnapshotValue,
+    BehaviorMutationSnapshotKey
+  >;
+  readonly om_interceptor_def: BehaviorRelationDiff<
+    BehaviorInterceptorSnapshotValue,
+    BehaviorInterceptorSnapshotKey
+  >;
+  readonly om_behavior_binding: BehaviorRelationDiff<
+    BehaviorBindingSnapshotValue,
+    BehaviorBindingSnapshotKey
+  >;
+}
+
+export interface BehaviorSchemaDiff {
+  readonly fromPresence: BehaviorSnapshotPresence;
+  readonly toPresence: BehaviorSnapshotPresence;
+  readonly comparable: boolean;
+  readonly diagnostics: readonly SchemaVersioningDiagnostic[];
+  readonly relations: Partial<BehaviorSchemaDiffRelations>;
 }
 
 export interface SchemaDiff {
   fromVersion: number;
   toVersion: number;
+  schema: any;
+  aliases: any;
+  perm?: any;
+  behavior: BehaviorSchemaDiff;
   added?: any;
   removed?: any;
   changed?: any;
@@ -247,6 +574,7 @@ export interface SchemaMigrationSpec {
 
 export interface RollbackSchemaOptions {
   strict?: boolean;
+  legacyBehaviorPolicy?: 'preserve' | 'clear';
 }
 
 export interface RollbackSchemaDiagnostic {
@@ -261,6 +589,8 @@ export interface RollbackSchemaResult {
   targetVersion: number;
   fromVersion: number;
   diagnostics: RollbackSchemaDiagnostic[];
+  compatibilityDiagnostics: readonly SchemaVersioningDiagnostic[];
+  behaviorPolicyApplied: 'snapshot' | 'preserve' | 'clear' | null;
 }
 
 export interface CheckAccessInput {
@@ -292,34 +622,135 @@ export interface CheckAccessResult {
   fieldVisibility?: Record<string, 'visible' | 'hidden'>;
 }
 
-export function initSchema(runner: CozoRunner): Promise<void>;
-export function createSchema(runner: CozoRunner): Promise<void>;
+export function createOmRuntime<TRunner extends CozoRunner>(runner: TRunner): OmRuntime<TRunner>;
+export function registerConstraint(
+  runtime: OmRuntime,
+  typeName: string,
+  constraintName: string,
+  when: (ctx: ConstraintContext) => Promise<boolean> | boolean,
+  then: (ctx: ConstraintContext) => Promise<boolean> | boolean
+): void;
+export function registerConstraint(
+  runtime: OmRuntime,
+  typeName: string,
+  constraintName: string,
+  whenBindingId: string,
+  when: (ctx: ConstraintContext) => Promise<boolean> | boolean,
+  thenBindingId: string,
+  then: (ctx: ConstraintContext) => Promise<boolean> | boolean
+): void;
+export function registerValidator(
+  runtime: OmRuntime,
+  typeName: string,
+  constraintName: string,
+  validator: ConstraintValidator
+): void;
+export function registerValidator(
+  runtime: OmRuntime,
+  typeName: string,
+  constraintName: string,
+  bindingId: string,
+  validator: ConstraintValidator
+): void;
+export function registerComputed(
+  runtime: OmRuntime,
+  typeName: string,
+  attrName: string,
+  compute: ComputedFn
+): void;
+export function registerComputed(
+  runtime: OmRuntime,
+  typeName: string,
+  attrName: string,
+  bindingId: string,
+  compute: ComputedFn
+): void;
+export function registerAction(
+  runtime: OmRuntime,
+  typeName: string,
+  actionName: string,
+  handler: ActionHandler
+): void;
+export function registerAction(
+  runtime: OmRuntime,
+  typeName: string,
+  actionName: string,
+  bindingId: string,
+  handler: ActionHandler
+): void;
+export function registerMutation(
+  runtime: OmRuntime,
+  typeName: string,
+  mutationName: string,
+  executor: MutationExecutor
+): void;
+export function registerMutation(
+  runtime: OmRuntime,
+  typeName: string,
+  mutationName: string,
+  bindingId: string,
+  executor: MutationExecutor
+): void;
+export function registerInterceptor(
+  runtime: OmRuntime,
+  typeName: string,
+  actionName: string,
+  phase: 'before' | 'after',
+  seq: number,
+  handler: InterceptorHandler,
+  description?: string
+): void;
+export function registerInterceptor(
+  runtime: OmRuntime,
+  typeName: string,
+  actionName: string,
+  phase: 'before' | 'after',
+  seq: number,
+  bindingId: string,
+  handler: InterceptorHandler,
+  description?: string
+): void;
 
-export function seedPermissionMetadata(runner: CozoRunner, data?: any): Promise<void>;
+export function initSchema(runner: OmRunner): Promise<void>;
+export function createSchema(runner: OmRunner): Promise<void>;
+export function getBehaviorCatalog(runner: OmRunner): Promise<BehaviorCatalog>;
+export function encodeBehaviorManifestJson(catalog: BehaviorCatalog): Uint8Array;
+export function decodeBehaviorManifestJson(
+  json: string | Uint8Array
+): BehaviorManifestDecodeResult;
+export function exportBehaviorManifestJson(runner: OmRunner): Promise<Uint8Array>;
+export function importBehaviorManifestJson(
+  runtime: OmRuntime<CozoDbLike>,
+  json: string | Uint8Array,
+  callbacks?: BehaviorCallbackBindingSet,
+  options?: BehaviorImportOptions
+): Promise<BehaviorImportResult>;
 
-export function checkAccess(runner: CozoRunner, input: CheckAccessInput): Promise<CheckAccessResult>;
+export function seedPermissionMetadata(runner: OmRunner, data?: any): Promise<void>;
 
-export function getSchemaState(runner: CozoRunner): Promise<SchemaState>;
-export function listSchemaVersions(runner: CozoRunner): Promise<SchemaVersion[]>;
-export function applySchemaMigration(runner: CozoRunner, spec: SchemaMigrationSpec): Promise<void>;
+export function checkAccess(runner: OmRunner, input: CheckAccessInput): Promise<CheckAccessResult>;
+
+export function getSchemaState(runner: OmRunner): Promise<SchemaState>;
+export function listSchemaVersions(runner: OmRunner): Promise<SchemaVersion[]>;
+export function applySchemaMigration(runner: OmRunner, spec: SchemaMigrationSpec): Promise<void>;
 export function rollbackSchema(
-  runner: CozoRunner,
+  runner: OmRunner,
   targetVersion: number,
   options?: RollbackSchemaOptions
 ): Promise<RollbackSchemaResult>;
 
-export function readSchemaSnapshot(runner: CozoRunner, version: number): Promise<SchemaSnapshot | null>;
-export function writeSchemaSnapshot(runner: CozoRunner, version: number): Promise<SchemaSnapshot>;
-export function diffSchemaVersions(runner: CozoRunner, fromVersion: number, toVersion: number): Promise<SchemaDiff>;
+export function readSchemaSnapshot(runner: OmRunner, version: number): Promise<SchemaSnapshot | null>;
+export function writeSchemaSnapshot(runner: OmRunner, version: number): Promise<SchemaSnapshot>;
+export function diffSchemaVersions(runner: OmRunner, fromVersion: number, toVersion: number): Promise<SchemaDiff>;
 
-export function defineType(runner: CozoRunner, name: string, description: string, options?: DefineTypeOptions): Promise<void>;
-export function defineMixin(runner: CozoRunner, name: string, description: string): Promise<void>;
-export function getAncestors(runner: CozoRunner, typeName: string): Promise<string[]>;
-export function getDescendants(runner: CozoRunner, typeName: string): Promise<string[]>;
-export function isSubtypeOf(runner: CozoRunner, childType: string, parentType: string): Promise<boolean>;
-export function getTypeHierarchy(runner: CozoRunner): Promise<TypeHierarchy>;
+export function defineType(runner: OmRunner, name: string, description: string, options?: DefineTypeOptions): Promise<void>;
+export function defineMixin(runner: OmRunner, name: string, description: string): Promise<void>;
+export function getAncestors(runner: OmRunner, typeName: string): Promise<string[]>;
+export function getDescendants(runner: OmRunner, typeName: string): Promise<string[]>;
+export function isSubtypeOf(runner: OmRunner, childType: string, parentType: string): Promise<boolean>;
+export function getTypeHierarchy(runner: OmRunner): Promise<TypeHierarchy>;
 export function defineAttribute(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   attrName: string,
   valueType: OmValueType,
@@ -327,7 +758,7 @@ export function defineAttribute(
   description?: string
 ): Promise<void>;
 export function defineRelation(
-  runner: CozoRunner,
+  runner: OmRunner,
   relName: string,
   fromType: string,
   toType: string,
@@ -335,61 +766,61 @@ export function defineRelation(
   description?: string
 ): Promise<void>;
 
-export function resolveType(runner: CozoRunner, typeName: string): Promise<string>;
-export function resolveRel(runner: CozoRunner, relName: string): Promise<string>;
-export function resolveAttr(runner: CozoRunner, typeName: string, attrName: string): Promise<string>;
-export function defineTypeAlias(runner: CozoRunner, alias: string, canonical: string): Promise<void>;
-export function defineRelationAlias(runner: CozoRunner, alias: string, canonical: string): Promise<void>;
+export function resolveType(runner: OmRunner, typeName: string): Promise<string>;
+export function resolveRel(runner: OmRunner, relName: string): Promise<string>;
+export function resolveAttr(runner: OmRunner, typeName: string, attrName: string): Promise<string>;
+export function defineTypeAlias(runner: OmRunner, alias: string, canonical: string): Promise<void>;
+export function defineRelationAlias(runner: OmRunner, alias: string, canonical: string): Promise<void>;
 export function defineAttributeAlias(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   aliasAttr: string,
   canonicalAttr: string
 ): Promise<void>;
 
 export function createEntity(
-  runner: CozoRunner,
+  runner: OmRunner,
   id: string,
   typeName: string,
   label: string
 ): Promise<void>;
 export function upsertEntity(
-  runner: CozoRunner,
+  runner: OmRunner,
   id: string,
   typeName: string,
   label: string
 ): Promise<void>;
-export function deleteEntity(runner: CozoRunner, entityId: string): Promise<void>;
+export function deleteEntity(runner: OmRunner, entityId: string): Promise<void>;
 
 export function inferValueType(value: any): OmValueType | 'Unknown';
-export function getEntityType(runner: CozoRunner, entityId: string): Promise<string>;
+export function getEntityType(runner: OmRunner, entityId: string): Promise<string>;
 export function validatePropertyType(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   attrName: string,
   value: any
 ): Promise<void>;
 export function setProperty(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   attrName: string,
   value: any,
   options?: WriteOptions
 ): Promise<void>;
 export function getProperty(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   attrName: string
 ): Promise<any | undefined>;
 
 export function validateRelation(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   toId: string
 ): Promise<void>;
 export function linkEntities(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   toId: string,
@@ -397,7 +828,7 @@ export function linkEntities(
   options?: WriteOptions
 ): Promise<void>;
 export function linkEntities(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   toId: string,
@@ -405,7 +836,7 @@ export function linkEntities(
 ): Promise<void>;
 
 export function unlinkEntities(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   toId: string,
@@ -413,7 +844,7 @@ export function unlinkEntities(
 ): Promise<void>;
 
 export function defineMutation(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   mutationName: string,
   executor: MutationExecutor,
@@ -421,13 +852,13 @@ export function defineMutation(
 ): Promise<void>;
 
 export function executeMutations(
-  db: CozoDbLike,
+  db: OmDbLike,
   entityId: string,
   mutations: MutationSpec[]
 ): Promise<void>;
 
 export function defineAction(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   actionName: string,
   handler: ActionHandler,
@@ -435,7 +866,7 @@ export function defineAction(
 ): Promise<void>;
 
 export function executeAction(
-  db: CozoDbLike,
+  db: OmDbLike,
   entityId: string,
   actionName: string,
   params?: Record<string, any>
@@ -448,7 +879,7 @@ export function callParentAction(
 ): Promise<MutationSpec[]>;
 
 export function addInterceptor(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   actionName: string,
   phase: 'before' | 'after',
@@ -457,20 +888,20 @@ export function addInterceptor(
 ): Promise<void>;
 
 export function defineConstraint(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   constraintName: string,
   def: ConstraintDefinition
 ): Promise<void>;
 
 export function validateConstraints(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
-  options?: { types?: Array<'conditional' | 'cross-entity' | 'computed-dep' | string> }
+  options?: { types?: Array<'conditional' | 'cross-entity' | 'computed-dep' | 'custom' | string> }
 ): Promise<ConstraintResult>;
 
 export function defineComputed(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   attrName: string,
   computeFn: ComputedFn,
@@ -478,6 +909,7 @@ export function defineComputed(
 ): Promise<void>;
 
 export function clearRegistry(): void;
+export function clearRegistry(runtime: OmRuntime): void | Promise<void>;
 
 // --- Existential rules (OM-024 ~ OM-027) ---
 
@@ -517,18 +949,18 @@ export interface ExistentialRule {
 }
 
 export function defineExistentialRule(
-  runner: CozoRunner,
+  runner: OmRunner,
   ruleName: string,
   spec: ExistentialRuleSpec
 ): Promise<ExistentialRule>;
 
-export function listExistentialRules(runner: CozoRunner): Promise<ExistentialRule[]>;
+export function listExistentialRules(runner: OmRunner): Promise<ExistentialRule[]>;
 
 /**
  * Drop the per-runner alias resolution cache. Required after seeding
  * om_alias_* rows directly (out-of-band renames) on a long-lived runner.
  */
-export function invalidateAliasCache(runner: CozoRunner): void;
+export function invalidateAliasCache(runner: OmRunner): void;
 
 export interface ExistentialViolation {
   rule: string;
@@ -537,7 +969,7 @@ export interface ExistentialViolation {
 }
 
 export function checkExistentialRules(
-  runner: CozoRunner,
+  runner: OmRunner,
   options?: { rules?: string[]; asOf?: string }
 ): Promise<ExistentialViolation[]>;
 
@@ -555,27 +987,27 @@ export interface ExistentialChaseResult {
 }
 
 export function applyExistentialRules(
-  runner: CozoRunner,
+  runner: OmRunner,
   options?: { rules?: string[]; maxIterations?: number; validTime?: string }
 ): Promise<ExistentialChaseResult>;
 
 export function validateRequiredProperties(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string
 ): Promise<string[]>;
 export function validateEntity(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string
 ): Promise<ValidationResult>;
-export function finalizeEntity(runner: CozoRunner, entityId: string): Promise<void>;
+export function finalizeEntity(runner: OmRunner, entityId: string): Promise<void>;
 
 export function getEntityView(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string
 ): Promise<EntityView | null>;
 
 export function getNeighbors(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   relName?: string,
   direction?: 'outgoing' | 'incoming' | 'both'
@@ -603,66 +1035,66 @@ export interface EdgeHistoryEntry {
 }
 
 export function getPropertyHistory(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   attrName: string,
   options?: HistoryRangeOptions
 ): Promise<PropertyHistoryEntry[]>;
 
 export function getPropertyAsOf(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   attrName: string,
   timestamp: string
 ): Promise<any | undefined>;
 
 export function getEntityViewAsOf(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   timestamp: string
 ): Promise<EntityView | null>;
 
 export function getNeighborsAsOf(
-  runner: CozoRunner,
+  runner: OmRunner,
   entityId: string,
   relName: string | null | undefined,
   timestamp: string
 ): Promise<NeighborResult>;
 
 export function getEdgeHistory(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   toId?: string,
   options?: HistoryRangeOptions
 ): Promise<EdgeHistoryEntry[]>;
 export function getEdgeHistory(
-  runner: CozoRunner,
+  runner: OmRunner,
   fromId: string,
   relName: string,
   options?: HistoryRangeOptions
 ): Promise<EdgeHistoryEntry[]>;
 
 export function traverse(
-  runner: CozoRunner,
+  runner: OmRunner,
   startId: string,
   relPath: string[]
 ): Promise<Array<{ id: string; typeName: string; label: string }>>;
 
 export function findByType(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   filter?: Record<string, any>,
   options?: FindByTypeOptions
 ): Promise<Array<{ id: string; label: string; properties: Record<string, any> }>>;
 
 export function getAttributeDefinitions(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string
 ): Promise<Map<string, AttributeDefinition>>;
 
 export function aggregateByType(
-  runner: CozoRunner,
+  runner: OmRunner,
   typeName: string,
   attrName: string,
   op: 'sum' | 'avg' | 'min' | 'max' | 'count',
@@ -670,7 +1102,7 @@ export function aggregateByType(
 ): Promise<number>;
 
 export function impactAnalysis(
-  runner: CozoRunner,
+  runner: OmRunner,
   input: {
     rootId: string;
     relNames?: string[];
@@ -698,7 +1130,7 @@ export function impactAnalysis(
 >>;
 
 export function ownershipTree(
-  runner: CozoRunner,
+  runner: OmRunner,
   input: {
     rootId: string;
     ownerRelNames?: string[];
@@ -726,7 +1158,7 @@ export function ownershipTree(
 >>;
 
 export function riskHotspot(
-  runner: CozoRunner,
+  runner: OmRunner,
   input?: {
     typeName?: string;
     riskAttr?: string;
@@ -759,7 +1191,7 @@ export function riskHotspot(
 >>;
 
 export function ingestBatch(
-  db: CozoDbLike,
+  db: OmDbLike,
   batch: BatchInput,
   options?: { validateRequired?: boolean }
 ): Promise<{ entities: number; properties: number; edges: number; validatedEntities: number }>;

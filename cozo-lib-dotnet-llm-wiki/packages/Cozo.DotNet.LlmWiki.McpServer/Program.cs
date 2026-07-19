@@ -2,10 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cozo.DotNet;
 using Cozo.DotNet.LlmWiki.Indexing;
+using Cozo.DotNet.LlmWiki.LlmClient;
 using Cozo.DotNet.LlmWiki.Server;
 using Cozo.DotNet.LlmWiki.Tools;
 using Cozo.DotNet.LlmWiki.Wiki;
 using Cozo.DotNet.Om;
+using Cozo.DotNet.Om.Depa;
 
 var app = new LlmWikiCli();
 return await app.RunAsync(args);
@@ -30,6 +32,9 @@ internal sealed class LlmWikiCli
             "serve" => await RunServeAsync(args.Skip(1).ToArray()),
             "mcp" => await RunMcpAsync(args.Skip(1).ToArray()),
             "index" => await RunIndexAsync(args.Skip(1).ToArray()),
+            "scan" => await RunScanAsync(args.Skip(1).ToArray()),
+            "export" => await RunExportAsync(args.Skip(1).ToArray()),
+            "ontology" => await RunOntologyAsync(args.Skip(1).ToArray()),
             "wiki" => await RunWikiAsync(args.Skip(1).ToArray()),
             "tools" => RunTools(),
             "call" => await RunCallAsync(args.Skip(1).ToArray()),
@@ -75,6 +80,242 @@ internal sealed class LlmWikiCli
         var summary = await new RepositoryIndexer().IndexAsync(om, LlmWikiCliOptions.IndexRequestFromOptions(options, repo));
         Console.WriteLine(JsonSerializer.Serialize(summary, LlmWikiJson.Options));
         return 0;
+    }
+
+    /// <summary>Explicitly materialize DEPA judgments. Export never invokes this unless --scan-first is supplied.</summary>
+    private static async Task<int> RunScanAsync(string[] args)
+    {
+        var options = LlmWikiCliOptions.Parse(args);
+        var repo = CozoWikiStorageOptions.FullPath(options.GetValueOrDefault("--repo", Directory.GetCurrentDirectory()));
+        var storage = CozoWikiStorageOptions.From(options, repo, createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        var report = await om.GetConformanceReportAsync(new DepaConformanceOptions(
+            ScanFirst: true,
+            MapPath: ResolveDepaConfigPath(repo, options.GetValueOrDefault("--map-path"), "depa-map.json"),
+            EffectsPath: ResolveDepaConfigPath(repo, options.GetValueOrDefault("--effects-path"), "depa-effects.json")));
+        Console.WriteLine(JsonSerializer.Serialize(report, LlmWikiJson.Options));
+        return 0;
+    }
+
+    /// <summary>
+    /// Export has an intentionally narrow contract: it reads one existing database and writes one
+    /// empty output directory. --scan-first is the explicit opt-in that refreshes depa_* first.
+    /// </summary>
+    private static async Task<int> RunExportAsync(string[] args)
+    {
+        var options = LlmWikiCliOptions.Parse(args);
+        var format = options.GetValueOrDefault("--format", "");
+        var output = options.GetValueOrDefault("--out", "");
+        if (string.IsNullOrWhiteSpace(format) || string.IsNullOrWhiteSpace(output))
+        {
+            Console.Error.WriteLine("Usage: depa-wiki export --format runtime-snapshot|ontology-xml|wiki|business-ontology-xml --out <empty-dir> [--repo <path>] [--scan-first] [storage options]");
+            return 2;
+        }
+
+        var repo = CozoWikiStorageOptions.FullPath(options.GetValueOrDefault("--repo", Directory.GetCurrentDirectory()));
+        var storage = CozoWikiStorageOptions.From(options, repo, createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        if (format.Equals("business-ontology-xml", StringComparison.OrdinalIgnoreCase))
+        {
+            var ontologyId = options.GetValueOrDefault("--ontology-id", "");
+            if (string.IsNullOrWhiteSpace(ontologyId))
+            {
+                Console.Error.WriteLine("business-ontology-xml requires --ontology-id <PascalCase.Fqn>.");
+                return 2;
+            }
+            var businessStore = new BusinessOntologyStore(om);
+            var snapshots = new List<BusinessOntologySnapshot> { await businessStore.ReadExportableAsync(ontologyId) };
+            if (options.TryGetValue("--supplemental-db", out var supplementalPath))
+            {
+                using var supplementalDb = new CozoDb(storage.Engine, CozoWikiStorageOptions.FullPath(supplementalPath));
+                snapshots.Add(await new BusinessOntologyStore(new CozoOm(supplementalDb)).ReadExportableAsync(ontologyId));
+            }
+            var businessResult = await new BusinessOntologyXmlExporter(
+                businessStore,
+                new BusinessOntologyQualityReportBuilder(om, businessStore)).ExportAsync(
+                new BusinessOntologyXmlExportRequest(ontologyId, output, options.GetValueOrDefault("--ontology-version", "0.1.0")), snapshots);
+            Console.WriteLine(JsonSerializer.Serialize(businessResult, LlmWikiJson.Options));
+            return 0;
+        }
+        DepaConformanceReport? report = null;
+        if (options.GetValueOrDefault("--scan-first", "false") == "true")
+        {
+            report = await om.GetConformanceReportAsync(new DepaConformanceOptions(
+                ScanFirst: true,
+                MapPath: ResolveDepaConfigPath(repo, options.GetValueOrDefault("--map-path"), "depa-map.json"),
+                EffectsPath: ResolveDepaConfigPath(repo, options.GetValueOrDefault("--effects-path"), "depa-effects.json")));
+        }
+
+        var result = await new DepaOntologyExporter().ExportAsync(om, new DepaExportRequest(
+            format,
+            output,
+            options.GetValueOrDefault("--repo-key", Path.GetFileName(repo.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))),
+            repo,
+            options.GetValueOrDefault("--revision")), report);
+        Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+        return 0;
+    }
+
+    /// <summary>Explicit writer for the independent onto_* business ontology generation.</summary>
+    private static async Task<int> RunOntologyAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            PrintOntologyUsage();
+            return 2;
+        }
+        if (args[0] == "derive-semantics")
+        {
+            return await RunOntologyDeriveSemanticsAsync(args.Skip(1).ToArray());
+        }
+        if (args[0] == "purge")
+        {
+            return await RunOntologyPurgeAsync(args.Skip(1).ToArray());
+        }
+        if (args[0] == "review" && args.Length > 1 && args[1] == "apply")
+        {
+            return await RunOntologyReviewApplyAsync(args.Skip(2).ToArray());
+        }
+        if (args[0] != "derive")
+        {
+            PrintOntologyUsage();
+            return 2;
+        }
+
+        var options = LlmWikiCliOptions.Parse(args.Skip(1).ToArray());
+        var ontologyId = options.GetValueOrDefault("--ontology-id", "");
+        var generationId = options.GetValueOrDefault("--generation-id", "");
+        var fingerprint = options.GetValueOrDefault("--source-fingerprint", "");
+        if (string.IsNullOrWhiteSpace(ontologyId) || string.IsNullOrWhiteSpace(generationId) || string.IsNullOrWhiteSpace(fingerprint))
+        {
+            Console.Error.WriteLine("ontology derive requires --ontology-id, --generation-id and --source-fingerprint.");
+            return 2;
+        }
+        var repo = CozoWikiStorageOptions.FullPath(options.GetValueOrDefault("--repo", Directory.GetCurrentDirectory()));
+        var storage = CozoWikiStorageOptions.From(options, repo, createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        var result = await new BusinessOntologyCandidateDeriver(om, new BusinessOntologyStore(om)).DeriveAsync(new BusinessOntologyDerivationRequest(
+            ontologyId, generationId, fingerprint,
+            options.GetValueOrDefault("--created-at", DateTimeOffset.UtcNow.ToString("O")),
+            options.GetValueOrDefault("--generator-version", "onto-candidate-deriver/1")));
+        Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+        return 0;
+    }
+
+    private static async Task<int> RunOntologyDeriveSemanticsAsync(string[] args)
+    {
+        var options = LlmWikiCliOptions.Parse(args);
+        var request = BusinessOntologySemanticCli.ParseDeriveSemantics(options);
+        var storage = CozoWikiStorageOptions.From(
+            options,
+            request.RepositoryPath,
+            createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        var client = request.Mode == BusinessOntologySemanticProjectionModes.Assisted
+            ? LlmClientFactory.FromEnvironment()
+            : null;
+
+        CozoDb? corroborationDb = null;
+        try
+        {
+            CozoOm? corroborationOm = null;
+            if (request.CorroborationDatabasePath is not null)
+            {
+                corroborationDb = new CozoDb(storage.Engine, request.CorroborationDatabasePath);
+                corroborationOm = new CozoOm(corroborationDb);
+            }
+            var store = new BusinessOntologyStore(om);
+            var result = await new BusinessOntologySemanticCli(
+                om,
+                store,
+                client)
+                .DeriveSemanticsAsync(request, corroborationOm);
+            object output = result;
+            if (request.ExperimentOutputDirectory is not null)
+            {
+                var export = await new BusinessOntologyXmlExporter(
+                    store,
+                    new BusinessOntologyQualityReportBuilder(om, store))
+                    .ExportAsync(new BusinessOntologyXmlExportRequest(
+                        request.OntologyId,
+                        request.ExperimentOutputDirectory));
+                var manifestPath = Path.Combine(export.OutputDirectory, "generation", "experiment.json");
+                var manifest = new
+                {
+                    schemaVersion = "onto-semantic-experiment-v1",
+                    experiment = request.Experiment,
+                    request.OntologyId,
+                    request.GenerationId,
+                    request.SourceFingerprint,
+                    request.GeneratorVersion,
+                    model = Environment.GetEnvironmentVariable("DEPA_WIKI_LLM_MODEL") ?? "gpt-5.6-terra",
+                    result.Experiment,
+                };
+                await File.WriteAllTextAsync(
+                    manifestPath,
+                    JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+                output = new { projection = result, export, experimentManifest = manifestPath };
+            }
+            Console.WriteLine(JsonSerializer.Serialize(output, LlmWikiJson.Options));
+            return 0;
+        }
+        finally
+        {
+            corroborationDb?.Dispose();
+        }
+    }
+
+    private static async Task<int> RunOntologyPurgeAsync(string[] args)
+    {
+        var options = LlmWikiCliOptions.Parse(args);
+        var request = BusinessOntologySemanticCli.ParsePurge(options);
+        var repo = CozoWikiStorageOptions.FullPath(
+            options.GetValueOrDefault("--repo", Directory.GetCurrentDirectory()));
+        var storage = CozoWikiStorageOptions.From(options, repo, createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        var result = await new BusinessOntologySemanticCli(
+            om,
+            new BusinessOntologyStore(om))
+            .PurgeAsync(request);
+        Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+        return 0;
+    }
+
+    private static async Task<int> RunOntologyReviewApplyAsync(string[] args)
+    {
+        var options = LlmWikiCliOptions.Parse(args);
+        var request = BusinessOntologySemanticCli.ParseReviewApply(options);
+        var repo = CozoWikiStorageOptions.FullPath(
+            options.GetValueOrDefault("--repo", Directory.GetCurrentDirectory()));
+        var storage = CozoWikiStorageOptions.From(options, repo, createDirectories: false);
+        EnsureExistingDatabase(storage);
+        using var db = new CozoDb(storage.Engine, storage.DbPath);
+        var om = new CozoOm(db);
+        var result = await new BusinessOntologySemanticCli(
+            om,
+            new BusinessOntologyStore(om))
+            .ApplyReviewAsync(request);
+        Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+        return 0;
+    }
+
+    private static void PrintOntologyUsage()
+    {
+        Console.Error.WriteLine("Usage:");
+        Console.Error.WriteLine("  depa-wiki ontology derive --ontology-id <PascalCase.Fqn> --generation-id <id> --source-fingerprint <fingerprint> [--created-at <RFC3339>] [--repo <path>] [storage options]");
+        Console.Error.WriteLine("  depa-wiki ontology derive-semantics --ontology-id <PascalCase.Fqn> --generation-id <id> --source-fingerprint <fingerprint> --repo <path> --mode deterministic|assisted [--experiment v2|v3 --max-slices <1..8> --experiment-out <empty-directory>] [--corroboration-db <db> --corroboration-repo <path>] [storage options]");
+        Console.Error.WriteLine("  depa-wiki ontology purge --ontology-id <PascalCase.Fqn> --generation-id <id> --reason <audit-reason> [--repo <path>] [storage options]");
+        Console.Error.WriteLine("  depa-wiki ontology review apply --ontology-id <PascalCase.Fqn> --decisions <file> [--repo <path>] [storage options]");
     }
 
     /// <summary>
@@ -137,7 +378,7 @@ internal sealed class LlmWikiCli
     {
         if (args.Length == 0 || args[0].StartsWith("--", StringComparison.Ordinal))
         {
-            Console.Error.WriteLine("Usage: depa-wiki call <tool-name> [--arguments-json json] [--tool-arg value] [storage options]");
+            Console.Error.WriteLine("Usage: depa-wiki call <tool-name> [--arguments-json|--args json] [--tool-arg value] [storage options]");
             return 2;
         }
 
@@ -146,9 +387,17 @@ internal sealed class LlmWikiCli
         var storage = CozoWikiStorageOptions.From(options, Directory.GetCurrentDirectory());
         using var db = new CozoDb(storage.Engine, storage.DbPath);
         var runner = new LlmWikiToolRunner(new CozoOm(db));
-        var result = await runner.CallAsync(toolName, LlmWikiCliOptions.ToolArguments(options));
-        Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
-        return 0;
+        try
+        {
+            var result = await runner.CallAsync(toolName, LlmWikiCliOptions.ToolArguments(options));
+            Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+            return 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or JsonException)
+        {
+            Console.Error.WriteLine(new JsonObject { ["error"] = ex.Message }.ToJsonString(LlmWikiJson.Options));
+            return 2;
+        }
     }
 
     private static async Task<int> RunServeAsync(string[] args)
@@ -172,10 +421,17 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  depa-wiki --serve [options]");
         Console.Error.WriteLine("  depa-wiki serve [options]");
         Console.Error.WriteLine("  depa-wiki mcp --stdio [options]");
-        Console.Error.WriteLine("  depa-wiki index --repo <path> [options]");
+        Console.Error.WriteLine("  depa-wiki index --repo <path> [--reindex] [options]");
+        Console.Error.WriteLine("  depa-wiki scan --repo <path> [--map-path <path>] [--effects-path <path>] [options]");
+        Console.Error.WriteLine("  depa-wiki export --format runtime-snapshot|ontology-xml|wiki|business-ontology-xml --out <empty-dir> [--ontology-id <Fqn>] [--supplemental-db <db>] [--repo <path>] [--scan-first] [options]");
+        Console.Error.WriteLine("  depa-wiki ontology derive --ontology-id <Fqn> --generation-id <id> --source-fingerprint <fingerprint> [--repo <path>] [options]");
+        Console.Error.WriteLine("  depa-wiki ontology derive-semantics --ontology-id <Fqn> --generation-id <id> --source-fingerprint <fingerprint> --repo <path> --mode deterministic|assisted [--corroboration-db <db> --corroboration-repo <path>] [options]");
+        Console.Error.WriteLine("    assisted Codex CLI: DEPA_WIKI_LLM_PROVIDER=codex-cli [DEPA_WIKI_CODEX_CLI_PATH=<path>] [DEPA_WIKI_LLM_MODEL=<model>] [DEPA_WIKI_LLM_TIMEOUT_SECONDS=<seconds>] [DEPA_WIKI_CODEX_CLI_MODEL_PROVIDER=<name> DEPA_WIKI_CODEX_CLI_BASE_URL=<url> DEPA_WIKI_CODEX_CLI_WIRE_API=responses]");
+        Console.Error.WriteLine("  depa-wiki ontology purge --ontology-id <Fqn> --generation-id <id> --reason <audit-reason> [--repo <path>] [options]");
+        Console.Error.WriteLine("  depa-wiki ontology review apply --ontology-id <Fqn> --decisions <file> [--repo <path>] [options]");
         Console.Error.WriteLine("  depa-wiki wiki --repo <path> --out <dir> [--pipeline legacy|codument-fractal] [options]");
         Console.Error.WriteLine("  depa-wiki tools");
-        Console.Error.WriteLine("  depa-wiki call <tool-name> [--arguments-json json] [--tool-arg value] [options]");
+        Console.Error.WriteLine("  depa-wiki call <tool-name> [--arguments-json|--args json] [--tool-arg value] [options]");
         Console.Error.WriteLine("  depa-wiki hook augment [--budget <chars>] [options]   (Claude Code PostToolUse hook: stdin JSON -> graph context)");
         Console.Error.WriteLine("  depa-wiki hook staleness [options]                    (Claude Code SessionStart hook: index-behind-HEAD hint)");
         Console.Error.WriteLine("  depa-wiki hooks install|uninstall|status [--work-dir <path>]  (manage the hook entries in <work-dir>/.claude/settings.json, merge-safe)");
@@ -204,6 +460,13 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  --use-llm true|false                codument-fractal only: use the configured LLM backend. Default: true, degrading to the pure structure layer when unavailable.");
         Console.Error.WriteLine("  --force                             codument-fractal only: ignore the page-level incremental cache and rebuild every page.");
         Console.Error.WriteLine();
+        Console.Error.WriteLine("DEPA export options:");
+        Console.Error.WriteLine("  --scan-first                        Explicitly run depa_scan before export so the artifact includes current PASS/GAP/BLOCKED report rows.");
+        Console.Error.WriteLine("  --repo-key <key>                    Stable repository key recorded in evidence. Default: repository directory name.");
+        Console.Error.WriteLine("  --revision <revision>               Source revision recorded in generated evidence.");
+        Console.Error.WriteLine("  --map-path <path>                   Explicit depa-map.json for scan/--scan-first.");
+        Console.Error.WriteLine("  --effects-path <path>               Explicit depa-effects.json for scan/--scan-first.");
+        Console.Error.WriteLine();
         Console.Error.WriteLine("Serve options:");
         Console.Error.WriteLine("  --serve                    Start local HTTP server mode.");
         Console.Error.WriteLine("  --host <host>              Server host. Default: 127.0.0.1.");
@@ -216,6 +479,8 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  depa-wiki --serve --work-dir ~/path/to/my/project --port 4176 --static-dir ./cozo-lib-dotnet-llm-wiki-viz/dist");
         Console.Error.WriteLine("  depa-wiki mcp --stdio");
         Console.Error.WriteLine("  depa-wiki index --repo ~/path/to/my/project");
+        Console.Error.WriteLine("  depa-wiki scan --repo ~/path/to/my/project");
+        Console.Error.WriteLine("  depa-wiki export --repo ~/path/to/my/project --format ontology-xml --out ~/exports/project-ontology --scan-first");
         Console.Error.WriteLine("  depa-wiki wiki --repo ~/path/to/my/project --out ~/path/to/my/project/.llm-wiki");
         Console.Error.WriteLine("  depa-wiki mcp --stdio --work-dir ~/path/to/my/project");
         Console.Error.WriteLine("  depa-wiki mcp --stdio --engine mem");
@@ -226,6 +491,23 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  depa-wiki call semantic_search --work-dir ~/path/to/my/project --query SampleService --limit 5 --source-kinds code,docs");
         Console.Error.WriteLine("  depa-wiki call overview_graph --work-dir ~/path/to/my/project --categories code,docs --max-nodes 400 --max-edges 900");
         Console.Error.WriteLine("  depa-wiki call query_named --work-dir ~/path/to/my/project --name code_impact --parameters-json '{\"symbolId\":\"...\"}'");
+    }
+
+    private static void EnsureExistingDatabase(CozoWikiStorageOptions storage)
+    {
+        if (!string.Equals(storage.Engine, "mem", StringComparison.Ordinal) && !File.Exists(storage.DbPath))
+        {
+            throw new FileNotFoundException("Selected Cozo database does not exist. Run depa-wiki index first or pass --db to an existing database.", storage.DbPath);
+        }
+    }
+
+    private static string? ResolveDepaConfigPath(string repo, string? explicitPath, string name)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitPath)) return CozoWikiStorageOptions.FullPath(explicitPath);
+        var direct = Path.Combine(repo, name);
+        if (File.Exists(direct)) return direct;
+        var nested = Path.Combine(repo, ".codument", name);
+        return File.Exists(nested) ? nested : null;
     }
 }
 

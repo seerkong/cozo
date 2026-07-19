@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="runtime-portability-verification" version="1">
+  <upsert selector="behavior://runtime-portability-verification/requirements/g15-g17-cross-runtime-audit">
+    <requirement id="g15-g17-cross-runtime-audit">
+      <statement>The project SHALL independently verify G15-G17 with executable Bun and .NET evidence, preserving only the frozen D6-D8 intentional boundaries.</statement>
+      <suite id="runtime-lifecycle" name="G15 runtime lifecycle">
+        <case id="registry-owner-and-clear">
+          <given>the completed registry lifecycle track and separate Bun and .NET OM runtime instances</given>
+          <when>the verifier exercises registration, clear/reset, isolation, and in-flight callback observation</when>
+          <then>each runtime SHALL retain instance-local callback facts while persisted definitions and binding identities remain intact</then>
+        </case>
+      </suite>
+      <suite id="behavior-portability" name="G16 behavior portability">
+        <case id="canonical-manifest-readiness">
+          <given>the completed Bun portability track and the C# V1 catalog contract</given>
+          <when>the verifier evaluates manifest round-trip, binding identity, restart, rebind, unresolved, and ready states</when>
+          <then>both implementations SHALL expose compatible durable metadata and fail closed for unresolved executable callbacks</then>
+        </case>
+      </suite>
+      <suite id="behavior-schema-versioning" name="G17 behavior schema versioning">
+        <case id="snapshot-diff-rollback">
+          <given>a Bun behavior-aware schema snapshot and a legacy snapshot lacking its behavior section</given>
+          <when>the verifier evaluates snapshot, keyed diff, migration, rollback, readiness reprojection, and D8 policies</when>
+          <then>all persisted behavior relations and binding identities SHALL be covered without persisting executable source, and the legacy default SHALL reject with zero effects</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

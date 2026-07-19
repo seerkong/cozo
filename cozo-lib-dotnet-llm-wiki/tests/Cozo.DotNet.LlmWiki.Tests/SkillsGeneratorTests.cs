@@ -245,9 +245,12 @@ internal static class SkillsGeneratorTests
                 "explain_relation", "parser_status", "parse_file", "index_embeddings", "semantic_search",
                 "overview_graph", "query_named", "trace", "check", "detect_changes",
                 "depa_conformance", "fact_grade_map", "health_score",
+                "ontology_investigation_overview", "find_business_terms", "list_use_case_slices",
+                "get_use_case_slice", "find_semantic_patterns", "get_semantic_evidence", "inspect_ontology_subject",
+                "run_business_ontology_agent",
             ];
             assert(toolMatrix.All(tool => exploring.Contains($"`{tool}`", StringComparison.Ordinal)),
-                "workflow-skills: depa-wiki-exploring should list the full 18-tool matrix");
+                "workflow-skills: depa-wiki-exploring should list the full 26-tool matrix");
             var impact = await File.ReadAllTextAsync(Path.Combine(target, "depa-wiki-impact", "SKILL.md"));
             assert(FrontmatterFields(SplitFrontmatter(impact)!.Value.Frontmatter).GetValueOrDefault("name") == "depa-wiki-impact"
                     && impact.Contains("impact_of_change", StringComparison.Ordinal)

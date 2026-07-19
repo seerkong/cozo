@@ -1,0 +1,48 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/codex-cli-semantic-assist">
+    <requirement id="codex-cli-semantic-assist">
+      <statement>系统 SHALL 支持以 `DEPA_WIKI_LLM_PROVIDER=codex-cli` 将本机 `codex exec` 作为 `ILlmClient` completion transport，用于 `ontology derive-semantics --mode assisted`；该 transport SHALL 在受控临时工作目录中只接收已裁剪的 prompt/evidence，并保持本地候选校验、pending 状态、显式 review 与 materialization 门禁不变。</statement>
+      <suite id="provider-selection" name="Provider 选择与降级">
+        <case id="codex-cli-available">
+          <given>`DEPA_WIKI_LLM_PROVIDER=codex-cli` 且指定或 PATH 中的可执行文件可解析</given>
+          <when>factory 构造 LLM client</when>
+          <then>系统 SHALL 返回可用的 Codex CLI client，且不要求 HTTP API key；当 `DEPA_WIKI_LLM_MODEL` 未配置时 SHALL 使用 `gpt-5.6-terra`，显式配置或单次请求 model 可覆盖该默认值</then>
+        </case>
+        <case id="codex-cli-unavailable">
+          <given>选择 `codex-cli` 但可执行文件不存在、不可执行或配置无效</given>
+          <when>factory 构造 LLM client 或 semantic CLI 请求 assisted mode</when>
+          <then>系统 SHALL 返回或报告带可操作、有界原因的 unavailable client，并在任何 onto 写入前失败</then>
+        </case>
+      </suite>
+      <suite id="process-boundary" name="进程边界">
+        <case id="isolated-exec">
+          <given>Codex CLI client 收到 system prompt 与 user evidence prompt</given>
+          <when>执行 completion</when>
+          <then>系统 SHALL 用非 shell 参数调用 `codex exec`，在新建空临时 cwd 中使用 ephemeral、read-only sandbox、忽略 user config/rules、skip-git-repo-check 与 output-schema，且不得将目标仓库作为 cwd 或 add-dir</then>
+        </case>
+        <case id="bounded-cancellation-and-failure">
+          <given>CLI 超时、取消、非零退出、空 final message 或超过输出/错误边界</given>
+          <when>执行 completion</when>
+          <then>系统 SHALL 终止该进程树、清理临时文件，并以不含完整 prompt/secret 的有界 `LlmException` 失败</then>
+        </case>
+        <case id="sealed-child-environment-and-private-temp">
+          <given>Codex CLI client 启动子进程并在临时目录保存 schema/final message</given>
+          <when>构造 child process environment 与临时工作目录</when>
+          <then>系统 SHALL 仅传递运行 Codex 所需的最小非秘密环境 allowlist，MUST NOT 传递 LLM API keys 或任意宿主环境变量；Unix 临时目录 SHALL 显式为 owner-only，Windows SHALL 使用仅当前用户 ACL，无法建立私有目录时 MUST 在启动 CLI 前失败</then>
+        </case>
+      </suite>
+      <suite id="semantic-governance" name="语义治理不变式">
+        <case id="local-validation-remains-authoritative">
+          <given>Codex CLI 返回 JSON proposal</given>
+          <when>semantic assisted projection 处理结果</when>
+          <then>系统 SHALL 继续执行既有 JSON envelope、canonical id、evidence reference 和 candidate schema 的本地校验；CLI/model/response 不得成为 BusinessOntologyEvidence</then>
+        </case>
+        <case id="pending-review-gate-remains">
+          <given>Codex CLI proposal 通过本地校验</given>
+          <when>写入 onto candidate generation</when>
+          <then>系统 SHALL 只创建 `pending` candidate；没有显式 accepted review 时不得 materialize 或导出为确认的 relation、rule、lifecycle、state 或 transition</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

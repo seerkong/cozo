@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-om-behavior-portability" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 C# OM 提供可版本化、可诊断、fail-closed 的行为定义导出、导入与 callback readiness 能力。</Goal>
+    <Description>以 JSON 为规范 manifest、YAML 为适配层，显式分离持久 metadata 与可执行 callback 状态，并提供 unresolved 导入与 requireReady 原子导入。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <gap-round>2</gap-round>
+    <CreatedAt>2026-07-16T20:18:53Z</CreatedAt>
+    <UpdatedAt>2026-07-17T01:12:00Z</UpdatedAt>
+    <cdt:Risks>
+      <cdt:Risk>导入 metadata 后缺失 callback 可能造成行为看似存在但运行时不可执行。</cdt:Risk>
+      <cdt:Risk>严格导入若非原子会留下部分 metadata、binding 或 readiness 状态。</cdt:Risk>
+      <cdt:Risk>JSON/YAML 双入口若各自解释语义会产生不可预测差异。</cdt:Risk>
+    </cdt:Risks>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="yaml-adapter" domain="source" path="vfs://@/cozo-lib-dotnet/packages/Om.Portability.Yaml/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-om-behavior-portability" name="add-dotnet-om-behavior-portability" version="1">
+    <Description>Add a portable behavior catalog and manifest boundary without embedding a script engine in Om.Core.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="定义 behavior catalog 与 JSON contract" status="DONE" order="0">
+        <Description>建立版本化数据模型、稳定排序和 canonical JSON codec。</Description>
+        <SubNodes>
+          <Task id="T1.0" name="实现 binding schema 与重启基线" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>以失败测试起步，完成 binding relation、schema snapshot/restore、旧库 additive init，以及进程重启后 binding identity 持久而 readiness 派生 unresolved 的绿色 vertical slice。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.0-AC1" checked="true">测试证明 binding identity 可跨进程持久，而 executable readiness 在空 registry 重启后派生为 unresolved。</cdt:Criterion>
+              <cdt:Criterion id="T1.0-AC2" checked="true">新增 relation 纳入 init、schema snapshot/restore 与旧库 additive compatibility。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.1" name="实现 behavior catalog、持久 binding identity 与 readiness projection" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>增加 om_behavior_binding 真源；键覆盖 kind/owner/name/callback-slot/phase/seq，持久 binding id，但 ready/unresolved 从 binding 表与当前 immutable registry snapshot 派生。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">Catalog 是纯可序列化数据，且不序列化 delegate。</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">Constraint when/then、computed、action、mutation 与 keyed interceptor callback identity 均可持久、导出并在重启后诚实显示 unresolved。</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">Interceptor identity 精确保留 (owner, action, phase, seq)，稀疏 seq 使用 max+1 而非 list.Count。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 versioned canonical JSON export/import codec" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>提供 deterministic ordering、明确版本和结构化 decode diagnostics。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">同一 catalog 重复导出字节稳定，round-trip 语义等价。</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">未知版本、未知 kind 与非法 key 产生结构化错误。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="修复 binding identity readiness 与公开模型不可变性" ownerAccount="agent:impl" status="DONE" order="3" priority="P0">
+            <Description>响应 P1 coding attractor：registry snapshot 携带 callback binding id，catalog 只有在持久 binding id 与 snapshot identity 精确匹配时投影 Ready；公开 catalog/decode collections 使用真实不可变值并防御调用方可变集合。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">相同 behavior key 但 binding id 不匹配时保持 unresolved，精确 identity rebind 后才 ready。</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC2" checked="true">Catalog、entry callbacks 与 decode diagnostics 不暴露可变集合，源集合后续修改不改变已构造值。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="实现导入、readiness 与 YAML adapter" status="DONE" order="1">
+        <Description>把 manifest 应用到 metadata/runtime，缺失 callback 时显式 unresolved 并 fail closed。</Description>
+        <SubNodes>
+          <Task id="T2.0" name="实现 unresolved 诊断与全入口 fail-closed vertical slice" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>建立公开结构化 unresolved diagnostic/exception，并以失败测试覆盖 constraint、computed direct/entity-view/as-of、action/parent、mutation 与 exact interceptor；发现持久 binding 未在所用 snapshot 精确就绪时，在用户 callback 或写 effect 前 fail closed。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.0-AC1" checked="true">每个真实执行/读取入口都有 unresolved 失败断言，诊断包含 owner、kind、key、slot 与 binding id。</cdt:Criterion>
+              <cdt:Criterion id="T2.0-AC2" checked="true">Unresolved action、parent action、mutation 或 interceptor 在 callback 与持久写 effect 前失败，原有 native/unbound 行为保持兼容。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.1" name="实现 runtime gate 与一致 snapshot resolution" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>在 P1 immutable registry snapshot 基座上增加 runtime gate；catalog/readiness resolve 与 import publish 共用 gate，行为执行在 gate 内捕获一个 metadata/registry resolution，再在释放 gate 后调用异步用户代码。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">Constraint evaluation、computed direct/as-of、action/parent action、mutation 和 interceptor collection 均使用一致 readiness gate。</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">合法 typed callbacks 保持现有 API；unresolved 行为不静默跳过、回落或假装未定义。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现 staged permissive 与 requireReady 原子导入" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>完整 preflight 后在 registry clone 上 staging；runtime gate 内提交持久事务并原子发布 registry snapshot。发布失败则在 gate 内恢复 DB snapshot，补偿失败聚合原始错误。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">默认导入返回 unresolved diagnostics 且不把行为标为可执行。</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">requireReady 的 preflight/persist/publish 任一失败后 metadata、binding relation、registry 与 readiness 均恢复。</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC3" checked="true">Publish 与 rollback-compensation 失败同时保留原始及补偿错误，不宣称原子成功。</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC4" checked="true">并发读只观察完整 pre-import 或 post-import 状态，不观察 split metadata/registry 状态。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="实现独立 YAML adapter package" ownerAccount="agent:impl" status="DONE" order="3" priority="P1">
+            <Description>在 packages/Om.Portability.Yaml 固定 YamlDotNet 18.1.0；只把受限 YAML AST 转为 canonical catalog，限制输入大小/深度/节点数并拒绝多文档、自定义 tag、merge/危险 alias，不反序列化任意对象。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">Om.Core 不依赖 YamlDotNet；等价 JSON/YAML 进入同一 normalize/validate/import pipeline。</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">超限或不安全 YAML 在 catalog effect 前以结构化 diagnostic 拒绝。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.4" name="修复 constraint type 与 callback slot preflight 一致性" ownerAccount="agent:impl" status="DONE" order="4" priority="P0">
+            <Description>响应 P2 coding attractor：constraint import 在 effect 前校验 type/slot coherence；conditional、cross-entity、computed-dep 精确要求 when+then，custom 精确要求 validator，防止 RequireReady 假成功或运行时静默跳过。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.4-AC1" checked="true">缺失、额外或类型错配的 constraint slots 返回稳定结构化 preflight diagnostic，默认与 RequireReady 均不应用任何 effect。</cdt:Criterion>
+              <cdt:Criterion id="T2.4-AC2" checked="true">合法 conditional 和 custom manifests 导入后执行对应 callbacks，不静默跳过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.5" name="修复 stored property 绕过 computed readiness" ownerAccount="agent:impl" status="DONE" order="5" priority="P0">
+            <Description>响应 P2 coding attractor 第二轮：当实体已有与 computed attribute 同名的 stored value 时，direct、entity view、property as-of 和 entity view as-of 仍须先解析 effective computed definition 并验证持久 binding readiness；unresolved 不得提前返回、跳过或回落到 stored value。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.5-AC1" checked="true">四个 computed 读取入口在同名 stored value 存在时仍对 unresolved binding 抛出精确 BehaviorUnresolvedException。</cdt:Criterion>
+              <cdt:Criterion id="T2.5-AC2" checked="true">ready 或 unbound computed 保持既有 stored-value precedence，只有无 stored value 时才执行 compute callback。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="补齐重启、并发与补偿验证" status="DONE" order="2">
+        <Description>在前两 phase 的失败优先测试之上补齐跨进程与故障矩阵。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="完成重启与全入口 readiness 矩阵" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>重开同一 DB 验证 binding identity 保留而 readiness 回到 unresolved；覆盖所有行为入口与 parent/inheritance。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">五类行为与 constraint 双 slot 在重启/绑定前后均有确定断言。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="完成原子性与 interceptor key 故障矩阵" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>覆盖并发 pre/post 可见性、持久失败、publish 失败、补偿失败、稀疏/冲突 seq、unknown version/kind/key 与 JSON/YAML round-trip。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.2-AC1" checked="true">每个故障点都精确断言 metadata、binding relation、registry、readiness 和异常链。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="验证与收口" status="DONE" order="3">
+        <Description>运行完整 C# OM tests，检查 API/范围边界并形成实现证据。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="运行验证与边界审查" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>运行 build/tests/XML/diff，确认不引入 Jint 或 G9 facade。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T4.1-AC1" checked="true">所有可用验证退出 0，完成状态有命令证据。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="防止 import 覆盖并发 registry 写入" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>响应 P4 coding attractor：staged registry publication 必须以捕获的 pre-import snapshot 为 expected identity 做原子 CAS；若公开 registry API 在 import 期间成功发布了新 snapshot，import 应作为 publish conflict 失败、补偿持久 state，并保留并发写入。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">并发 registry writer 成功返回后不会被 import staged snapshot 覆盖；import 返回结构化 publish failure 并恢复 metadata/bindings。</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">冲突与无冲突 publication 都在 registry 写锁内原子判断/交换，现有补偿与 reader gate 语义保持。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.3" name="拒绝跨 kind manifest metadata" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>响应 P4 coding attractor：canonical decode/preflight 按 behavior kind 校验 metadata 字段矩阵，禁止 action/computed/mutation/interceptor 携带 constraintType/message，禁止 constraint 携带 description 或 interceptor key，禁止非 interceptor 携带 phase/seq；非法组合稳定诊断且零 effect。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.3-AC1" checked="true">每类非法跨 kind metadata 组合经 codec 与 import facade 产生稳定结构化 diagnostic，并保持四状态面不变。</cdt:Criterion>
+              <cdt:Criterion id="T4.3-AC2" checked="true">合法五类 canonical round-trip 字节与 metadata 语义不变，YAML 仍复用同一 validation pipeline。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks/>
+</Track>

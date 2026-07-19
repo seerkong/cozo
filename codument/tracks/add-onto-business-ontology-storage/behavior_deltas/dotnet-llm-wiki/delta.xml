@@ -1,0 +1,48 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/business-ontology-storage">
+    <requirement id="business-ontology-storage">
+      <statement>系统 SHALL 在 LlmWiki 层持久化独立的 `onto_*` 业务本体 generation state，覆盖业务概念、属性、关系、规则、生命周期、状态、迁移、实现映射、证据、候选和审查；该层 SHALL 与 `ck_*` 观察及 `depa_*` 判断隔离。</statement>
+      <suite id="schema-isolation" name="Schema 初始化与隔离">
+        <case id="initialize-onto-relations">
+          <given>一个新的 Cozo 数据库</given>
+          <when>业务本体存储初始化</when>
+          <then>系统 SHALL 创建规定的 `onto_*` relations，且不创建或修改 `depa_*` 判断实体</then>
+        </case>
+        <case id="preserve-observations">
+          <given>数据库已有 `ck_*` 观察行和任意 `depa_*` 行</given>
+          <when>初始化、写入或刷新一个 `onto_*` generation</when>
+          <then>系统 SHALL 不删除、不重写或重分类这些既有行</then>
+        </case>
+      </suite>
+      <suite id="semantic-integrity" name="语义与证据完整性">
+        <case id="persist-complete-graph">
+          <given>一组含概念、属性、关系、规则、生命周期、状态、迁移、映射及直接证据的业务语义输入</given>
+          <when>写入一个 generation</when>
+          <then>系统 SHALL 保留稳定 identity、中文说明、状态、grade、confidence 和所有 direct evidence references</then>
+        </case>
+        <case id="reject-invalid-evidence">
+          <given>证据包含绝对路径、非法 grade/confidence、缺失引用或 hypothesis 没有 inferred evidence</given>
+          <when>尝试写入或标记其 exportable</when>
+          <then>系统 SHALL 拒绝该输入并给出可定位诊断</then>
+        </case>
+        <case id="candidate-not-domain-fact">
+          <given>一个 pending 或 rejected 的业务候选</given>
+          <when>读取 exportable business ontology projection</when>
+          <then>系统 SHALL 保留候选供审查但不得将其作为可导出的业务声明返回</then>
+        </case>
+      </suite>
+      <suite id="generation-refresh" name="Generation 刷新">
+        <case id="deterministic-rerun">
+          <given>相同 ontology ID、输入 fingerprint 与语义输入</given>
+          <when>重复写入 generation</when>
+          <then>系统 SHALL 产生稳定 identities，且不累计重复语义或证据行</then>
+        </case>
+        <case id="scoped-replacement">
+          <given>两个 ontology ID 与同一 ontology 的旧 generation</given>
+          <when>提交该 ontology 的新 coherent generation</when>
+          <then>系统 SHALL 仅替换该 ontology 的旧生成行，保留另一 ontology、`ck_*`、`depa_*` 与有效审查历史</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

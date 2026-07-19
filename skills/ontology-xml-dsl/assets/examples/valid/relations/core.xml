@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RelationModule id="ExampleCatalog.Relations.Core">
+  <Relations>
+    <Relation id="ExampleCatalog.Relation.AssignedTo" name="assignedTo" from="ExampleCatalog.Record" to="ExampleCatalog.Person" directed="true" min="0" max="1" />
+    <Relation id="ExampleCatalog.Relation.Concerns" name="concerns" from="ExampleCatalog.OutboundOrder" to="ExampleCatalog.Record" directed="true" min="1" max="*" />
+  </Relations>
+</RelationModule>

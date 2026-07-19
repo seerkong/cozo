@@ -61,7 +61,7 @@ public sealed class GovernanceAccessRequest
 public static class OmServerEndpoints
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private const string IntegrityRuleName = "asset_must_have_owner";
+    private const string IntegrityRuleName = "resource_must_have_owner";
 
     public static async Task<object> SchemaStateAsync(OmServerState state)
     {
@@ -264,17 +264,17 @@ public static class OmServerEndpoints
     {
         await om.InitSchemaAsync();
         await om.DefineTypeAsync("User", "User");
-        await om.DefineTypeAsync("Asset", "Asset");
-        await om.DefineRelationAsync("owns", "User", "Asset");
+        await om.DefineTypeAsync("Resource", "Resource");
+        await om.DefineRelationAsync("owns", "User", "Resource");
         await om.DefineExistentialRuleAsync(
             IntegrityRuleName,
             new ExistentialRuleSpec(
-                new ExistentialForEachSpec("Asset"),
+                new ExistentialForEachSpec("Resource"),
                 new ExistentialExistsSpec("owns", ExistentialDirection.In, "User"),
                 new ExistentialMaterializeSpec("auto owner for {fromId}"),
                 ExistentialRuleMode.Materialize,
-                "Each asset must have an owner"));
-        await om.UpsertEntityAsync("asset:orphan-1", "Asset", "Orphan Asset 1");
-        await om.UpsertEntityAsync("asset:orphan-2", "Asset", "Orphan Asset 2");
+                "Each resource must have an owner"));
+        await om.UpsertEntityAsync("resource:unowned-1", "Resource", "Unowned Resource 1");
+        await om.UpsertEntityAsync("resource:unowned-2", "Resource", "Unowned Resource 2");
     }
 }

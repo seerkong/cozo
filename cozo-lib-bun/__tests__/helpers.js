@@ -16,19 +16,19 @@ async function createTestDb() {
 
 /**
  * Create a test DB with a standard type hierarchy pre-seeded:
- *   Asset (root)
- *     ├─ ITAsset
- *     │    ├─ Server
- *     │    └─ Laptop
- *     └─ Vehicle
+ *   Resource (root)
+ *     ├─ ExecutableResource
+ *     │    ├─ ApiService
+ *     │    └─ Worker
+ *     └─ Dataset
  */
 async function createTestDbWithHierarchy() {
   const { db } = await createTestDb();
-  await om.defineType(db, 'Asset', 'Asset');
-  await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
-  await om.defineType(db, 'Server', 'Server', { parentType: 'ITAsset' });
-  await om.defineType(db, 'Laptop', 'Laptop', { parentType: 'ITAsset' });
-  await om.defineType(db, 'Vehicle', 'Vehicle', { parentType: 'Asset' });
+  await om.defineType(db, 'Resource', 'Resource');
+  await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
+  await om.defineType(db, 'ApiService', 'ApiService', { parentType: 'ExecutableResource' });
+  await om.defineType(db, 'Worker', 'Worker', { parentType: 'ExecutableResource' });
+  await om.defineType(db, 'Dataset', 'Dataset', { parentType: 'Resource' });
   return { db, om };
 }
 

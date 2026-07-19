@@ -4,7 +4,7 @@
 
 > 本文是完整提示词（口径已对齐当前标准）。**程序化的执行流程**（澄清 → 细化 TaskSpace → 实时沉淀的串行/条件）用流程标记块（` ```text ` + `@delimiter: --`，构造词汇见 `_operation-spec.md`）表达；**说明、规则、背景、示例**用 Markdown，内嵌 XML 用 ```` ```xml ```` 围栏。
 >
-> 口径映射：旧 `codument-discuss` 的 phase 细化能力→`codument-discuss-phase`；`plan.xml`→`track.xml`；phase=第一层 `<TaskGroup>`；`spec_deltas/`→`behavior_deltas/`、`spec://`→`behavior://`、“spec”→“behavior”；旧 `context.md` 的"讨论记录"不再是独立产物，而是**落进 `track.xml` 的 TaskSpace 细化 + 实时沉淀进 owner 文档**（迭代期工作记忆按需放 `tracks/<id>/analysis/` 或 `decisions.md`）；`<gate_criteria>`→`<cdt:Gate>`、`<acceptance_criteria>`→`<cdt:Acceptance>`；并行调度标 `cdt:child-mode="dag"` 交给 `plan-track-wave`。
+> 口径映射：旧 `codument-discuss` 的 phase 细化能力→`codument-discuss-phase`；`plan.xml`→`track.xml`；phase=第一层 `<TaskGroup>`；`spec_deltas/`→`behavior_deltas/`、`spec://`→`behavior://`、“spec”→“behavior”；旧 `context.md` 的"讨论记录"不再是独立产物，而是**落进 `track.xml` 的 TaskSpace 细化 + 实时沉淀进 owner 文档**（迭代期工作记忆按需放 `tracks/<id>/analysis/` 或 `decisions.xnl`，旧 track 兼容 `decisions.md`）；`<gate_criteria>`→`<cdt:Gate>`、`<acceptance_criteria>`→`<cdt:Acceptance>`；并行调度标 `cdt:child-mode="dag"` 交给 `plan-track-wave`。
 
 ---
 
@@ -15,7 +15,7 @@
 discuss 同时承担两件事，缺一不可：
 
 1. **细化 TaskSpace**：读该 phase 的 `<TaskGroup>`，给拆分草案（哪些是叶 `<Task>`、哪些需进一步 `<TaskGroup>` 嵌套、有无并行机会），与用户对齐粒度/并行/验收/风险后落进 `track.xml`。
-2. **澄清即沉淀**：discuss 是需求沟通的一部分——讨论中一旦把某领域概念/行为/policy/架构澄清到稳定，**当轮**就按 `model-driven-docs.md` 路由收敛进 `docs/modeling`/`docs/impl`，而不是只留对话或拖到归档。这是补强 owner 文档新鲜度的关键动作。
+2. **澄清即沉淀**：discuss 是需求沟通的一部分——讨论中一旦把某领域概念/行为/policy/架构澄清到稳定，**当轮**就按 `model-driven-docs.md` 路由收敛进 `codument/modeling`/`codument/engineering`，而不是只留对话或拖到归档。这是补强 owner 文档新鲜度的关键动作。
 
 ---
 
@@ -79,7 +79,7 @@ discuss 同时承担两件事，缺一不可：
    - 输入物料（该 phase `<Ports><MaterialBundle role="input">`，如有声明）。
    - 现有调度（`cdt:child-mode`、`<Schedule><Dag>`，如有声明）。
 
-3. **读取迭代期工作记忆：** 若 `tracks/<id>/analysis/`、`decisions.md` 已存在，加载之前的分析/决策记录作为背景。
+3. **读取迭代期工作记忆：** 若 `tracks/<id>/analysis/`、`decisions.xnl` 已存在，加载之前的分析/决策记录作为背景；旧 track 兼容读取 `decisions.md`。
 
 ### 3.2 引导讨论（澄清 → 细化 → 实时沉淀）
 
@@ -160,14 +160,14 @@ discuss 同时承担两件事，缺一不可：
 </TaskGroup>
 ```
 
-> 旧产物对照：旧的 `context.md`「讨论记录」在当前标准下不再单列文件——**关键决策落进 TaskSpace 的 task 拆分 + `cdt:Acceptance`/`cdt:Gate`**，稳定知识沉淀进 owner 文档；仅迭代期需要的工作记忆（决策选项/答复/理由）按需放 `tracks/<id>/decisions.md` 或 `analysis/`。
+> 旧产物对照：旧的 `context.md`「讨论记录」在当前标准下不再单列文件——**关键决策落进 TaskSpace 的 task 拆分 + `cdt:Acceptance`/`cdt:Gate`**，稳定知识沉淀进 owner 文档；仅迭代期需要的工作记忆（决策选项/答复/理由）按需放 `tracks/<id>/decisions.xnl` 或 `analysis/`，旧 `decisions.md` 只作兼容 fallback。
 
 ### 3.4 实时沉淀稳定结论（澄清即沉淀）
 
-discuss 中一旦把某领域概念/行为/policy/架构澄清到**稳定**（将成为后续迭代依赖的基线），**当轮**就按 `knowledge-tiers.md` 晋升阶梯 + `model-driven-docs.md` 路由收敛进 owner 文档——不要只留对话、也不要拖到归档：
+discuss 中一旦把某领域概念/行为/policy/架构澄清到**稳定**（将成为后续迭代依赖的基线），**当轮**就按 `knowledge-tiers.md` 晋升阶梯 + `model-driven-docs.md` 路由收敛进 track delta——不要只留对话、也不要拖到归档：
 
-- **稳定领域知识**（概念/对象/字段语义/生命周期/policy/workflow/derived 建模） → `docs/modeling/`。
-- **稳定实现/运维知识**（架构、framework/runtime 约定、operations、howto/rules/reference/troubleshooting） → `docs/impl/`。
+- **稳定领域知识**（概念/对象/字段语义/生命周期/policy/workflow/derived 建模） → `codument/modeling/`。
+- **稳定实现/运维知识**（架构、framework/runtime 约定、operations、howto/rules/reference/troubleshooting） → `codument/engineering/`。
 - **对外行为新增/变更** → 记进 `behavior_deltas/`（归档时应用进 `behaviors/` 登记表）。
 - **承重的一次性决策** → `decisions/`（`decision://`）。
 
@@ -175,24 +175,24 @@ discuss 中一旦把某领域概念/行为/policy/架构澄清到**稳定**（�
 @delimiter: --
 -- #switch ?promote on="本轮澄清出的知识类型与稳定度"
 ---- #case ?modeling when="领域概念/对象/字段语义/生命周期/policy/workflow 已稳定"
-据 model-driven-docs 路由表写最小正确文档进 docs/modeling/**，维护 frontmatter（last_verified）
+写入 modeling_deltas/<plane>/<context>.xnl，并运行 codument modeling validate --deltas <track-id>
 ---- /?modeling
----- #case ?impl when="架构/约定/operations/排障知识已稳定"
-写进 docs/impl/<plane>/{overview|howto|rules|reference|troubleshooting}/**，维护 frontmatter
----- /?impl
+---- #case ?engineering when="架构/约定/operations/排障知识已稳定"
+写入 engineering_deltas/<plane>/<category>.xnl，并运行 codument engineering validate --deltas <track-id>
+---- /?engineering
 ---- #case ?behavior when="对外行为新增/变更"
 记进 behavior_deltas/<cap>/delta.xml（<behavior-patch>），归档时提升进 behaviors/
 ---- /?behavior
 ---- #case ?decision when="一次性取舍变为以后都按此来的承重决策"
-落 tracks/<id>/decisions.md（archive-ready 的进 decisions/，可提升 decision://）
+落 tracks/<id>/decisions.xnl（archive-ready 的标 `durable_candidate = true`，旧 track 可兼容 decisions/，可提升 decision://）
 ---- /?decision
 ---- #default ?unstable
-未稳定的猜测/被否决方案 → 留 track（analysis/decisions.md），不污染 owner 文档
+未稳定的猜测/被否决方案 → 留 track（analysis/ 或 decisions.xnl），不污染 owner 文档
 ---- /?unstable
 -- /?promote
 ```
 
-> 晋升判定细则（落 `docs/` 还是 behaviors/decisions/memory、何时晋升、触发条件）见 `codument/std/attractors/knowledge-tiers.md` §4–§5；docs profile 未启用时，仅记 track 待归档兜底，不强行写 `docs/`。
+> 晋升判定细则（落 modeling/engineering registry 还是 behaviors/decisions/memory、何时晋升、触发条件）见 `codument/std/attractors/knowledge-tiers.md` §4–§5；对应 profile 未启用时，仅记 track 待归档兜底，不强行创建 registry。
 
 ---
 
@@ -211,4 +211,4 @@ discuss 中一旦把某领域概念/行为/policy/架构澄清到**稳定**（�
 - `codument/std/operations/plan-track-wave.md`（`cdt:child-mode=dag` 层的依赖边声明）
 - `codument/std/sop/questioning.md`（ask-single-question-free / -closed / ask-multi-question-free）
 - `codument/std/attractors/knowledge-tiers.md`（晋升阶梯、真源优先级）
-- `codument/std/attractors/model-driven-docs.md`（docs/modeling 与 docs/impl 路由、frontmatter）
+- `codument/std/attractors/model-driven-docs.md`（codument/modeling 与 codument/engineering 路由、XNL schema）

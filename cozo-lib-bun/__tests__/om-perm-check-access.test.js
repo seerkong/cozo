@@ -7,11 +7,11 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
     const { db, om } = await createTestDb();
     try {
       await om.defineType(db, 'User', 'User');
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineRelation(db, 'owns', 'User', 'Asset', true);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineRelation(db, 'owns', 'User', 'Resource', true);
 
       await om.createEntity(db, 'u:1', 'User', 'User 1');
-      await om.createEntity(db, 'a:1', 'Asset', 'Asset 1');
+      await om.createEntity(db, 'a:1', 'Resource', 'Resource 1');
       await om.linkEntities(db, 'u:1', 'owns', 'a:1');
 
       await om.seedPermissionMetadata(db, {
@@ -20,7 +20,7 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
             policy_id: 'pol:allow:owns',
             effect: 'allow',
             action: 'read',
-            resource_type: 'Asset',
+            resource_type: 'Resource',
             enabled: true,
             description: 'Allow read when owns',
           },
@@ -53,13 +53,13 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
     const { db, om } = await createTestDb();
     try {
       await om.defineType(db, 'User', 'User');
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineRelation(db, 'owns', 'User', 'Asset', true);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineRelation(db, 'owns', 'User', 'Resource', true);
       await om.defineAttribute(db, 'User', 'role', 'String', false);
       await om.defineAttribute(db, 'User', 'location', 'String', false);
 
       await om.createEntity(db, 'u:1', 'User', 'User 1');
-      await om.createEntity(db, 'a:1', 'Asset', 'Asset 1');
+      await om.createEntity(db, 'a:1', 'Resource', 'Resource 1');
       await om.linkEntities(db, 'u:1', 'owns', 'a:1');
 
       await om.seedPermissionMetadata(db, {
@@ -68,7 +68,7 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
             policy_id: 'pol:allow:admin',
             effect: 'allow',
             action: 'read',
-            resource_type: 'Asset',
+            resource_type: 'Resource',
             enabled: true,
             description: 'Allow admin',
           },
@@ -76,7 +76,7 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
             policy_id: 'pol:deny:not-hq',
             effect: 'deny',
             action: 'read',
-            resource_type: 'Asset',
+            resource_type: 'Resource',
             enabled: true,
             description: 'Deny if not HQ',
           },
@@ -111,11 +111,11 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
     const { db, om } = await createTestDb();
     try {
       await om.defineType(db, 'User', 'User');
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineRelation(db, 'owns', 'User', 'Asset', true);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineRelation(db, 'owns', 'User', 'Resource', true);
 
       await om.createEntity(db, 'u:1', 'User', 'User 1');
-      await om.createEntity(db, 'a:1', 'Asset', 'Asset 1');
+      await om.createEntity(db, 'a:1', 'Resource', 'Resource 1');
       await om.linkEntities(db, 'u:1', 'owns', 'a:1');
 
       await om.seedPermissionMetadata(db, {
@@ -124,7 +124,7 @@ describe('P3/WAVE-P3-02 (T3.2): checkAccess (hybrid path + ABAC) + explanation',
             policy_id: 'pol:allow:hide-secret',
             effect: 'allow',
             action: 'read',
-            resource_type: 'Asset',
+            resource_type: 'Resource',
             enabled: true,
             description: 'Allow but hide secret',
           },

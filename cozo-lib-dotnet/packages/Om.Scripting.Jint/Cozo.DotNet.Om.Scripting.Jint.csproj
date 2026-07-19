@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Cozo.DotNet.Om.Scripting.Jint</PackageId>
+    <Version>0.7.6</Version>
+    <Authors>Ziyang Hu</Authors>
+    <Description>Optional Jint adapter for Cozo .NET OM behavior callbacks.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/cozodb/cozo</RepositoryUrl>
+    <PackageProjectUrl>https://www.cozodb.org</PackageProjectUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Cozo.DotNet.csproj" />
+    <PackageReference Include="Jint" Version="4.13.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-llm-wiki-java-call-resolution" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>补齐 Java typed binding、import/package scope 与继承调用消解</Goal>
+    <Description>Parent mission G3 track；复用共享 CallResolver，不引入 Java compiler。</Description>
+    <QuestionMode>decision-tree</QuestionMode><QuestionSeverity>auto</QuestionSeverity><CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-16T16:50:13Z</CreatedAt><UpdatedAt>2026-07-16T17:09:04Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="output" name="indexing" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/" />
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/" />
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-java-call-resolution" name="add-dotnet-llm-wiki-java-call-resolution" version="1">
+    <SubNodes>
+      <TaskGroup id="P1" name="Java resolver contracts" status="DONE" order="0">
+        <SubNodes><Task id="T1.1" name="锁定 Java 调用消解行为" status="DONE" order="0" priority="P0"><SubNodes>
+          <Task id="T1.1.1" name="编写 typed/import/super/derived 调用消解测试" status="DONE" order="0" />
+          <Task id="T1.1.2" name="实现 Java-gated CallResolver 扩展" status="DONE" order="1" />
+        </SubNodes><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">Java CALLS/ACCESSES 与 derived edges fixtures 通过，歧义和 unresolved 行为受控</cdt:Criterion></cdt:Acceptance></Task></SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="回归与收口" status="DONE" order="1">
+        <SubNodes><Task id="T2.1" name="运行共享 resolver 与全量回归" status="DONE" order="0" priority="P0"><SubNodes>
+          <Task id="T2.1.1" name="执行 C#/TS/JS/Java resolver regression" status="DONE" order="0" />
+        </SubNodes><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">solution build 与完整 smoke suite 通过，既有计数和 confidence 不回归</cdt:Criterion></cdt:Acceptance></Task></SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

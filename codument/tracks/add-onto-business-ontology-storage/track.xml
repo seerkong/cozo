@@ -1,0 +1,61 @@
+<Track id="add-onto-business-ontology-storage" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 LlmWiki 层实现独立、可审计、可重建的 onto_* 业务本体存储。</Goal>
+    <Description>Parent mission G2 track；只实现 storage/read contract，不推导业务语义、不导出 XML、不改 CLI。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-17T09:14:10Z</CreatedAt>
+    <UpdatedAt>2026-07-17T09:24:28Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/" />
+    <MaterialBundle role="output" name="ontology-storage" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/" />
+    <MaterialBundle role="output" name="ontology-storage-tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/" />
+  </Ports>
+  <TaskSpace id="space_add-onto-business-ontology-storage" name="add-onto-business-ontology-storage" version="1">
+    <Description>以测试驱动实现 onto schema、store、完整性与 generation refresh。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="存储合同测试" status="DONE" order="0">
+        <Description>将 schema isolation、semantic graph、invalid evidence 和 generation refresh 固化为 memory-db tests。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="编写 onto 存储 fixture 与失败/隔离断言" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">测试覆盖完整语义图、pending/rejected candidate、invalid evidence 及跨 ontology refresh</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="onto schema 与 store" status="DONE" order="1">
+        <Description>实现 schema 初始化、写入/读取模型、校验和 scoped replacement。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现 onto relation 初始化与语义记录读写" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">所有 contract relation 在 fresh DB 初始化，且完整 semantic graph 可按稳定 identity 读回</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现 evidence eligibility、candidate review 与 generation 刷新" status="DONE" order="1" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">无效输入失败；exportable view 排除 pending/rejected；刷新只替换同 ontology generation</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="回归验证" status="DONE" order="2">
+        <Description>运行聚焦与完整 LlmWiki tests，证明当前 exporter、DEPA 和 CodeKnowledge 行为没有被存储层改变。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="运行 storage fixture、LlmWiki smoke tests 与边界检查" status="DONE" order="0" priority="P0">
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">新增测试和既有 LlmWiki smoke tests 通过，且 diff 不包含 Om.Core/Bun 修改</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

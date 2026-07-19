@@ -57,7 +57,7 @@
 - `design.md` 与 `design/`
 - `behavior_deltas/**/*.xml`（旧 track 兼容 `spec.md`）
 - `track.xml`
-- `decisions/*.md`（旧 track 兼容 `decisions.md`）
+- `decisions.xnl`（旧 track 兼容 `decisions.md` 与 `decisions/*.md`）
 - `reports/*.md`
 - archive 中的 `summary.md`
 
@@ -67,7 +67,7 @@
 - [std/attractors/knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) §4–§5（晋升判定）
 - [std/skill/docs-modeling-fractal/index.md](@codument/std/skill/docs-modeling-fractal/index.md)
 - [std/skill/docs-engineering-fractal/index.md](@codument/std/skill/docs-engineering-fractal/index.md)
-- 现有 `docs/modeling` 与 `docs/impl`（如果目标是本项目 docs）
+- 现有 `codument/modeling` 与 `codument/engineering`（如果目标是本项目 docs）
 
 ---
 
@@ -88,8 +88,8 @@
 
 docs 类 artifact 的内容选择 / 路由 / 质量 / 晋升判定 + 目录职责补齐套路：
 
-- 先按 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) §4–§5 判定：该信息是否该晋升、晋升到哪层（`docs/modeling`/`docs/impl`/`behaviors`/`decisions`/`memory`）。
-- 建模/本体 → `docs/modeling/...`；设计实现 → `docs/impl/...`（领域中立，按 `std/skill/docs-{modeling,engineering}-fractal/index.md` 规范，不写死 web 结构）。
+- 先按 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) §4–§5 判定：该信息是否该晋升、晋升到哪层（`codument/modeling`/`codument/engineering`/`behaviors`/`decisions`/`memory`）。
+- 建模/本体 → `codument/modeling/...`；设计实现 → `codument/engineering/...`（领域中立，按 `std/skill/docs-{modeling,engineering}-fractal/index.md` 规范，不写死 web 结构）。
 - 文件级路由用 [model-driven-docs.md](@codument/std/attractors/model-driven-docs.md) 的 Routing Table；单文件过大按"同名文件夹"拆分；frontmatter/命名/时效性按规范。
 - **新建目录**：按 [folder-manifest.md](@codument/std/spec/folder-manifest.md) 为新目录写「目录职责」块；可顺手对缺块目录跑一次补齐（backfill）。
 - **优先实时、归档兜底**：discuss 期已实时收敛的稳定结论，本步只做全量复查/补漏，不重复劳动；只把尚未沉淀的稳定知识补上。
@@ -119,7 +119,7 @@ docs 类 artifact 的内容选择 / 路由 / 质量 / 晋升判定 + 目录职�
 读取来源 = track 的 output MaterialBundle + §3 相关上下文
 ---- /?source
 ---- #step ?generate
-按 workflow / skill / docs profile 规则生成 artifact 内容——先得到一套相对文件树（docs/modeling、docs/impl 等）；docs 路由 / 晋升判定按 §4.5
+按 workflow / skill / docs profile 规则生成 artifact 内容——先得到一套相对文件树（codument/modeling、codument/engineering 等）；docs 路由 / 晋升判定按 §4.5
 ---- /?generate
 ---- #if ?dry-run cond="policy 含 dry-run（或首次同步）"
 ------ #step ?preview
@@ -148,7 +148,7 @@ docs 类 artifact 的内容选择 / 路由 / 质量 / 晋升判定 + 目录职�
 -- /?sync
 ```
 
-如果项目尚无 `docs/modeling` 或 `docs/impl`，docs 类 artifact 只能创建与当前 artifact source **直接相关**的小文档；**不要**退化为全量 docs bootstrap。
+如果项目尚无 `codument/modeling` 或 `codument/engineering`，docs 类 artifact 只能创建与当前 artifact source **直接相关**的小文档；**不要**退化为全量 docs bootstrap。
 
 ---
 
@@ -156,7 +156,7 @@ docs 类 artifact 的内容选择 / 路由 / 质量 / 晋升判定 + 目录职�
 
 - 不要执行未被指定或未被 hook 引用的 artifact。
 - 不要因为 `docs` / `memory` profile `enabled` 或 artifact 配置存在就**隐式**同步。
-- 不要把普通实现细节写入 docs modeling（建模真源只装本体 / 心智模型 / 派生设计，不复述实现细节）。
+- 不要把普通实现细节写入 modeling registry（建模真源只装本体 / 心智模型 / 派生设计，不复述实现细节）。
 - 如果同步存在争议，优先输出**待确认事项**而不是断言。
 - `codument validate ...` 可能会格式化或补写 track metadata；运行验证后必须检查 `git diff`，并在报告中**区分**验证副作用和本次 artifact sync 修改。
 

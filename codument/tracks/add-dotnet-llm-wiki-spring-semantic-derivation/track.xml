@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-llm-wiki-spring-semantic-derivation" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata><Status>completed</Status><Goal>派生可解释、可查询的 Spring 框架语义事实</Goal><Description>Parent mission G4 track；Spring 解释位于 Indexing，不污染 JavaExtractor。</Description><QuestionMode>decision-tree</QuestionMode><QuestionSeverity>auto</QuestionSeverity><CommitMode>manual</CommitMode><CreatedAt>2026-07-16T17:09:04Z</CreatedAt><UpdatedAt>2026-07-16T17:36:22Z</UpdatedAt></Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="input" name="java-dogfood" domain="external-repository" path="vfs:///Users/kongweixian/java/ks-ep/is-asset-new/" />
+    <MaterialBundle role="output" name="indexing" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/" />
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/" />
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-spring-semantic-derivation" name="add-dotnet-llm-wiki-spring-semantic-derivation" version="1"><SubNodes>
+    <TaskGroup id="P1" name="Spring derivation contracts" status="DONE" order="0"><SubNodes><Task id="T1.1" name="锁定角色、入口与行为事实" status="DONE" order="0" priority="P0"><SubNodes>
+      <Task id="T1.1.1" name="编写 Spring annotation/role/route/transaction/listener fixtures" status="DONE" order="0" />
+      <Task id="T1.1.2" name="实现 SpringSemanticDeriver 与 batch integration" status="DONE" order="1" />
+    </SubNodes><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">固定 Spring vocabulary 全部可查询且 provenance 完整，Feign/Mapper 边界正确</cdt:Criterion></cdt:Acceptance></Task></SubNodes></TaskGroup>
+    <TaskGroup id="P2" name="持久化与回归" status="DONE" order="1"><SubNodes><Task id="T2.1" name="验证 entry point/process 与增量清理" status="DONE" order="0" priority="P0"><SubNodes>
+      <Task id="T2.1.1" name="运行 batch/persistence/process/incremental regression" status="DONE" order="0" />
+    </SubNodes><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">Spring facts 持久化并参与 process，改删文件无残留，全量回归通过</cdt:Criterion></cdt:Acceptance></Task></SubNodes><Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks></TaskGroup>
+  </SubNodes></TaskSpace>
+</Track>

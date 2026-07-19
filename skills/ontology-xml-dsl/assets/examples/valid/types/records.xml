@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TypeModule id="ExampleCatalog.Types.Records">
+  <Types>
+    <Type id="ExampleCatalog.ManagedResource" abstract="true" />
+    <Type id="ExampleCatalog.Person" />
+    <Type id="ExampleCatalog.Record" parent="ExampleCatalog.ManagedResource">
+      <Attributes>
+        <Attribute name="recordNumber" type="String" required="true" />
+        <Attribute name="lifecycleState" type="String" required="true" />
+      </Attributes>
+    </Type>
+    <Type id="ExampleCatalog.OutboundOrder">
+      <Attributes>
+        <Attribute name="status" type="String" required="true" />
+      </Attributes>
+    </Type>
+  </Types>
+</TypeModule>

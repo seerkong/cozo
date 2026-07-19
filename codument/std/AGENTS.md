@@ -20,7 +20,7 @@ AI 编程助手用 Codument 做行为驱动开发的**入口与路由**。本文
 | 规划跨多个 track 的路线 / mission | `missions/README.md`、`std/spec/mission-xml-spec.md` |
 | 长期记忆（lessons/incidents/patterns） | `std/attractors/project-memory.md` + `memory/`（memory profile） |
 | engineering/modeling 长期知识 registry 怎么写 | `std/spec/{modeling,engineering}-registry.md`、`std/spec/{modeling,engineering}-node-schema.md` |
-| legacy docs/ 怎么写（modeling/impl 分形、frontmatter） | `std/attractors/model-driven-docs.md` → `std/skill/docs-{modeling,engineering}-fractal/index.md` |
+| modeling / engineering 长期知识怎么写（分形、路由、元数据） | `std/attractors/model-driven-docs.md` → `std/skill/docs-{modeling,engineering}-fractal/index.md` |
 | 怎么提问/确认/纠偏（协议） | `std/sop/questioning.md`、`std/sop/validation.md` |
 | 执行套路（TDD / wave 调度 / gap-loop） | `std/sop/{tdd,wave-exec,gap-loop}.md` |
 | track 文件（track.xml）格式 | `std/spec/track-xml-spec.md` |
@@ -47,10 +47,10 @@ mission 是更长周期的控制面对象：
 
 ## 知识沉淀与晋升（务必，详见 std/attractors/knowledge-tiers.md）
 
-codument 是 **track 中心**的：迭代记忆强，但 **owner registry（`codument/modeling`/`codument/engineering`）和 legacy owner docs（`docs/modeling`/`docs/impl`）的维护是弱环**，要刻意补强：
+codument 是 **track 中心**的：迭代记忆强，但 **owner registry（`codument/modeling`/`codument/engineering`）的维护是弱环**，要刻意补强：
 
 - **file-in/file-out**：重要输入/结论落文件，别只留 chat；按职责分类写回（见分层表）。
-- **实时维护，不只归档**：澄清（discuss）期一旦某概念/行为/policy/架构**稳定**，**当轮就**收敛进 `codument/modeling` / `codument/engineering` 的 delta（或 legacy docs），不要拖到归档才补、也不要只留在 proposal。
+- **实时维护，不只归档**：澄清（discuss）期一旦某概念/行为/policy/架构**稳定**，**当轮就**收敛进 `codument/modeling` / `codument/engineering` 的 delta，不要拖到归档才补、也不要只留在 proposal。
 - **晋升阶梯**：track → `behaviors/`（行为，归档必做）/ `codument/modeling`（结构真源）/ `codument/engineering`（工程知识真源）/ `decisions/`（承重决策）/ `memory/`（复用教训）；`memory` 中**反复复发**的再固化为 sop/skill/check。触发条件见 knowledge-tiers.md §5。
 - **新建目录自带职责**：在 docs/ 下新建文件夹时，按 `std/spec/folder-manifest.md` 给它写"目录职责"块（或跑补齐）。
 

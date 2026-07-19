@@ -2,6 +2,7 @@ using System.Text.Json;
 using Cozo.DotNet.Om.Contracts;
 using Cozo.DotNet.Om.Contracts.Models;
 using Cozo.DotNet.Om.Inputs;
+using Cozo.DotNet.Om.Internals;
 using Cozo.DotNet.Om.Logic;
 using Cozo.DotNet.Om.Runtime;
 using Cozo.DotNet.Om.Support;
@@ -25,11 +26,53 @@ public sealed class CozoOm
 
     public CozoOmRuntime Runtime { get; }
 
+    public Task<BehaviorCatalog> GetBehaviorCatalogAsync(CancellationToken cancellationToken = default) =>
+        BehaviorCatalogLogic.GetAsync(Runtime, cancellationToken);
+
+    public async Task<byte[]> ExportBehaviorManifestJsonAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var catalog = await GetBehaviorCatalogAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        return BehaviorManifestJsonCodec.Encode(catalog);
+    }
+
+    public Task<BehaviorImportResult> ImportBehaviorManifestJsonAsync(
+        string json,
+        BehaviorCallbackBindingSet? callbacks = null,
+        BehaviorImportOptions? options = null,
+        CancellationToken cancellationToken = default) =>
+        BehaviorImportLogic.ImportJsonAsync(Runtime, json, callbacks, options, cancellationToken);
+
+    public async Task ClearRegistryAsync(CancellationToken cancellationToken = default)
+    {
+        await using var gate = await Runtime.BehaviorGate.EnterAsync(cancellationToken).ConfigureAwait(false);
+        Runtime.Registry.Clear();
+    }
+
     public Task InitSchemaAsync(CancellationToken cancellationToken = default) =>
         SchemaLogic.InitSchemaAsync(Runtime, cancellationToken);
 
+    public Task<SchemaInitializationResult> InitializeSchemaV2Async(
+        InitializeSchemaV2Input? input = null,
+        CancellationToken cancellationToken = default) =>
+        SchemaLogic.InitializeSchemaV2Async(Runtime, input, cancellationToken);
+
+    public Task<SchemaMigrationV2Result> ApplySchemaMigrationV2Async(
+        SchemaMigrationV2Input input,
+        CancellationToken cancellationToken = default) =>
+        SchemaLogic.ApplySchemaMigrationV2Async(Runtime, input, cancellationToken);
+
+    public Task<SchemaRollbackV2Result> RollbackSchemaV2Async(
+        RollbackSchemaV2Input input,
+        CancellationToken cancellationToken = default) =>
+        SchemaLogic.RollbackSchemaV2Async(Runtime, input, cancellationToken);
+
     public Task DefineTypeAsync(string name, string description = "", string? parentType = null, IReadOnlyList<string>? mixins = null, CancellationToken cancellationToken = default) =>
         TypeLogic.DefineTypeAsync(Runtime, new DefineTypeInput(name, description, parentType, mixins), cancellationToken);
+
+    public Task DefineTypeAsync(DefineTypePatchInput input, CancellationToken cancellationToken = default) =>
+        TypeLogic.DefineTypeAsync(Runtime, input, cancellationToken);
 
     public Task DefineMixinAsync(string name, string description = "", CancellationToken cancellationToken = default) =>
         TypeLogic.DefineMixinAsync(Runtime, new DefineMixinInput(name, description), cancellationToken);
@@ -102,6 +145,12 @@ public sealed class CozoOm
     public Task<NeighborResult> GetNeighborsAsOfAsync(string entityId, string? relName, string asOf, OmDirection direction = OmDirection.Both, CancellationToken cancellationToken = default) =>
         RelationLogic.GetNeighborsAsOfAsync(Runtime, entityId, relName, asOf, direction, cancellationToken);
 
+    public Task<IReadOnlyList<OmEntity>> TraverseAsync(
+        string startEntityId,
+        IReadOnlyList<string>? relationPath,
+        CancellationToken cancellationToken = default) =>
+        RelationLogic.TraverseAsync(Runtime, startEntityId, relationPath, cancellationToken);
+
     public Task<IReadOnlyList<EdgeHistoryEntry>> GetEdgeHistoryAsync(string fromId, string relName, string? toId = null, HistoryRangeOptions? options = null, CancellationToken cancellationToken = default) =>
         RelationLogic.GetEdgeHistoryAsync(Runtime, fromId, relName, toId, options, cancellationToken);
 
@@ -151,6 +200,14 @@ public sealed class CozoOm
     public Task<ValidationResult> ValidateEntityAsync(string entityId, CancellationToken cancellationToken = default) =>
         ConstraintLogic.ValidateEntityAsync(Runtime, entityId, cancellationToken);
 
+    public Task<ValidationResult> ValidateConstraintsAsync(
+        string entityId,
+        IReadOnlyList<string>? types = null,
+        CancellationToken cancellationToken = default) =>
+        ConstraintLogic.ValidateConstraintsAsync(Runtime, entityId, types, cancellationToken);
+
+    public OmValueType InferValueType(object? value) => OmConvert.InferValueType(value);
+
     public Task ValidatePropertyTypeAsync(string entityId, string attrName, object? value, CancellationToken cancellationToken = default) =>
         EntityLogic.ValidatePropertyTypeAsync(Runtime, entityId, attrName, value, cancellationToken);
 
@@ -175,8 +232,12 @@ public sealed class CozoOm
         string message = "",
         CancellationToken cancellationToken = default)
     {
-        await ConstraintLogic.DefineConstraintAsync(Runtime, new DefineConstraintInput(typeName, constraintName, constraintType, message), cancellationToken);
-        Runtime.Registry.RegisterConstraint(typeName, constraintName, when, then);
+        await ConstraintLogic.DefineConstraintCallbackAsync(
+            Runtime,
+            new DefineConstraintInput(typeName, constraintName, constraintType, message),
+            when,
+            then,
+            cancellationToken: cancellationToken);
     }
 
     public void RegisterValidator(string typeName, string constraintName, Func<OmValidationContext, ValueTask<string?>> validator) =>
@@ -211,8 +272,11 @@ public sealed class CozoOm
         string description = "",
         CancellationToken cancellationToken = default)
     {
-        await ConstraintLogic.DefineActionAsync(Runtime, new DefineActionInput(typeName, actionName, description), cancellationToken);
-        Runtime.Registry.RegisterAction(typeName, actionName, handler);
+        await ConstraintLogic.DefineActionCallbackAsync(
+            Runtime,
+            new DefineActionInput(typeName, actionName, description),
+            handler,
+            cancellationToken: cancellationToken);
     }
 
     public async Task DefineMutationAsync(
@@ -222,8 +286,11 @@ public sealed class CozoOm
         string description = "",
         CancellationToken cancellationToken = default)
     {
-        await ConstraintLogic.DefineMutationAsync(Runtime, new DefineMutationInput(typeName, mutationName, description), cancellationToken);
-        Runtime.Registry.RegisterMutation(typeName, mutationName, executor);
+        await ConstraintLogic.DefineMutationCallbackAsync(
+            Runtime,
+            new DefineMutationInput(typeName, mutationName, description),
+            executor,
+            cancellationToken: cancellationToken);
     }
 
     public async Task AddInterceptorAsync(
@@ -234,8 +301,11 @@ public sealed class CozoOm
         string description = "",
         CancellationToken cancellationToken = default)
     {
-        var seq = Runtime.Registry.RegisterInterceptor(typeName, actionName, phase, handler, description);
-        await ConstraintLogic.AddInterceptorAsync(Runtime, new AddInterceptorInput(typeName, actionName, phase, seq, description), cancellationToken);
+        await ConstraintLogic.AddInterceptorCallbackAsync(
+            Runtime,
+            new AddInterceptorInput(typeName, actionName, phase, Seq: 0, description),
+            handler,
+            cancellationToken: cancellationToken);
     }
 
     public Task ExecuteActionAsync(
@@ -263,15 +333,33 @@ public sealed class CozoOm
     public Task<SchemaSnapshot?> ReadSchemaSnapshotAsync(int version, CancellationToken cancellationToken = default) =>
         SchemaLogic.ReadSchemaSnapshotAsync(Runtime, version, cancellationToken);
 
+    /// <summary>
+    /// Returns the legacy coarse snapshot diff. Use DiffSchemaVersionsV2Async
+    /// when callers need a per-definition keyed result.
+    /// </summary>
     public Task<SchemaDiff> DiffSchemaVersionsAsync(int fromVersion, int toVersion, CancellationToken cancellationToken = default) =>
         SchemaLogic.DiffSchemaVersionsAsync(Runtime, fromVersion, toVersion, cancellationToken);
 
     public Task<SchemaDiff> DiffCurrentAgainstSnapshotAsync(int fromVersion, CancellationToken cancellationToken = default) =>
         SchemaLogic.DiffCurrentAgainstSnapshotAsync(Runtime, fromVersion, cancellationToken);
 
+    public Task<SchemaKeyedDiff> DiffSchemaVersionsV2Async(int fromVersion, int toVersion, CancellationToken cancellationToken = default) =>
+        SchemaLogic.DiffSchemaVersionsV2Async(Runtime, fromVersion, toVersion, cancellationToken);
+
+    public Task<SchemaKeyedDiff> DiffCurrentAgainstSnapshotV2Async(int fromVersion, CancellationToken cancellationToken = default) =>
+        SchemaLogic.DiffCurrentAgainstSnapshotV2Async(Runtime, fromVersion, cancellationToken);
+
+    /// <summary>
+    /// Compatibility rollback API. Its legacy strict argument is not a V2
+    /// validation guarantee and therefore remains separate from RollbackSchemaV2Input.
+    /// </summary>
     public Task RollbackSchemaAsync(int version, bool strict = false, CancellationToken cancellationToken = default) =>
         SchemaLogic.RollbackSchemaAsync(Runtime, version, strict, cancellationToken);
 
+    /// <summary>
+    /// Compatibility migration API. Use ApplySchemaMigrationV2Async for the
+    /// strict-by-default, atomic migration contract.
+    /// </summary>
     public Task<SchemaMigrationResult> ApplySchemaMigrationAsync(SchemaMigrationSpec spec, CancellationToken cancellationToken = default) =>
         SchemaLogic.ApplySchemaMigrationAsync(Runtime, spec, cancellationToken);
 

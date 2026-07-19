@@ -1,0 +1,15 @@
+<behavior-patch capability="ontology-library" version="1">
+  <upsert selector="behavior://ontology-library/requirements/domain-neutrality">
+    <requirement id="domain-neutrality">
+      <statement>本体建模库、LlmWiki CLI、质量报告和默认可见 demo SHALL 不依赖 IT 资产或任何特定业务领域的对象名称、工作流词汇、字段名或质量阈值；领域实例只能作为显式、可替换的测试或示例 fixture。</statement>
+      <suite id="production-domain-neutrality" name="生产行为去领域化">
+        <case id="quality-gate-is-structural"><given>任意已索引业务仓库</given><when>生成业务本体质量报告</when><then>系统 SHALL 按证据完整性、候选结构、跨文件覆盖和冲突诊断评估，不得要求入库、领用、调拨、维修、报废或同类预设业务流程</then></case>
+        <case id="relation-filter-is-structural"><given>源码 typed reference 或方法调用</given><when>投影业务关系</when><then>系统 SHALL 基于声明位置、引用种类和通用操作命名规则过滤，不得特判 AssetNumber 或任何客户字段</then></case>
+        <case id="generic-default-demo"><given>启动 Bun 可视化 demo</given><when>读取默认 demo catalog</when><then>默认层级、多态和治理示例 SHALL 使用中性对象域，且不暴露 it-asset demo id、标题或数据</then></case>
+      </suite>
+      <suite id="fixture-domain-neutrality" name="测试与技能 fixture 去领域化">
+        <case id="neutral-fixture-contract"><given>运行本体、LlmWiki 或技能校验测试</given><when>加载 fixture 与示例 bundle</when><then>fixture SHALL 使用中性领域命名，并继续覆盖类型、属性、关系、规则、生命周期、跨层映射和导出行为</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,30 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/business-ontology-semantic-understanding">
+    <requirement id="business-ontology-semantic-understanding">
+      <statement>系统 SHALL 从可追溯的源码语义事实、关联文档和前后端佐证中提出 `onto_*` 业务关系、规则及生命周期候选；候选 SHALL 经本地结构校验、直接 evidence 约束和显式 review 决策后才可提升为 exportable ontology，且整个链路不得读取或依赖 `depa_*` 判断。</statement>
+      <suite id="semantic-claim-extraction" name="源码语义事实">
+        <case id="typed-reference-claim"><given>Java 领域载体字段的声明类型可解析为另一个已知领域载体</given><when>索引并生成语义事实</when><then>系统 SHALL 记录带相对路径、行范围、解析器和置信度的 type-reference claim，而不直接写业务 relation</then></case>
+        <case id="enforced-constraint-claim"><given>字段或方法具有可解析的验证、持久化约束或事务内状态赋值</given><when>索引并生成语义事实</when><then>系统 SHALL 记录约束或状态变更 claim 及其直接源码 evidence</then></case>
+        <case id="no-implicit-reindex"><given>现有数据库缺少所需 semantic claim schema</given><when>请求语义投影</when><then>系统 SHALL 返回可操作的 reindex 诊断，且不得自行改写已有索引</then></case>
+      </suite>
+      <suite id="candidate-inference" name="候选推理">
+        <case id="deterministic-candidates"><given>有效的 relation/rule/lifecycle source claims</given><when>运行 deterministic semantic projection</when><then>系统 SHALL 生成带稳定 id、规范 payload 和直接 evidence refs 的 pending candidates</then></case>
+        <case id="assisted-candidates"><given>请求 assisted mode 且 LLM 可用</given><when>LLM 返回严格 JSON proposal</when><then>系统 SHALL 仅接受能引用输入 evidence、引用现有业务概念并通过本地 schema 校验的候选</then></case>
+        <case id="unavailable-assisted-mode"><given>请求 assisted mode 且 LLM 不可用或响应无效</given><when>运行投影</when><then>系统 SHALL 在任何 onto 写入之前失败并给出诊断，不得降级为伪造的 LLM 结果</then></case>
+      </suite>
+      <suite id="business-understanding-correction" name="业务理解纠偏">
+        <case id="carrier-is-not-concept"><given>索引中只有单个 DTO/entity/VO/request/response 代码载体</given><when>运行本体理解</when><then>系统 SHALL 只记录 implementation mapping/evidence，不得创建或导出业务概念</then></case>
+        <case id="canonical-concept-consolidation"><given>同一领域身份在 API、DTO、entity、service 或 frontend 多层出现</given><when>运行本体理解</when><then>系统 SHALL 将这些 carrier 归并为一个 canonical business concept proposal，并保留多条 mapping 与直接 evidence</then></case>
+        <case id="field-constraint-is-not-business-rule"><given>字段只有 Bean Validation 或 persistence column annotation</given><when>运行规则投影</when><then>系统 SHALL 将其作为属性约束或 relation cardinality evidence，不得计为独立 business rule</then></case>
+        <case id="conditional-business-rule"><given>业务动作路径包含状态/数据 guard，并以业务异常、拒绝结果或受控写入体现效果</given><when>形成跨文件 use-case slice</when><then>系统 SHALL 提出包含 predicate、governed subject、effect 和源码锚点的 pending business rule</then></case>
+        <case id="stateful-use-case-transition"><given>业务动作读取或判断旧状态后通过 assignment/setter 写入 enum、code、string 或 numeric 新状态并持久化</given><when>形成跨文件 use-case slice</when><then>系统 SHALL 提出含 from/to/action/guard/effect 的 pending lifecycle transition；未知 from-state 不得伪造完整 transition</then></case>
+        <case id="semantic-quality-gate"><given>双仓 fresh dogfood 已完成</given><when>验收本体候选</when><then>系统 SHALL 报告 carrier 与 canonical concept 的归并、业务关系/规则/生命周期覆盖和代表性证据；仅非空或 XML 合法不得通过门禁</then></case>
+      </suite>
+      <suite id="review-and-export" name="审核与提升">
+        <case id="explicit-promotion"><given>pending candidate 的 stable evidence identity 仍有效且存在 accepted review decision</given><when>应用 review 并生成新 ontology generation</when><then>系统 SHALL materialize 对应 relation/rule/lifecycle semantic record，并保留 review、candidate 与 evidence provenance</then></case>
+        <case id="stale-review"><given>accepted review 引用的 candidate 或 evidence 在刷新后不再有效</given><when>生成新 ontology generation</when><then>系统 SHALL 不提升该候选，保留可审计诊断并要求重新审核</then></case>
+        <case id="depa-isolation"><given>数据库同时包含 depa judgment rows</given><when>运行 claim、candidate、review 或 export 流程</when><then>系统 SHALL 不查询、复制或把 depa judgment 解释为业务规则</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

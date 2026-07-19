@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EvidenceModule id="ExampleCatalog.Evidence.Backend">
+  <EvidenceItems>
+    <Evidence id="backend:record-outbound-validation" repository="source-repository" revision="example" path="is-record-service/src/main/java/com/kuaishou/is/record/service/RecordOutboundService.java" symbol="java:com.kuaishou.is.record.service.RecordOutboundService.validateOutbound#1" startLine="128" endLine="156" grade="enforced" resolver="treesitter" confidence="1.0">
+      <Summary>Backend validation for outbound availability.</Summary>
+    </Evidence>
+    <Evidence id="backend:accept-inbound-transition" repository="source-repository" revision="example" path="is-record-service/src/main/java/com/kuaishou/is/record/service/InboundService.java" symbol="java:com.kuaishou.is.record.service.InboundService.accept#1" startLine="40" endLine="72" grade="enforced" resolver="treesitter" confidence="0.95" />
+  </EvidenceItems>
+</EvidenceModule>

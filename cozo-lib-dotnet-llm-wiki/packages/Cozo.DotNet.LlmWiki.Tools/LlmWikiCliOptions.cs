@@ -25,9 +25,10 @@ public static class LlmWikiCliOptions
     public static JsonObject ToolArguments(IReadOnlyDictionary<string, string> options)
     {
         var result = new JsonObject();
-        if (options.TryGetValue("--arguments-json", out var raw) && !string.IsNullOrWhiteSpace(raw))
+        if ((options.TryGetValue("--arguments-json", out var raw) || options.TryGetValue("--args", out raw))
+            && !string.IsNullOrWhiteSpace(raw))
         {
-            var parsed = JsonNode.Parse(raw)?.AsObject() ?? throw new JsonException("--arguments-json must be a JSON object.");
+            var parsed = JsonNode.Parse(raw)?.AsObject() ?? throw new JsonException("--arguments-json/--args must be a JSON object.");
             foreach (var property in parsed)
             {
                 result[property.Key] = property.Value?.DeepClone();
@@ -36,7 +37,7 @@ public static class LlmWikiCliOptions
 
         foreach (var (key, value) in options)
         {
-            if (StorageOptionNames.Contains(key) || key == "--arguments-json")
+            if (StorageOptionNames.Contains(key) || key is "--arguments-json" or "--args")
             {
                 continue;
             }
@@ -52,7 +53,8 @@ public static class LlmWikiCliOptions
             repoPath,
             DocSymbolLinkMode: ParseDocSymbolLinkMode(options.GetValueOrDefault("--doc-symbol-link-mode")),
             MaxDocLinksPerDoc: PositiveIntOrDefault(options.GetValueOrDefault("--max-doc-links-per-doc"), 20),
-            MaxInferredRelations: PositiveIntOrDefault(options.GetValueOrDefault("--max-inferred-relations"), 200_000));
+            MaxInferredRelations: PositiveIntOrDefault(options.GetValueOrDefault("--max-inferred-relations"), 200_000),
+            Reindex: string.Equals(options.GetValueOrDefault("--reindex"), "true", StringComparison.OrdinalIgnoreCase));
 
     public static string KebabOptionToCamelName(string option)
     {

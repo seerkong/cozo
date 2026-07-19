@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="verify-onto-business-ontology-projection" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata><Status>completed</Status><Goal>独立验证两个已索引项目的 onto_* 业务本体及其 XML 交付物。</Goal><Description>Parent mission G5 track；只读审计，明确 canonical ontology 与 candidate audit 的语义边界。</Description><QuestionMode>decision-tree</QuestionMode><QuestionSeverity>auto</QuestionSeverity><CommitMode>manual</CommitMode><CreatedAt>2026-07-17T10:45:30Z</CreatedAt><UpdatedAt>2026-07-17T10:45:30Z</UpdatedAt></Metadata>
+  <Ports scope="track"><MaterialBundle role="input" name="backend-ontology-store" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/depa-wiki.db" /><MaterialBundle role="input" name="frontend-ontology-store" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/depa-wiki.db" /><MaterialBundle role="input" name="business-ontology-xml" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v0/ontology/it-asset-management/" /><MaterialBundle role="output" name="report" domain="track" path="vfs://./reports/" /></Ports>
+  <TaskSpace id="space_verify-onto-business-ontology-projection" name="verify-onto-business-ontology-projection" version="1"><SubNodes>
+    <TaskGroup id="P1" name="存储与制品审计" status="DONE" order="0"><SubNodes><Task id="T1.1" name="只读核对两个 onto generation 与 XML 模块" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">后端 canonical 本体、前端候选补充和 XML 模块可相互追溯</cdt:Criterion></cdt:Acceptance></Task></SubNodes></TaskGroup>
+    <TaskGroup id="P2" name="语义边界与交付结论" status="DONE" order="1"><SubNodes><Task id="T2.1" name="抽样证据并记录 canonical 与 candidate 的边界" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">报告不把代码符号或未确认候选误称为业务本体</cdt:Criterion></cdt:Acceptance></Task></SubNodes></TaskGroup>
+  </SubNodes></TaskSpace>
+</Track>

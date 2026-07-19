@@ -8,7 +8,7 @@
       "difficulty": "easy",
       "workRoot": "cozo-lib-dotnet-llm-wiki",
       "tools": [
-        { "name": "semantic_search", "arguments": { "query": "RepositoryIndexer IndexAsync callers", "limit": "5" } },
+        { "name": "semantic_search", "arguments": { "query": "LlmWikiToolRunner CallAsync RepositoryIndexer IndexAsync", "limit": "5" } },
         { "name": "trace", "arguments": { "from": "CallAsync", "to": "IndexAsync" } }
       ],
       "must": ["LlmWikiToolRunner", "RepositoryIndexer"],
@@ -91,7 +91,7 @@
       "difficulty": "medium",
       "workRoot": "cozo-lib-dotnet-llm-wiki",
       "tools": [
-        { "name": "semantic_search", "arguments": { "query": "WikiCompiler BuildAsync", "limit": "5" } },
+        { "name": "semantic_search", "arguments": { "query": "LlmWikiToolRunner BuildWikiToolAsync WikiCompiler BuildAsync", "limit": "5" } },
         { "name": "trace", "arguments": { "from": "CallAsync", "to": "BuildAsync" } }
       ],
       "must": ["LlmWikiToolRunner"],
@@ -103,7 +103,7 @@
       "difficulty": "easy",
       "workRoot": "cozo-lib-dotnet-llm-wiki",
       "tools": [
-        { "name": "semantic_search", "arguments": { "query": "claude code hook augment command", "limit": "5" } }
+        { "name": "semantic_search", "arguments": { "query": "HookCommands RunAsync augment", "limit": "5" } }
       ],
       "must": ["HookCommands"],
       "should": ["McpServer"]
@@ -136,7 +136,7 @@
       "difficulty": "medium",
       "workRoot": "cozo-lib-dotnet-llm-wiki",
       "tools": [
-        { "name": "semantic_search", "arguments": { "query": "bundled MiniLM onnx embedding provider", "limit": "5" } },
+        { "name": "semantic_search", "arguments": { "query": "OnnxMiniLmEmbeddingProvider DefaultDimensions 384 bundled MiniLM onnx embedding provider", "limit": "5" } },
         { "name": "symbol_context", "arguments": { "symbolId": "OnnxMiniLmEmbeddingProvider" } }
       ],
       "must": ["OnnxMiniLmEmbeddingProvider"],

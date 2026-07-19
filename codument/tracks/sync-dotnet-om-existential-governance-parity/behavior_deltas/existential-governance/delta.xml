@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch id="existential-governance-parity" xmlns:cdt="urn:codument:v1">
+  <upsert selector="behavior://existential-governance/requirements/runtime-safety">
+    <requirement id="runtime-safety">
+      <statement>.NET OM SHALL reject unsupported existential where operators before persistence, re-resolve stored aliases when evaluating a rule, and treat absent rule storage as an empty rule set.</statement>
+      <suite id="governance" name="Existential governance">
+        <case id="definition-alias-no-init"><given>an invalid, historical-alias, or uninitialized existential-rule state</given><when>definition or evaluation APIs run</when><then>they SHALL fail before persistence, resolve aliases dynamically, or return an empty safe result respectively</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="permission-governance" version="1">
+  <upsert selector="behavior://permission-governance/requirements/strict-witness-and-abac">
+    <requirement id="strict-witness-and-abac">
+      <statement>The .NET OM SHALL evaluate permission policies fail closed using graph witnesses and temporal entity-aware ABAC semantics observably equivalent to the Bun reference.</statement>
+      <suite id="path-witness" name="Strict graph path witness">
+        <case id="unwitnessed-path-denies"><given>An allow policy declares a relation path but the subject has no matching edge sequence to the resource</given><when>Access is checked</when><then>The result SHALL deny and explanation SHALL record an unmatched path without a witness</then></case>
+        <case id="witnessed-path-allows"><given>An allow policy path has a directed subject-to-resource relation witness</given><when>Access is checked</when><then>The result SHALL allow and explanation SHALL contain the ordered canonical witness hops</then></case>
+        <case id="asof-path-changes"><given>A relation witness exists only at one valid-time point</given><when>Access is checked at current time and at the historical point</when><then>Each decision SHALL use the corresponding temporal graph state</then></case>
+      </suite>
+      <suite id="abac-and-field-result" name="Entity-aware ABAC and field result">
+        <case id="comparators-and-deny"><given>Allow and deny policies have witnessed paths and subject/resource attributes with equality and ordered predicates</given><when>One predicate changes to match the deny policy</when><then>Deny SHALL override allow and explanation SHALL identify evaluated predicate results</then></case>
+        <case id="temporal-attributes"><given>An ABAC-referenced property changes over valid time</given><when>Access is checked with AsOf values on each side of the change</when><then>The result SHALL resolve the property at that same AsOf point</then></case>
+        <case id="field-hide"><given>An allowed witnessed policy has a truthy field.&lt;name&gt; hide rule</given><when>Access is checked</when><then>The typed result and explanation SHALL mark that field hidden without changing the allow decision</then></case>
+      </suite>
+      <suite id="fail-closed-diagnostics" name="Fail-closed validation and explanations">
+        <case id="invalid-path-or-operator"><given>A policy contains an unknown relation, unsupported ABAC operator or malformed reference</given><when>Access is checked</when><then>The policy SHALL not grant access and explanation SHALL expose deterministic failure detail</then></case>
+        <case id="stable-order"><given>Equivalent policies and rules are seeded in different insertion orders</given><when>Access is checked</when><then>Decision, matched policy order, witness choice and explanation ordering SHALL remain deterministic</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

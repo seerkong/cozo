@@ -13,7 +13,7 @@ internal sealed record EvalOracleTaskResult(EvalTask Task, EvalScoreResult Score
 /// <summary>
 /// Oracle executor for the eval baseline (track add-llm-wiki-eval-baseline T2.1, delta case
 /// oracle-gate): per work root it builds one real in-memory Cozo db, indexes the real repository
-/// through the shared 18-tool runner (index_repo), then answers every task by executing its
+/// through the shared tool runner (index_repo), then answers every task by executing its
 /// suggested tool sequence and concatenating the JSON-serialized tool outputs as the "answer
 /// text" scored by EvalScorer. Input-echo fields (query/rootId/targetId/reason) are stripped
 /// from each output first, so a hit proves the task set is answerable from the graph alone.

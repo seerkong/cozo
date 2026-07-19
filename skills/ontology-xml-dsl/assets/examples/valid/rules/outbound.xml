@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RuleModule id="ExampleCatalog.Rules.Outbound">
+  <Rules>
+    <Rule id="ExampleCatalog.Rule.OutboundRequiresAvailableRecord" scope="ExampleCatalog.OutboundOrder" kind="CrossEntity">
+      <Statement>Approved outbound orders contain only available records.</Statement>
+      <When><PropertyEquals property="status" value="approved" /></When>
+      <Require>
+        <EveryRelated relation="ExampleCatalog.Relation.Concerns">
+          <PropertyEquals property="lifecycleState" value="available" />
+        </EveryRelated>
+      </Require>
+      <Violation code="RECORD_NOT_AVAILABLE" message="Record is not available for outbound." />
+      <EvidenceRefs><EvidenceRef ref="backend:record-outbound-validation" /></EvidenceRefs>
+    </Rule>
+  </Rules>
+</RuleModule>

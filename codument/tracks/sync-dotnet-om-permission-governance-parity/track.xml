@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="sync-dotnet-om-permission-governance-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>将 .NET OM 权限检查收敛到 Bun 的严格 witness、完整 temporal ABAC、字段结果与可解释 fail-closed 语义。</Goal>
+    <Description>执行 D1=A 的安全硬切，不保留 explanatory-only path 或 permissive legacy evaluation。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-17T13:58:00Z</CreatedAt>
+    <UpdatedAt>2026-07-17T11:12:24Z</UpdatedAt>
+    <gap-round>2</gap-round>
+    <cdt:Risks><cdt:Risk>错误的 compatibility fallback 可能把权限拒绝变为允许。</cdt:Risk><cdt:Risk>as-of 图和属性读不一致会产生不可审计的授权结果。</cdt:Risk></cdt:Risks>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="bun-reference" domain="source" path="vfs://@/cozo-lib-bun/cozo-om.js"/>
+    <MaterialBundle role="input" name="mission-evidence" domain="codument" path="vfs://@/codument/missions/active/converge-dotnet-om-bun-capability-parity/"/>
+    <MaterialBundle role="output" name="om-core" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+  </Ports>
+  <TaskSpace id="space_sync-dotnet-om-permission-governance-parity" name="sync-dotnet-om-permission-governance-parity" version="1">
+    <Description>Build strict authorization semantics with characterization, implementation and cross-runtime verification.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="锁定 strict permission contract" status="DONE" order="0">
+        <Description>以 Bun fixtures 和当前 C# false-allow characterization 定义不可绕过的 witness/ABAC contract。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="添加两侧 conformance fixtures" ownerAccount="agent:impl" status="DONE" order="0" priority="P0"><Description>新增 path/no-path、deny precedence、temporal、field hide、invalid policy 和 stable ordering 测试；先证明当前 C# explanatory path gap。</Description><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">Bun 与 C# 共享可比 fixture 的允许/拒绝、witness 与字段结果预期。</cdt:Criterion><cdt:Criterion id="T1.1-AC2" checked="true">现有 C# explanatory-only path 的错误 allow 有失败优先 characterization。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T1.2" name="定义 typed result 与 fail-closed diagnostics" ownerAccount="agent:impl" status="DONE" order="1" priority="P0"><Description>设计不可变 typed field visibility、witness/explanation contracts 和 invalid-policy detail，不以未结构化 JSON 作为唯一 API。</Description><cdt:Acceptance><cdt:Criterion id="T1.2-AC1" checked="true">公共 C# 合约可发现地表达 allow、field visibility 与结构化 evaluation detail。</cdt:Criterion><cdt:Criterion id="T1.2-AC2" checked="true">未知 path/ref/operator 和缺失实体均 fail closed 且可解释。</cdt:Criterion></cdt:Acceptance></Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="实现 witness 与 temporal ABAC" status="DONE" order="1">
+        <Description>实现 canonical path 解析/时态 witness、属性/type reference、comparators、deny precedence 和 field hide。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现 strict graph witness evaluator" ownerAccount="agent:impl" status="DONE" order="0" priority="P0"><Description>解析路径并沿 canonical directed relations 在 current/AsOf 图中找稳定最短 witness；无 witness 不匹配 policy。</Description><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">无 witness、unknown relation、方向错误和 empty-path 非 self 均不可 allow。</cdt:Criterion><cdt:Criterion id="T2.1-AC2" checked="true">witness 使用同一 AsOf 的图状态并有确定顺序。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.2" name="实现 entity-aware ABAC 与字段结果" ownerAccount="agent:impl" status="DONE" order="1" priority="P0"><Description>在同一 AsOf 解析 subject/resource type/property，支持 Bun comparators、hide 规则、deny override 与详细 explanation。</Description><cdt:Acceptance><cdt:Criterion id="T2.2-AC1" checked="true">属性/类型比较、unsupported predicate 和 missing value 的 allow/deny 与 Bun fixture 对齐。</cdt:Criterion><cdt:Criterion id="T2.2-AC2" checked="true">field hide 是 typed result 与 explanation 的一致附加结果，deny 仍优先。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.3" name="迁移旧 seed 与 facade 语义" ownerAccount="agent:impl" status="DONE" order="2" priority="P1"><Description>更新 seed/path normalization 与 facade，删除或拒绝任何 explanatory-only permissive fallback。</Description><cdt:Acceptance><cdt:Criterion id="T2.3-AC1" checked="true">旧 permissive path 不存在 silent allow fallback。</cdt:Criterion><cdt:Criterion id="T2.3-AC2" checked="true">typed async facade 保持 cancellation 与 schema snapshot compatibility。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.4" name="关闭 wildcard grant 并投影 normalized AsOf" ownerAccount="agent:impl" status="DONE" order="3" priority="P0"><Description>响应 P2 attractor：删除 action/resource wildcard grant，保持 exact Bun matching，并在 typed/JSON explanation 中一致暴露 normalized AsOf。</Description><cdt:Acceptance><cdt:Criterion id="T2.4-AC1" checked="true">action 或 resource_type 为 * 的 policy 不会成为 allow/deny grant，且有两侧回归测试。</cdt:Criterion><cdt:Criterion id="T2.4-AC2" checked="true">AsOf 解析一次并在 typed/JSON explanation 中一致、确定地呈现。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.5" name="收紧 ABAC reference 并消除 AsOf 重解析" ownerAccount="agent:impl" status="DONE" order="4" priority="P0"><Description>响应第二轮 attractor：仅允许决策白名单 reference，并把 normalized AsOf 传入授权内部 temporal reads。</Description><cdt:Acceptance><cdt:Criterion id="T2.5-AC1" checked="true">被禁止的 compatibility reference 不能 allow/deny，typed/JSON diagnostics 均为 fail-closed。</cdt:Criterion><cdt:Criterion id="T2.5-AC2" checked="true">授权请求只在边界规范化一次 AsOf，内部 witness/ABAC reads 复用该值。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.6" name="消除 Bun authorization AsOf 重解析" ownerAccount="agent:impl" status="DONE" order="5" priority="P0"><Description>修复 Bun checkAccess 内部 temporal helper 对已规范化 AsOf 的重复解析，保持 public helper API 不变。</Description><cdt:Acceptance><cdt:Criterion id="T2.6-AC1" checked="true">Bun authorization temporal reads 复用边界 normalized AsOf，且公共 API 行为不变。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T2.7" name="收敛 empty path 与 field hide policy gating" ownerAccount="agent:impl" status="DONE" order="6" priority="P0"><Description>响应 P2 attractor：两侧统一 empty [] self-witness，且仅已匹配 allow policy 能贡献 field hide。</Description><cdt:Acceptance><cdt:Criterion id="T2.7-AC1" checked="true">empty [] 仅 subject==resource 时形成 empty witness，非 self fail closed。</cdt:Criterion><cdt:Criterion id="T2.7-AC2" checked="true">unmatched/deny/failed-ABAC policy 不能泄露 fieldVisibility。</cdt:Criterion></cdt:Acceptance></Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="跨实现验证与安全收口" status="DONE" order="2">
+        <Description>运行两侧测试、负向安全矩阵、稳定 explanation 检查和 fresh gap-loop。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="验证 Bun/.NET observable parity" ownerAccount="agent:impl" status="DONE" order="0" priority="P0"><Description>运行两侧新增 fixture、完整 OM tests 和针对 temporal/fail-closed 的重复检查。</Description><cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">所有 delta cases 在两侧有可执行且一致的行为证据。</cdt:Criterion><cdt:Criterion id="T3.1-AC2" checked="true">安全负例不允许、无 wildcard/legacy bypass，解释顺序稳定。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T3.1.1" name="消除阻断验证的 Jint 守卫调度伪超时" ownerAccount="agent:impl" status="DONE" order="1" priority="P0"><Description>修复 full harness 中 parent-action 组合测试的外层守卫调度问题；不得放宽脚本运行时限制、行为断言或外部 watchdog。</Description><cdt:Acceptance><cdt:Criterion id="T3.1.1-AC1" checked="true">parent/inheritance composition 在完整 harness 中不再出现 scheduler-induced outer-guard timeout。</cdt:Criterion><cdt:Criterion id="T3.1.1-AC2" checked="true">完整 OM harness、Jint matrix 和 permission-governance focused matrix 均通过，且现有资源/失败断言未被削弱。</cdt:Criterion></cdt:Acceptance></Task>
+          <Task id="T3.2" name="最终验证与 gap-loop" ownerAccount="agent:impl" status="DONE" order="1" priority="P0"><Description>build/test/XML/diff/API review 并 fresh target-backward review。</Description><cdt:Acceptance><cdt:Criterion id="T3.2-AC1" checked="true">.NET 与 Bun suite、Codument strict 和 scoped diff/XML 均通过。</cdt:Criterion><cdt:Criterion id="T3.2-AC2" checked="true">fresh review 未发现 permissive authorization or temporal inconsistency gap。</cdt:Criterion></cdt:Acceptance></Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks/>
+</Track>

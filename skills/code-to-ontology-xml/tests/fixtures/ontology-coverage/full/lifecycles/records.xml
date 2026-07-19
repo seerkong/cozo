@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LifecycleModule id="ExampleCatalog.Lifecycles.Records">
+  <StateMachines>
+    <StateMachine id="ExampleCatalog.Lifecycle.Record" subject="ExampleCatalog.Record" stateProperty="status" initial="pending">
+      <States>
+        <State id="pending" />
+        <State id="available" />
+      </States>
+      <Transitions>
+        <Transition id="ExampleCatalog.Transition.ActivateRecord" action="activate" from="pending" to="available">
+          <EvidenceRefs><EvidenceRef ref="backend:record-state-write" /></EvidenceRefs>
+        </Transition>
+      </Transitions>
+    </StateMachine>
+  </StateMachines>
+</LifecycleModule>

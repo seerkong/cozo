@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-codex-cli-ontology-semantic-assist" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>让业务本体 assisted 语义识别可受控地调用本机 Codex CLI，同时保持 evidence、pending candidate 与显式 review 的治理边界。</Goal>
+    <Description>新增 `codex-cli` ILlmClient provider 和安全的外部进程 adapter；它只消费现有已裁剪 evidence pack，不能读取目标仓库作为工作区，也不能直接确认/导出业务本体。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-18T16:56:31Z</CreatedAt>
+    <UpdatedAt>2026-07-18T17:42:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="input" name="semantic-assisted-contract" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/OntologySemanticAssistedProposalClient.cs" />
+    <MaterialBundle role="output" name="llm-client" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.LlmClient/" />
+    <MaterialBundle role="output" name="semantic-cli" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/" />
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/" />
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/dotnet-llm-wiki.xml" />
+  </Ports>
+  <TaskSpace id="space_add-codex-cli-ontology-semantic-assist" name="add-codex-cli-ontology-semantic-assist" version="1">
+    <Description>按 provider contract、process isolation、semantic integration 三阶段接入并验证 Codex CLI。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Provider 合同与受控进程 adapter" status="DONE" order="0">
+        <Description>在 LlmClient 层建立 Codex CLI 配置、可用性和无 shell 的临时进程运行时。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="扩展 config/factory 选择 codex-cli provider" status="DONE" order="0" priority="P0">
+            <Description>支持环境选择、可选 CLI path、默认 `gpt-5.6-terra` 的 model、timeout 与无 API key 的 unavailable/available 合同，不改变 HTTP providers。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">factory 对 resolvable `codex-cli` 返回可用 client，对不可解析 command 返回带有界原因的 unavailable client；OpenAI/Anthropic 现有行为保持。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 isolated codex exec completion runner" status="DONE" order="1" priority="P0">
+            <Description>以 ProcessStartInfo.ArgumentList、私有临时 cwd、fixed hardening flags、stdin/output-schema/final-output、timeout/cancel/cleanup 实现 adapter。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.2-AC1" checked="true">runner 不走 shell、不传 repo/add-dir，在成功时只返回 final JSON；timeout/cancel/nonzero/oversize 均清理进程树和临时文件并抛有界 LlmException。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="覆盖 provider 与进程边界 fake-executable tests" status="DONE" order="2" priority="P0">
+            <Description>用测试 shim 断言参数、cwd、stdin、model、错误、超时和 cleanup；不调用真实 Codex/网络。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.3-AC1" checked="true">focused LlmClient tests 可重复验证成功和失败边界，且不依赖真实 Codex account。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T1.4" name="密封 child 环境并建立 owner-private 临时目录" status="DONE" order="3" priority="P0">
+            <Description>修复 P1 AttractorCheck 发现的秘密环境继承和临时文件权限缺口；只向 Codex CLI 传递记录在 design 中的非秘密 allowlist，建立失败时不得启动 child process。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.4-AC1" checked="true">测试证明 HTTP LLM API key/任意宿主 secret 不会传入 child；Unix temp dir 为 0700，Windows temp dir 使用 protected current-user ACL，任一私有化失败会在 CLI 启动前中止。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="语义 CLI 接线与治理回归" status="ACTIVE" order="1">
+        <Description>让现有 derive-semantics assisted 路径选择 CLI provider，并证明既有本地治理不可绕过。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="接线 factory 到 derive-semantics 并补充可操作 usage" status="DONE" order="0" priority="P0">
+            <Description>保持命令/模式兼容，说明 environment 选择与在无法使用 CLI 时的失败方式。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">operator 能仅通过既有 `derive-semantics --mode assisted` 加 provider 环境配置调用 Codex CLI；deterministic path 不创建 provider。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="增加 Codex-shaped assisted semantic integration fixture" status="DONE" order="1" priority="P0">
+            <Description>以 fake executable 输出 valid/invalid proposals，验证 local validator、evidence discipline、pending/review gate 和 no-partial-write。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.2-AC1" checked="true">有效 output 仅产生 evidence-backed pending candidates；hallucinated/invalid output 在进入 onto write 前按既有失败合同拒绝，且不会 materialize。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="独立验证与运行交付" status="ACTIVE" order="2">
+        <Description>运行 focused/full regression，审查进程边界，并提供不进入 CI 的可选人工 smoke 指引。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="执行 focused suite、build 与 clean-room contract audit" status="DONE" order="0" priority="P0">
+            <Description>检查 diff、CLI flags、临时清理和 provider failure surface；跑 LlmClient、assisted semantic 与 CLI focused suites。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">所有 focused suites/build 通过，或独立记录与本 track 无关的已知失败；无真实网络调用。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="记录运行配置与可选人工 Codex smoke 边界" status="DONE" order="1" priority="P1">
+            <Description>在 track findings 中给出环境变量、隔离数据库建议、不会自动 promotion 的事实与可选手工验证步骤。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.2-AC1" checked="true">交付说明足以让已登录的操作者在 disposable database 上运行 assisted mode，且明确输出仍待 review。</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="2" verify-round="true" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

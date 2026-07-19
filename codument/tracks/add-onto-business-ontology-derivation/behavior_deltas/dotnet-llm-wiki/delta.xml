@@ -1,0 +1,16 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/business-ontology-derivation">
+    <requirement id="business-ontology-derivation">
+      <statement>系统 SHALL 从 `ck_*` 代码观察、源码锚点和已有框架派生事实生成可审计的 `onto_*` 业务本体候选；命名、页面、框架角色和图拓扑推断 SHALL 默认保持 hypothesis/pending，且不得读取或依赖 `depa_*` 判断。</statement>
+      <suite id="candidate-extraction" name="候选提取">
+        <case id="backend-contract-candidate"><given>索引含 Java DTO/entity/API 字段和源码位置</given><when>运行候选投影</when><then>系统 SHALL 生成概念和属性候选，并保留 contractual 或原始 evidence grade、symbol 和相对路径</then></case>
+        <case id="workflow-candidate"><given>索引含 Spring route、service、transaction 或 process facts</given><when>运行候选投影</when><then>系统 SHALL 生成 implementation mapping 或 lifecycle/rule candidate，而不把 framework role 直接导出为业务类型</then></case>
+        <case id="frontend-corroboration"><given>索引含前端页面、表单或文档的领域术语</given><when>运行候选投影</when><then>系统 SHALL 将其记录为 presentational 或 inferred evidence，只能补强而不能单独升级为 accepted rule</then></case>
+      </suite>
+      <suite id="safety" name="语义边界">
+        <case id="no-depa-input"><given>数据库含 depa judgment rows</given><when>运行业务候选投影</when><then>系统 SHALL 不查询、复制或依赖 `depa_*` 数据</then></case>
+        <case id="deterministic-refresh"><given>相同的 CodeKnowledge 输入 fingerprint</given><when>重复运行候选投影</when><then>系统 SHALL 产生稳定 candidate identities 和 scoped onto generation refresh</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

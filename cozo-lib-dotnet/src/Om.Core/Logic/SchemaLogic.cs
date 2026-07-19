@@ -24,6 +24,7 @@ public static class SchemaLogic
             ":create om_interceptor_def {type_name, action_name, phase, seq => description}",
             ":create om_constraint_def {type_name, constraint_name => constraint_type, message}",
             ":create om_computed_def {type_name, attr_name => description}",
+            ":create om_behavior_binding {behavior_kind, owner_type, behavior_name, callback_slot, phase, seq => binding_id}",
             ":create om_perm_action {action => description}",
             ":create om_perm_policy {policy_id => effect, action, resource_type, enabled, description}",
             ":create om_perm_abac_rule {policy_id, left_ref, op, right_ref}",
@@ -51,6 +52,48 @@ public static class SchemaLogic
         }
 
         await SeedSchemaStateAsync(runtime, cancellationToken);
+    }
+
+    public static async Task<SchemaInitializationResult> InitializeSchemaV2Async(
+        CozoOmRuntime runtime,
+        InitializeSchemaV2Input? input = null,
+        CancellationToken cancellationToken = default)
+    {
+        var options = input?.EffectiveOptions ?? SchemaInitializationOptions.Default;
+        var legacyRelations = await DetectLegacyTemporalRelationsAsync(runtime, cancellationToken);
+        if (legacyRelations.Count > 0 && options.LegacyHandling == SchemaLegacyHandling.DetectOnly)
+        {
+            return new SchemaInitializationResult(
+                initialized: false,
+                legacyHandling: options.LegacyHandling,
+                legacySchemaDetected: true,
+                diagnostics: legacyRelations.Select(relation => new SchemaDiagnostic(
+                    "legacy_temporal_relation_detected",
+                    SchemaDiagnosticSeverity.Warning,
+                    $"Relation '{relation}' lacks the V2 temporal fields. Re-run with LegacyHandling=Upgrade to migrate it.",
+                    relation)));
+        }
+
+        if (legacyRelations.Count == 0)
+        {
+            await InitSchemaAsync(runtime, cancellationToken);
+            return new SchemaInitializationResult(true, options.LegacyHandling, legacySchemaDetected: false);
+        }
+
+        await using var transaction = await runtime.Store.BeginTransactionAsync(write: true, cancellationToken);
+        var txRuntime = runtime with { Store = transaction };
+        await UpgradeLegacyTemporalRelationsAsync(txRuntime, legacyRelations, cancellationToken);
+        await InitSchemaAsync(txRuntime, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new SchemaInitializationResult(
+            initialized: true,
+            legacyHandling: options.LegacyHandling,
+            legacySchemaDetected: true,
+            diagnostics: legacyRelations.Select(relation => new SchemaDiagnostic(
+                "legacy_temporal_relation_upgraded",
+                SchemaDiagnosticSeverity.Info,
+                $"Relation '{relation}' was upgraded to the V2 temporal shape.",
+                relation)));
     }
 
     public static async Task<SchemaState> GetSchemaStateAsync(CozoOmRuntime runtime, CancellationToken cancellationToken = default)
@@ -159,6 +202,30 @@ public static class SchemaLogic
             ?? throw new CozoException($"Missing schema snapshot for version={fromVersion}");
         var current = new SchemaSnapshot(0, "", await ReadCurrentSchemaObjectAsync(runtime, cancellationToken), null);
         return DiffSnapshots(from, current);
+    }
+
+    public static async Task<SchemaKeyedDiff> DiffSchemaVersionsV2Async(
+        CozoOmRuntime runtime,
+        int fromVersion,
+        int toVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var from = await ReadSchemaSnapshotAsync(runtime, fromVersion, cancellationToken)
+            ?? throw new CozoException($"Missing schema snapshot for version={fromVersion}");
+        var to = await ReadSchemaSnapshotAsync(runtime, toVersion, cancellationToken)
+            ?? throw new CozoException($"Missing schema snapshot for version={toVersion}");
+        return DiffSnapshotsV2(from, to);
+    }
+
+    public static async Task<SchemaKeyedDiff> DiffCurrentAgainstSnapshotV2Async(
+        CozoOmRuntime runtime,
+        int fromVersion,
+        CancellationToken cancellationToken = default)
+    {
+        var from = await ReadSchemaSnapshotAsync(runtime, fromVersion, cancellationToken)
+            ?? throw new CozoException($"Missing schema snapshot for version={fromVersion}");
+        var current = new SchemaSnapshot(0, string.Empty, await ReadCurrentSchemaObjectAsync(runtime, cancellationToken), null);
+        return DiffSnapshotsV2(from, current);
     }
 
     public static async Task RollbackSchemaAsync(CozoOmRuntime runtime, int version, bool strict = false, CancellationToken cancellationToken = default)
@@ -275,6 +342,138 @@ public static class SchemaLogic
         return new SchemaMigrationResult(migrationId, spec.FromVersion, spec.ToVersion, steps.Count, snapshot.Checksum ?? "");
     }
 
+    public static async Task<SchemaMigrationV2Result> ApplySchemaMigrationV2Async(
+        CozoOmRuntime runtime,
+        SchemaMigrationV2Input input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var migrationId = OmConvert.RequireName(input.MigrationId, nameof(input.MigrationId));
+        if (input.FromVersion <= 0) throw new ArgumentOutOfRangeException(nameof(input), "FromVersion must be positive.");
+        if (input.ToVersion <= 0 || input.ToVersion == input.FromVersion)
+        {
+            throw new ArgumentOutOfRangeException(nameof(input), "ToVersion must be positive and differ from FromVersion.");
+        }
+
+        await using var transaction = await runtime.Store.BeginTransactionAsync(write: true, cancellationToken);
+        var txRuntime = runtime with { Store = transaction };
+        try
+        {
+            var state = await GetSchemaStateAsync(txRuntime, cancellationToken);
+            if (state.CurrentVersion != input.FromVersion)
+            {
+                return MigrationRejected(input, "schema_version_mismatch",
+                    $"Schema currentVersion={state.CurrentVersion} does not match fromVersion={input.FromVersion}.");
+            }
+
+            var diagnostics = await PreflightMigrationAsync(txRuntime, input, cancellationToken);
+            if (diagnostics.Any(diagnostic => diagnostic.Severity == SchemaDiagnosticSeverity.Error))
+            {
+                return new SchemaMigrationV2Result(
+                    migrationId,
+                    input.FromVersion,
+                    input.ToVersion,
+                    applied: false,
+                    strict: input.Options.Strict,
+                    diagnostics: diagnostics);
+            }
+
+            var legacyResult = await ApplySchemaMigrationAsync(
+                txRuntime,
+                new SchemaMigrationSpec(
+                    migrationId,
+                    input.FromVersion,
+                    input.ToVersion,
+                    input.Label,
+                    input.Description,
+                    Strict: false,
+                    Steps: input.Steps),
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new SchemaMigrationV2Result(
+                legacyResult.MigrationId,
+                legacyResult.FromVersion,
+                legacyResult.ToVersion,
+                applied: true,
+                strict: input.Options.Strict,
+                diagnostics: diagnostics);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return MigrationRejected(input, "migration_failed", exception.Message);
+        }
+    }
+
+    public static async Task<SchemaRollbackV2Result> RollbackSchemaV2Async(
+        CozoOmRuntime runtime,
+        RollbackSchemaV2Input input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.TargetVersion <= 0) throw new ArgumentOutOfRangeException(nameof(input), "TargetVersion must be positive.");
+
+        await using var transaction = await runtime.Store.BeginTransactionAsync(write: true, cancellationToken);
+        var txRuntime = runtime with { Store = transaction };
+        var options = input.EffectiveOptions;
+        try
+        {
+            var state = await GetSchemaStateAsync(txRuntime, cancellationToken);
+            if (state.CurrentVersion == input.TargetVersion)
+            {
+                return new SchemaRollbackV2Result(
+                    state.CurrentVersion,
+                    input.TargetVersion,
+                    applied: true,
+                    strict: options.Strict,
+                    forced: options.Force);
+            }
+
+            await RollbackSchemaAsync(txRuntime, input.TargetVersion, strict: false, cancellationToken);
+            var diagnostics = await ValidateRollbackEntitiesAsync(txRuntime, cancellationToken);
+            if (options.Strict && !options.Force && diagnostics.Length > 0)
+            {
+                return new SchemaRollbackV2Result(
+                    state.CurrentVersion,
+                    input.TargetVersion,
+                    applied: false,
+                    strict: true,
+                    forced: false,
+                    diagnostics: diagnostics);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return new SchemaRollbackV2Result(
+                state.CurrentVersion,
+                input.TargetVersion,
+                applied: true,
+                strict: options.Strict,
+                forced: options.Force,
+                diagnostics: diagnostics);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var state = await GetSchemaStateAsync(runtime, cancellationToken);
+            return new SchemaRollbackV2Result(
+                state.CurrentVersion,
+                input.TargetVersion,
+                applied: false,
+                strict: options.Strict,
+                forced: options.Force,
+                diagnostics:
+                [
+                    new SchemaDiagnostic("rollback_failed", SchemaDiagnosticSeverity.Error, exception.Message),
+                ]);
+        }
+    }
+
     private static async Task ApplyMigrationStepAsync(
         CozoOmRuntime runtime,
         JsonElement step,
@@ -367,6 +566,207 @@ public static class SchemaLogic
         await TypeLogic.DefineAttributeAsync(runtime, new DefineAttributeInput(typeName, attrName, valueType, required), cancellationToken);
     }
 
+    private static SchemaMigrationV2Result MigrationRejected(
+        SchemaMigrationV2Input input,
+        string code,
+        string message) =>
+        new(
+            input.MigrationId,
+            input.FromVersion,
+            input.ToVersion,
+            applied: false,
+            strict: input.Options.Strict,
+            diagnostics:
+            [
+                new SchemaDiagnostic(code, SchemaDiagnosticSeverity.Error, message),
+            ]);
+
+    private static async Task<IReadOnlyList<SchemaDiagnostic>> PreflightMigrationAsync(
+        CozoOmRuntime runtime,
+        SchemaMigrationV2Input input,
+        CancellationToken cancellationToken)
+    {
+        var diagnostics = new List<SchemaDiagnostic>();
+        foreach (var step in input.Steps)
+        {
+            try
+            {
+                var kind = ReadStepString(step, "kind", "type");
+                if (kind is not ("addType" or "addAttribute" or "addRelation" or "renameAttribute" or "changeAttribute"))
+                {
+                    diagnostics.Add(new SchemaDiagnostic(
+                        "unsupported_migration_step",
+                        SchemaDiagnosticSeverity.Error,
+                        $"Unsupported migration step kind '{kind ?? string.Empty}'."));
+                    continue;
+                }
+
+                if (kind == "changeAttribute" && input.Options.Strict)
+                {
+                    await PreflightChangeAttributeAsync(runtime, step, diagnostics, cancellationToken);
+                }
+                else if (kind == "addAttribute"
+                         && input.Options.Strict
+                         && ReadStepBool(step, false, "required"))
+                {
+                    await PreflightRequiredAttributeAsync(runtime, step, diagnostics, cancellationToken);
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or CozoException or InvalidOperationException)
+            {
+                diagnostics.Add(new SchemaDiagnostic("invalid_migration_step", SchemaDiagnosticSeverity.Error, exception.Message));
+            }
+        }
+
+        return diagnostics;
+    }
+
+    private static async Task PreflightChangeAttributeAsync(
+        CozoOmRuntime runtime,
+        JsonElement step,
+        ICollection<SchemaDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var typeName = await TypeLogic.ResolveTypeAsync(runtime, ReadRequiredStepString(step, "typeName", "type_name"), cancellationToken);
+        var attrName = await TypeLogic.ResolveAttrAsync(runtime, typeName, ReadRequiredStepString(step, "attrName", "attr_name"), cancellationToken);
+        var targetValueType = OmConvert.StoredToValueType(ReadRequiredStepString(step, "valueType", "value_type"));
+        if (targetValueType == OmValueType.Unknown)
+        {
+            throw new CozoException($"Unsupported target value type for '{typeName}.{attrName}'.");
+        }
+
+        var entities = await runtime.Store.RunAsync(
+            """
+            ?[id, type_name] :=
+              *om_entity{ id, type_name, label: _label }
+            :sort id
+            """,
+            cancellationToken: cancellationToken);
+        foreach (var row in entities.Rows)
+        {
+            var entityId = JsonRows.StringAt(row, 0) ?? string.Empty;
+            var entityType = await TypeLogic.ResolveTypeAsync(runtime, JsonRows.StringAt(row, 1) ?? string.Empty, cancellationToken);
+            var applies = entityType == typeName || (await TypeLogic.GetAncestorsAsync(runtime, entityType, cancellationToken)).Contains(typeName);
+            if (!applies) continue;
+
+            var properties = await EntityLogic.GetAllPropertiesAsync(runtime, entityId, cancellationToken);
+            if (!properties.TryGetValue(attrName, out var value))
+            {
+                if (step.TryGetProperty("required", out var requiredElement) && ReadStepBool(step, false, "required") && requiredElement.ValueKind != JsonValueKind.Null)
+                {
+                    diagnostics.Add(new SchemaDiagnostic(
+                        "required_property_missing",
+                        SchemaDiagnosticSeverity.Error,
+                        $"Entity '{entityId}' lacks required property '{attrName}'.",
+                        "om_attr_def",
+                        $"{typeName}:{attrName}",
+                        entityId));
+                }
+
+                continue;
+            }
+
+            var actualValueType = OmConvert.InferValueType(value);
+            if (targetValueType != OmValueType.Json
+                && targetValueType != OmValueType.Validity
+                && targetValueType != actualValueType)
+            {
+                diagnostics.Add(new SchemaDiagnostic(
+                    "attribute_value_type_incompatible",
+                    SchemaDiagnosticSeverity.Error,
+                    $"Entity '{entityId}' property '{attrName}' is {actualValueType}, not {targetValueType}.",
+                    "om_attr_def",
+                    $"{typeName}:{attrName}",
+                    entityId));
+            }
+        }
+    }
+
+    private static async Task PreflightRequiredAttributeAsync(
+        CozoOmRuntime runtime,
+        JsonElement step,
+        ICollection<SchemaDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var requestedType = ReadRequiredStepString(step, "typeName", "type_name");
+        var typeName = await TryResolveTypeAsync(runtime, requestedType, cancellationToken) ?? requestedType;
+        var attrName = ReadRequiredStepString(step, "attrName", "attr_name");
+        var entities = await runtime.Store.RunAsync(
+            """
+            ?[id, type_name] :=
+              *om_entity{ id, type_name, label: _label }
+            :sort id
+            """,
+            cancellationToken: cancellationToken);
+        foreach (var row in entities.Rows)
+        {
+            var entityId = JsonRows.StringAt(row, 0) ?? string.Empty;
+            var entityType = await TypeLogic.ResolveTypeAsync(runtime, JsonRows.StringAt(row, 1) ?? string.Empty, cancellationToken);
+            var applies = entityType == typeName || (await TypeLogic.GetAncestorsAsync(runtime, entityType, cancellationToken)).Contains(typeName);
+            if (!applies) continue;
+
+            var properties = await EntityLogic.GetAllPropertiesAsync(runtime, entityId, cancellationToken);
+            if (!properties.ContainsKey(attrName))
+            {
+                diagnostics.Add(new SchemaDiagnostic(
+                    "required_property_missing",
+                    SchemaDiagnosticSeverity.Error,
+                    $"Entity '{entityId}' lacks new required property '{attrName}'.",
+                    "om_attr_def",
+                    $"{typeName}:{attrName}",
+                    entityId));
+            }
+        }
+    }
+
+    private static async Task<string?> TryResolveTypeAsync(
+        CozoOmRuntime runtime,
+        string typeName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await TypeLogic.ResolveTypeAsync(runtime, typeName, cancellationToken);
+        }
+        catch (CozoException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<SchemaDiagnostic[]> ValidateRollbackEntitiesAsync(
+        CozoOmRuntime runtime,
+        CancellationToken cancellationToken)
+    {
+        var entities = await runtime.Store.RunAsync(
+            """
+            ?[id] :=
+              *om_entity{ id, type_name: _type_name, label: _label }
+            :sort id
+            """,
+            cancellationToken: cancellationToken);
+        var diagnostics = new List<SchemaDiagnostic>();
+        foreach (var row in entities.Rows)
+        {
+            var entityId = JsonRows.StringAt(row, 0) ?? string.Empty;
+            try
+            {
+                var validation = await ConstraintLogic.ValidateEntityAsync(runtime, entityId, cancellationToken);
+                diagnostics.AddRange(validation.Errors.Select(error => new SchemaDiagnostic(
+                    "rollback_entity_invalid",
+                    SchemaDiagnosticSeverity.Error,
+                    error,
+                    EntityId: entityId)));
+            }
+            catch (Exception exception) when (exception is CozoException or InvalidOperationException)
+            {
+                diagnostics.Add(new SchemaDiagnostic("rollback_entity_invalid", SchemaDiagnosticSeverity.Error, exception.Message, EntityId: entityId));
+            }
+        }
+
+        return diagnostics.ToArray();
+    }
+
     private static string ReadRequiredStepString(JsonElement step, params string[] names)
     {
         return OmConvert.RequireName(ReadStepString(step, names) ?? "", names[0]);
@@ -457,6 +857,7 @@ public static class SchemaLogic
             ["om_action_def"] = await ReadRowsAsync(runtime, "om_action_def", "type_name, action_name, description", cancellationToken),
             ["om_mutation_def"] = await ReadRowsAsync(runtime, "om_mutation_def", "type_name, mutation_name, description", cancellationToken),
             ["om_interceptor_def"] = await ReadRowsAsync(runtime, "om_interceptor_def", "type_name, action_name, phase, seq, description", cancellationToken),
+            ["om_behavior_binding"] = await ReadRowsAsync(runtime, "om_behavior_binding", "behavior_kind, owner_type, behavior_name, callback_slot, phase, seq, binding_id", cancellationToken),
             ["om_perm_action"] = await ReadRowsAsync(runtime, "om_perm_action", "action, description", cancellationToken),
             ["om_perm_policy"] = await ReadRowsAsync(runtime, "om_perm_policy", "policy_id, effect, action, resource_type, enabled, description", cancellationToken),
             ["om_perm_abac_rule"] = await ReadRowsAsync(runtime, "om_perm_abac_rule", "policy_id, left_ref, op, right_ref", cancellationToken),
@@ -489,6 +890,68 @@ public static class SchemaLogic
         return result.Rows;
     }
 
+    private static async Task<IReadOnlyList<string>> DetectLegacyTemporalRelationsAsync(
+        CozoOmRuntime runtime,
+        CancellationToken cancellationToken)
+    {
+        var relations = await runtime.Store.RunAsync("::relations", cancellationToken: cancellationToken);
+        var names = relations.Rows
+            .Select(row => row.Count > 0 ? JsonRows.StringAt(row, 0) : null)
+            .Where(name => name is "om_property" or "om_edge")
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        var legacy = new List<string>();
+        foreach (var name in names)
+        {
+            var columns = await runtime.Store.RunAsync($"::columns {name}", cancellationToken: cancellationToken);
+            var columnNames = columns.Rows
+                .Select(row => row.Count > 0 ? JsonRows.StringAt(row, 0) : null)
+                .Where(column => !string.IsNullOrWhiteSpace(column))
+                .ToHashSet(StringComparer.Ordinal);
+            if (!columnNames.Contains("valid_time") || !columnNames.Contains("tx_time"))
+            {
+                legacy.Add(name);
+            }
+        }
+
+        return legacy;
+    }
+
+    private static async Task UpgradeLegacyTemporalRelationsAsync(
+        CozoOmRuntime runtime,
+        IReadOnlyList<string> relations,
+        CancellationToken cancellationToken)
+    {
+        if (relations.Contains("om_property", StringComparer.Ordinal))
+        {
+            await runtime.Store.RunAsync(
+                """
+                ?[entity_id, attr_name, valid_time, value, tx_time] :=
+                  *om_property{ entity_id, attr_name, value },
+                  valid_time = "ASSERT",
+                  tx_time = $tx_time
+                :replace om_property {entity_id: String, attr_name: String, valid_time: Validity => value, tx_time: String}
+                """,
+                LogicSupport.Params(("tx_time", runtime.Options.TimeProvider.GetUtcNow().UtcDateTime.ToString("O"))),
+                cancellationToken: cancellationToken);
+        }
+
+        if (relations.Contains("om_edge", StringComparer.Ordinal))
+        {
+            await runtime.Store.RunAsync(
+                """
+                ?[from_id, rel_name, to_id, valid_time, props, tx_time] :=
+                  *om_edge{ from_id, rel_name, to_id, props },
+                  valid_time = "ASSERT",
+                  tx_time = $tx_time
+                :replace om_edge {from_id: String, rel_name: String, to_id: String, valid_time: Validity => props, tx_time: String}
+                """,
+                LogicSupport.Params(("tx_time", runtime.Options.TimeProvider.GetUtcNow().UtcDateTime.ToString("O"))),
+                cancellationToken: cancellationToken);
+        }
+    }
+
     private static SchemaDiff DiffSnapshots(SchemaSnapshot from, SchemaSnapshot to)
     {
         var fromText = from.Schema.GetRawText();
@@ -497,6 +960,63 @@ public static class SchemaLogic
         var removed = fromText == toText ? LogicSupport.EmptyObject() : from.Schema.Clone();
         var changed = fromText == toText ? LogicSupport.EmptyObject() : JsonSerializer.SerializeToElement(new { from = from.Version, to = to.Version }, OmConvert.JsonOptions);
         return new SchemaDiff(from.Version, to.Version, added, removed, changed);
+    }
+
+    private static SchemaKeyedDiff DiffSnapshotsV2(SchemaSnapshot from, SchemaSnapshot to)
+    {
+        var fromTables = ReadSnapshotTables(from.Schema);
+        var toTables = ReadSnapshotTables(to.Schema);
+        var relationSpecs = RollbackRelations.ToDictionary(spec => spec.Relation, StringComparer.Ordinal);
+        var definitions = new List<KeyValuePair<string, SchemaDefinitionDiff>>();
+        foreach (var table in fromTables.Keys.Union(toTables.Keys, StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal))
+        {
+            var keyColumns = relationSpecs.TryGetValue(table, out var spec) ? spec.KeyColumns.Length : 0;
+            var before = IndexSnapshotRows(fromTables.GetValueOrDefault(table), keyColumns);
+            var after = IndexSnapshotRows(toTables.GetValueOrDefault(table), keyColumns);
+            var added = after.Where(pair => !before.ContainsKey(pair.Key));
+            var removed = before.Where(pair => !after.ContainsKey(pair.Key));
+            var changed = before
+                .Where(pair => after.TryGetValue(pair.Key, out var later) && pair.Value.GetRawText() != later.GetRawText())
+                .Select(pair => KeyValuePair.Create(pair.Key, new SchemaDefinitionChange(pair.Value, after[pair.Key])));
+            definitions.Add(KeyValuePair.Create(table, new SchemaDefinitionDiff(added, removed, changed)));
+        }
+
+        return new SchemaKeyedDiff(from.Version, to.Version, definitions);
+    }
+
+    private static Dictionary<string, JsonElement> ReadSnapshotTables(JsonElement snapshot)
+    {
+        var tables = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        if (!snapshot.TryGetProperty("schema", out var schema) || schema.ValueKind != JsonValueKind.Object)
+        {
+            return tables;
+        }
+
+        foreach (var property in schema.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.Array)
+            {
+                tables[property.Name] = property.Value.Clone();
+            }
+        }
+
+        return tables;
+    }
+
+    private static Dictionary<string, JsonElement> IndexSnapshotRows(JsonElement? rows, int keyColumns)
+    {
+        var indexed = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        if (rows is null || rows.Value.ValueKind != JsonValueKind.Array) return indexed;
+        foreach (var row in rows.Value.EnumerateArray())
+        {
+            var cells = row.ValueKind == JsonValueKind.Array ? row.EnumerateArray().ToArray() : [];
+            var key = keyColumns == 0
+                ? row.GetRawText()
+                : string.Join("\u001f", cells.Take(keyColumns).Select(cell => cell.GetRawText()));
+            indexed[key] = row.Clone();
+        }
+
+        return indexed;
     }
 
     private static string ComputeChecksum(JsonElement schema)
@@ -532,6 +1052,7 @@ public static class SchemaLogic
         new("om_action_def", ["type_name", "action_name", "description"], ["type_name", "action_name"]),
         new("om_mutation_def", ["type_name", "mutation_name", "description"], ["type_name", "mutation_name"]),
         new("om_interceptor_def", ["type_name", "action_name", "phase", "seq", "description"], ["type_name", "action_name", "phase", "seq"]),
+        new("om_behavior_binding", ["behavior_kind", "owner_type", "behavior_name", "callback_slot", "phase", "seq", "binding_id"], ["behavior_kind", "owner_type", "behavior_name", "callback_slot", "phase", "seq"]),
         new("om_perm_action", ["action", "description"], ["action"]),
         new("om_perm_policy", ["policy_id", "effect", "action", "resource_type", "enabled", "description"], ["policy_id"]),
         new("om_perm_abac_rule", ["policy_id", "left_ref", "op", "right_ref"], ["policy_id", "left_ref", "op", "right_ref"]),

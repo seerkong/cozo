@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="add-dotnet-llm-wiki-java-spring-semantic-parsing" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 C# 版 depa-wiki 增加 Tree-sitter Java 基线和 Spring 语义推导能力</Goal>
+    <Description>复用现有 Tree-sitter Native/CLI、per-language extractor、CallResolver 和 CodeKnowledge v2 图契约，使 Java/Spring 多模块仓库能够形成可验证的代码图事实，为后续 IT 资产业务本体分析提供后端证据。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>10</Revision>
+    <CreatedAt>2026-07-16T14:34:46Z</CreatedAt>
+    <UpdatedAt>2026-07-16T18:09:20Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/" />
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/" />
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/" />
+    <MaterialBundle role="input" name="llm-wiki" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
+    <MaterialBundle role="input" name="java-dogfood-repository" domain="external-repository" path="vfs:///Users/kongweixian/java/ks-ep/is-asset-new/" />
+  </Ports>
+
+  <TaskSpace id="space_add-dotnet-llm-wiki-java-spring-semantic-parsing" name="add-dotnet-llm-wiki-java-spring-semantic-parsing" version="1" cdt:child-mode="dag">
+    <Description>Java grammar and extractor baseline, Java call resolution, Spring semantic derivation, and real-repository verification.</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="证据盘点与切片定稿" status="DONE" order="0">
+        <Description>核对现有 parser contract、grammar pin、CodeKnowledge schema、Java fixtures 和 Spring vocabulary，形成实现 track 的边界与门禁。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="完成 Java parser/Spring 语义 evidence review 并锁定首批覆盖矩阵" status="DONE" order="0" />
+          <Task id="G1-T2" name="确认 Java grammar pin、ABI/平台策略和 Spring vocabulary 的保守默认" status="DONE" order="1" />
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G2" name="Tree-sitter Java baseline" status="DONE" order="1">
+        <Description>接入 Java grammar、扩展文件/语言识别、实现 JavaExtractor，把 Java 结构事实接入既有 CodeKnowledge 图。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 Tree-sitter Java baseline 与 extractor track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-llm-wiki-java-treesitter-baseline" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G3" name="Java semantic relations" status="DONE" order="2">
+        <Description>在 Java 结构事实之上复用调用消解，补充 CALLS/ACCESSES 和必要的 Java-specific resolution 诊断。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 Java call resolution track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-llm-wiki-java-call-resolution" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G4" name="Spring semantic derivation" status="DONE" order="3">
+        <Description>实现有界、可解释的 Spring framework role/route/transaction/listener 派生事实，不把框架推断混入通用语法 extractor。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 Spring semantic derivation track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-llm-wiki-spring-semantic-derivation" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G5" name="Dogfood 验证与收口" status="DONE" order="4">
+        <Description>对 Java fixture 和 is-asset-new 做真实索引，验证统计、查询、执行流、Spring 语义证据及既有语言回归。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 Java/Spring indexing E2E verification track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-dotnet-llm-wiki-java-spring-indexing" />
+          </Task>
+          <Task id="G5-T2" name="记录 mission 收口报告和 IT 资产本体分析的移交边界" status="DONE" order="1" />
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+
+  <Schedule>
+    <Dag for="space_add-dotnet-llm-wiki-java-spring-semantic-parsing">
+      <Node id="G2"><After ref="G1" /></Node>
+      <Node id="G3"><After ref="G2" /></Node>
+      <Node id="G4"><After ref="G3" /></Node>
+      <Node id="G5"><After ref="G4" /></Node>
+    </Dag>
+  </Schedule>
+
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block" />
+    </Hook>
+  </Hooks>
+</Mission>

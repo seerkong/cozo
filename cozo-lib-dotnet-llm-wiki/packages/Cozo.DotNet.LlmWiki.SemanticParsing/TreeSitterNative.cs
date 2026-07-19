@@ -44,6 +44,7 @@ internal static class TreeSitterNative
     internal const string RuntimeLibrary = "tree-sitter";
     internal const string CSharpLibrary = "tree-sitter-c-sharp";
     internal const string TypeScriptLibrary = "tree-sitter-typescript";
+    internal const string JavaLibrary = "tree-sitter-java";
 
     /// <summary>Grammar ABI window supported by the bundled libtree-sitter runtime (v0.27.0: TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION..TREE_SITTER_LANGUAGE_VERSION).</summary>
     public const uint MinCompatibleLanguageAbi = 13;
@@ -66,7 +67,7 @@ internal static class TreeSitterNative
 
     private static IntPtr Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
-        if (libraryName is not (RuntimeLibrary or CSharpLibrary or TypeScriptLibrary))
+        if (libraryName is not (RuntimeLibrary or CSharpLibrary or TypeScriptLibrary or JavaLibrary))
         {
             return IntPtr.Zero;
         }
@@ -183,6 +184,7 @@ internal static class TreeSitterNative
     // ---- grammar entry points ----
     [DllImport(CSharpLibrary)] internal static extern IntPtr tree_sitter_c_sharp();
     [DllImport(TypeScriptLibrary)] internal static extern IntPtr tree_sitter_typescript();
+    [DllImport(JavaLibrary)] internal static extern IntPtr tree_sitter_java();
 
     // ---- libc free for ts_node_string ----
     [DllImport("libSystem.B.dylib", EntryPoint = "free")] private static extern void FreeDarwin(IntPtr ptr);

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using Cozo.DotNet.Om.Contracts.Models;
 
@@ -62,6 +63,45 @@ public sealed record SchemaMigrationSpec(
     string? Description = null,
     bool Strict = false,
     IReadOnlyList<JsonElement>? Steps = null);
+
+public sealed record InitializeSchemaV2Input(SchemaInitializationOptions? Options = null)
+{
+    public SchemaInitializationOptions EffectiveOptions => Options ?? SchemaInitializationOptions.Default;
+}
+
+public sealed record SchemaMigrationV2Input
+{
+    public SchemaMigrationV2Input(
+        string migrationId,
+        int fromVersion,
+        int toVersion,
+        IEnumerable<JsonElement>? steps = null,
+        string? label = null,
+        string? description = null,
+        SchemaMigrationV2Options? options = null)
+    {
+        MigrationId = migrationId;
+        FromVersion = fromVersion;
+        ToVersion = toVersion;
+        Steps = steps?.Select(step => step.Clone()).ToImmutableArray() ?? ImmutableArray<JsonElement>.Empty;
+        Label = label;
+        Description = description;
+        Options = options ?? SchemaMigrationV2Options.Default;
+    }
+
+    public string MigrationId { get; }
+    public int FromVersion { get; }
+    public int ToVersion { get; }
+    public ImmutableArray<JsonElement> Steps { get; }
+    public string? Label { get; }
+    public string? Description { get; }
+    public SchemaMigrationV2Options Options { get; }
+}
+
+public sealed record RollbackSchemaV2Input(int TargetVersion, SchemaRollbackV2Options? Options = null)
+{
+    public SchemaRollbackV2Options EffectiveOptions => Options ?? SchemaRollbackV2Options.Default;
+}
 
 public sealed record DefinePermissionPolicyInput(
     string PolicyId,

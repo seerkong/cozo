@@ -59,14 +59,21 @@ public static class ExistentialRuleLogic
 
     public static async Task<IReadOnlyList<ExistentialRule>> ListExistentialRulesAsync(CozoOmRuntime runtime, CancellationToken cancellationToken = default)
     {
-        var result = await runtime.Store.RunAsync(
-            """
-            ?[rule_name, spec_json, mode, message, enabled] :=
-              *om_existential_rule_def{ rule_name, spec_json, mode, message, enabled }
-            :sort rule_name
-            """,
-            cancellationToken: cancellationToken);
-        return result.Rows.Select(ParseRuleRow).Where(r => r is not null).Cast<ExistentialRule>().ToArray();
+        try
+        {
+            var result = await runtime.Store.RunAsync(
+                """
+                ?[rule_name, spec_json, mode, message, enabled] :=
+                  *om_existential_rule_def{ rule_name, spec_json, mode, message, enabled }
+                :sort rule_name
+                """,
+                cancellationToken: cancellationToken);
+            return result.Rows.Select(ParseRuleRow).Where(r => r is not null).Cast<ExistentialRule>().ToArray();
+        }
+        catch (CozoException exception) when (IsMissingRuleStorage(exception))
+        {
+            return [];
+        }
     }
 
     public static async Task<IReadOnlyList<ExistentialViolation>> CheckExistentialRulesAsync(
@@ -109,20 +116,21 @@ public static class ExistentialRuleLogic
             var roundCreated = 0;
             foreach (var rule in rules)
             {
-                var violations = await FindViolationsAsync(runtime, rule, asOf: null, cancellationToken);
+                var runtimeRule = await ResolveRuntimeRuleAsync(runtime, rule, cancellationToken);
+                var violations = await FindViolationsAsync(runtime, runtimeRule, asOf: null, cancellationToken);
                 foreach (var violation in violations)
                 {
-                    var attemptKey = $"{rule.RuleName}\u0001{violation.EntityId}";
+                    var attemptKey = $"{runtimeRule.RuleName}\u0001{violation.EntityId}";
                     if (!attempted.Add(attemptKey)) continue;
-                    var skolemId = OmConvert.SkolemId(rule.RuleName, violation.EntityId);
-                    var label = SkolemLabel(rule, violation.EntityId);
-                    await EntityLogic.UpsertEntityAsync(runtime, new EntityInput(skolemId, rule.Exists.ToType, label), cancellationToken);
+                    var skolemId = OmConvert.SkolemId(runtimeRule.RuleName, violation.EntityId);
+                    var label = SkolemLabel(runtimeRule, violation.EntityId);
+                    await EntityLogic.UpsertEntityAsync(runtime, new EntityInput(skolemId, runtimeRule.Exists.ToType, label), cancellationToken);
                     await EntityLogic.SetPropertyAsync(
                         runtime,
-                        new SetPropertyInput(skolemId, SkolemOriginAttr, rule.RuleName, new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime)),
+                        new SetPropertyInput(skolemId, SkolemOriginAttr, runtimeRule.RuleName, new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime)),
                         cancellationToken);
 
-                    foreach (var prop in rule.Materialize?.Props ?? new Dictionary<string, JsonElement>())
+                    foreach (var prop in runtimeRule.Materialize?.Props ?? new Dictionary<string, JsonElement>())
                     {
                         await EntityLogic.SetPropertyAsync(
                             runtime,
@@ -130,11 +138,11 @@ public static class ExistentialRuleLogic
                             cancellationToken);
                     }
 
-                    var link = rule.Exists.Direction == ExistentialDirection.In
-                        ? new LinkEntitiesInput(skolemId, rule.Exists.Rel, violation.EntityId, new Dictionary<string, object?>(), new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime))
-                        : new LinkEntitiesInput(violation.EntityId, rule.Exists.Rel, skolemId, new Dictionary<string, object?>(), new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime));
+                    var link = runtimeRule.Exists.Direction == ExistentialDirection.In
+                        ? new LinkEntitiesInput(skolemId, runtimeRule.Exists.Rel, violation.EntityId, new Dictionary<string, object?>(), new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime))
+                        : new LinkEntitiesInput(violation.EntityId, runtimeRule.Exists.Rel, skolemId, new Dictionary<string, object?>(), new WriteOptions(SkipConstraints: true, ValidTime: input?.ValidTime));
                     await RelationLogic.LinkEntitiesAsync(runtime, link, cancellationToken);
-                    created.Add(new ExistentialCreated(rule.RuleName, violation.EntityId, skolemId, rule.Exists.Rel, rule.Exists.ToType));
+                    created.Add(new ExistentialCreated(runtimeRule.RuleName, violation.EntityId, skolemId, runtimeRule.Exists.Rel, runtimeRule.Exists.ToType));
                     roundCreated++;
                 }
             }
@@ -171,6 +179,11 @@ public static class ExistentialRuleLogic
         var where = new List<ExistentialWhereCondition>();
         foreach (var condition in spec.ForEach.Where ?? [])
         {
+            if (condition.Op is not ("=" or "!=" or ">" or ">=" or "<" or "<="))
+            {
+                throw new CozoException($"Unsupported existential where op '{condition.Op}'");
+            }
+
             var attr = await TypeLogic.ResolveAttrAsync(runtime, bodyType, condition.Attr, cancellationToken);
             where.Add(condition with { Attr = attr });
         }
@@ -190,17 +203,21 @@ public static class ExistentialRuleLogic
         string? asOf,
         CancellationToken cancellationToken)
     {
+        rule = await ResolveRuntimeRuleAsync(runtime, rule, cancellationToken);
         var bodyTypes = new[] { rule.ForEach.Type }
             .Concat(await TypeLogic.GetDescendantsAsync(runtime, rule.ForEach.Type, cancellationToken))
             .ToArray();
+        var bodyTypeNames = await ExpandTypeNamesAsync(runtime, bodyTypes, cancellationToken);
         var toTypes = new[] { rule.Exists.ToType }
             .Concat(await TypeLogic.GetDescendantsAsync(runtime, rule.Exists.ToType, cancellationToken))
             .ToArray();
+        var toTypeNames = await ExpandTypeNamesAsync(runtime, toTypes, cancellationToken);
+        var relationNames = await ExpandRelationNamesAsync(runtime, rule.Exists.Rel, cancellationToken);
         var at = asOf is null ? "\"NOW\"" : "$as_of";
         var edgeAtom = rule.Exists.Direction == ExistentialDirection.In
             ? $"*om_edge{{ from_id: other_id, rel_name: rn, to_id: id, props: _p @ {at} }}"
             : $"*om_edge{{ from_id: id, rel_name: rn, to_id: other_id, props: _p @ {at} }}";
-        var parameters = LogicSupport.Params(("rel_name", rule.Exists.Rel), ("to_types", toTypes));
+        var parameters = LogicSupport.Params(("rel_names", relationNames), ("to_types", toTypeNames));
         if (asOf is not null) parameters["as_of"] = asOf;
 
         var whereAtoms = new List<string>();
@@ -217,16 +234,17 @@ public static class ExistentialRuleLogic
                 "<=" => "<=",
                 _ => throw new CozoException($"Unsupported existential where op '{condition.Op}'")
             };
-            parameters[$"w_attr_{index}"] = condition.Attr;
+            parameters[$"w_attrs_{index}"] = await ExpandAttributeNamesAsync(runtime, bodyTypes, condition.Attr, cancellationToken);
             parameters[$"w_value_{index}"] = JsonSerializer.Deserialize<object?>(condition.Value.GetRawText(), OmConvert.JsonOptions);
-            whereAtoms.Add($"*om_property{{ entity_id: id, attr_name: $w_attr_{index}, value: w_val_{index} @ {at} }}");
+            whereAtoms.Add($"*om_property{{ entity_id: id, attr_name: w_attr_{index}, value: w_val_{index} @ {at} }}");
+            whereAtoms.Add($"is_in(w_attr_{index}, $w_attrs_{index})");
             whereAtoms.Add($"w_val_{index} {op} $w_value_{index}");
             index++;
         }
 
         var where = whereAtoms.Count == 0 ? "" : ",\n  " + string.Join(",\n  ", whereAtoms);
         var script =
-            $"sat[id] := {edgeAtom}, rn = $rel_name,\n" +
+            $"sat[id] := {edgeAtom}, is_in(rn, $rel_names),\n" +
             "  *om_entity{ id: other_id, type_name: other_type, label: _other_label },\n" +
             "  is_in(other_type, $to_types)\n" +
             "?[id] := *om_entity{ id, type_name: $type_name, label: _label }" + where + ",\n" +
@@ -234,7 +252,7 @@ public static class ExistentialRuleLogic
             ":sort id";
 
         var violations = new List<ExistentialViolation>();
-        foreach (var bodyType in bodyTypes)
+        foreach (var bodyType in bodyTypeNames)
         {
             parameters["type_name"] = bodyType;
             var rows = await runtime.Store.RunAsync(script, parameters, cancellationToken: cancellationToken);
@@ -242,6 +260,136 @@ public static class ExistentialRuleLogic
         }
 
         return violations;
+    }
+
+    private static async Task<IReadOnlyList<string>> ExpandTypeNamesAsync(
+        CozoOmRuntime runtime,
+        IEnumerable<string> canonicalTypes,
+        CancellationToken cancellationToken)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var typeName in canonicalTypes)
+        {
+            var canonical = await TypeLogic.ResolveTypeAsync(runtime, typeName, cancellationToken);
+            names.Add(canonical);
+            foreach (var alias in await ListTypeAliasesForCanonicalAsync(runtime, canonical, cancellationToken)) names.Add(alias);
+        }
+
+        return names.ToArray();
+    }
+
+    private static async Task<IReadOnlyList<string>> ExpandRelationNamesAsync(
+        CozoOmRuntime runtime,
+        string canonicalRelation,
+        CancellationToken cancellationToken)
+    {
+        var canonical = await TypeLogic.ResolveRelAsync(runtime, canonicalRelation, cancellationToken);
+        var names = new SortedSet<string>(StringComparer.Ordinal) { canonical };
+        foreach (var alias in await ListRelationAliasesForCanonicalAsync(runtime, canonical, cancellationToken)) names.Add(alias);
+        return names.ToArray();
+    }
+
+    private static async Task<IReadOnlyList<string>> ExpandAttributeNamesAsync(
+        CozoOmRuntime runtime,
+        IEnumerable<string> bodyTypes,
+        string canonicalAttribute,
+        CancellationToken cancellationToken)
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var typeName in bodyTypes)
+        {
+            var canonical = await TypeLogic.ResolveAttrAsync(runtime, typeName, canonicalAttribute, cancellationToken);
+            names.Add(canonical);
+            foreach (var alias in await TypeLogic.GetAttributeAliasesForCanonicalAsync(runtime, typeName, canonical, cancellationToken)) names.Add(alias);
+        }
+
+        return names.ToArray();
+    }
+
+    private static async Task<IReadOnlyList<string>> ListTypeAliasesForCanonicalAsync(
+        CozoOmRuntime runtime,
+        string canonicalType,
+        CancellationToken cancellationToken)
+    {
+        var rows = await runtime.Store.RunAsync(
+            """
+            ?[alias] :=
+              *om_alias_type{ alias, canonical: _canonical }
+            :sort alias
+            """,
+            cancellationToken: cancellationToken);
+        return await FilterAliasesAsync(rows.Rows, alias => TypeLogic.ResolveTypeAsync(runtime, alias, cancellationToken), canonicalType);
+    }
+
+    private static async Task<IReadOnlyList<string>> ListRelationAliasesForCanonicalAsync(
+        CozoOmRuntime runtime,
+        string canonicalRelation,
+        CancellationToken cancellationToken)
+    {
+        var rows = await runtime.Store.RunAsync(
+            """
+            ?[alias] :=
+              *om_alias_rel{ alias, canonical: _canonical }
+            :sort alias
+            """,
+            cancellationToken: cancellationToken);
+        return await FilterAliasesAsync(rows.Rows, alias => TypeLogic.ResolveRelAsync(runtime, alias, cancellationToken), canonicalRelation);
+    }
+
+    private static async Task<IReadOnlyList<string>> FilterAliasesAsync(
+        IReadOnlyList<IReadOnlyList<JsonElement>> rows,
+        Func<string, Task<string>> resolve,
+        string canonical)
+    {
+        var aliases = new List<string>();
+        foreach (var row in rows)
+        {
+            var alias = JsonRows.StringAt(row, 0);
+            if (string.IsNullOrWhiteSpace(alias)) continue;
+            try
+            {
+                if (await resolve(alias!) == canonical) aliases.Add(alias!);
+            }
+            catch (CozoException)
+            {
+                // Cyclic legacy aliases remain resolution errors, but must not break compatible reads.
+            }
+        }
+
+        return aliases;
+    }
+
+    private static async Task<ExistentialRule> ResolveRuntimeRuleAsync(
+        CozoOmRuntime runtime,
+        ExistentialRule rule,
+        CancellationToken cancellationToken)
+    {
+        var bodyType = await TypeLogic.ResolveTypeAsync(runtime, rule.ForEach.Type, cancellationToken);
+        var relation = await TypeLogic.ResolveRelAsync(runtime, rule.Exists.Rel, cancellationToken);
+        var toType = await TypeLogic.ResolveTypeAsync(runtime, rule.Exists.ToType, cancellationToken);
+        var where = new List<ExistentialWhereCondition>();
+        foreach (var condition in rule.ForEach.Where ?? [])
+        {
+            where.Add(condition with
+            {
+                Attr = await TypeLogic.ResolveAttrAsync(runtime, bodyType, condition.Attr, cancellationToken),
+            });
+        }
+
+        return rule with
+        {
+            ForEach = new ExistentialForEachSpec(bodyType, where),
+            Exists = new ExistentialExistsSpec(relation, rule.Exists.Direction, toType),
+        };
+    }
+
+    private static bool IsMissingRuleStorage(CozoException exception)
+    {
+        var detail = $"{exception.Message}\n{exception.RawResponse}";
+        return detail.Contains("relation not found", StringComparison.OrdinalIgnoreCase)
+               || detail.Contains("stored_relation_not_found", StringComparison.OrdinalIgnoreCase)
+               || detail.Contains("cannot find requested stored relation", StringComparison.OrdinalIgnoreCase)
+               || detail.Contains("not found", StringComparison.OrdinalIgnoreCase) && detail.Contains("om_existential_rule_def", StringComparison.Ordinal);
     }
 
     private static string SkolemLabel(ExistentialRule rule, string triggerEntityId)

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="schema-evolution" version="1">
+  <upsert selector="behavior://schema-evolution/requirements/atomic-strict-v2">
+    <requirement id="atomic-strict-v2">
+      <statement>.NET OM SHALL expose additive strict-by-default V2 migration and rollback APIs which preflight before mutation, return structured diagnostics/results, and apply schema, snapshot, state and history changes atomically.</statement>
+      <suite id="migration" name="Migration V2">
+        <case id="strict-preflight-and-rollback">
+          <given>a migration or rollback contains an invalid strict operation</given>
+          <when>the V2 API is invoked</when>
+          <then>it SHALL return or throw structured failure without partially changing schema state, data, snapshots or migration history</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://schema-evolution/requirements/legacy-and-diff">
+    <requirement id="legacy-and-diff">
+      <statement>.NET OM SHALL detect legacy non-temporal relation shapes without automatic mutation by default, provide explicit idempotent upgrade, preserve compatibility wrappers, and return deterministic keyed diffs over the full C# snapshot including behavior metadata.</statement>
+      <suite id="compatibility" name="Legacy and diff">
+        <case id="detect-only-and-explicit-upgrade">
+          <given>a database contains a supported legacy relation shape</given>
+          <when>normal initialization runs</when>
+          <then>it SHALL report detect-only status and SHALL change storage only after an explicit upgrade request or opt-in</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

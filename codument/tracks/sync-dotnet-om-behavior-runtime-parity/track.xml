@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="sync-dotnet-om-behavior-runtime-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>补齐 C# OM 的 parent-action、行为继承顺序与定义 guardrails，并用 Bun/C# 对等测试固定行为。</Goal>
+    <Description>实现 CallParentActionAsync、稳定的父子 interceptor 顺序、owner/scope/phase/callback 校验及 metadata/registry 双向原子性，同时保留 C# 事务与 typed registry 设计。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <gap-round>2</gap-round>
+    <CreatedAt>2026-07-16T18:19:47Z</CreatedAt>
+    <UpdatedAt>2026-07-16T20:02:13Z</UpdatedAt>
+    <cdt:Risks>
+      <cdt:Risk>Parent dispatch 若重入完整 action execution 会重复 interceptor 或产生嵌套事务。</cdt:Risk>
+      <cdt:Risk>Interceptor seq 是 owner-local；错误全局排序会改变继承链行为。</cdt:Risk>
+      <cdt:Risk>Metadata 与 callback 注册任一方向失败都可能产生不一致状态。</cdt:Risk>
+    </cdt:Risks>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="bun-tests" domain="source" path="vfs://@/cozo-lib-bun/__tests__/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_sync-dotnet-om-behavior-runtime-parity" name="sync-dotnet-om-behavior-runtime-parity" version="1">
+    <Description>Synchronize .NET OM behavior-runtime inheritance and guardrails with the Bun reference.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="实现行为运行时对等" status="DONE" order="0">
+        <Description>在现有 C# transaction/registry 架构中补齐 parent dispatch、继承顺序和定义原子性。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="实现行为定义 guardrails 与双向原子性" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>验证 owner type、constraint scope、interceptor phase、callback，并协调 metadata/registry 失败补偿。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">无效定义不留下 metadata 或 callback registry 残留。</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">内部协调 helper 不扩大非必要 public surface。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 CallParentActionAsync" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>从 ActionOwnerType 上方解析最近 parent handler，返回 mutations，不重复执行 interceptor 或开启事务。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">多级 override 能逐层推进 owner 并组合 mutations。</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">链结束抛 InvalidOperationException，诊断包含 action 与 current owner。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="修正 inherited interceptor 顺序" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>保持 ancestor-to-child owner grouping 和 owner-local seq，不对扁平链做全局 seq 排序。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">before/after 均按父到子、owner 内注册顺序执行。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="同步双端行为测试" status="DONE" order="1">
+        <Description>在 C# 与 Bun 测试中覆盖共享继承、顺序、错误和回滚契约。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="补充 C# runtime parity tests" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>覆盖 parent action、mutation inheritance、mixed owner interceptor order、guardrail 原子性和 rollback。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">Behavior delta 的全部 C# cases 有可断言测试。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="补充 Bun reference tests" ownerAccount="agent:impl" status="DONE" order="1" priority="P1">
+            <Description>补齐 inherited mutation 与 mixed parent/child interceptor ordering 等参考测试。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">Bun reference 对共享行为有对应场景。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="验证与收口" status="DONE" order="2">
+        <Description>运行可用测试、检查公开面与 track 结构，形成可复核证据。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="运行 C# 与 Bun 验证" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>运行 C# OM tests 和目标 Bun suites；环境缺失时记录准确命令与失败原因。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">可用 runtime 的测试退出码为 0，缺失 runtime 不被误报为通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="检查边界并完成 track" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>检查 public surface、行为 delta 和实现报告，更新状态真源。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">没有吸收 G4-G9 范围，所有完成状态有证据。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Parallel max-concurrent="1" spot-check="true"/>
+  </Schedule>
+  <Hooks>
+  </Hooks>
+</Track>

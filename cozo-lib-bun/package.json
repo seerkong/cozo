@@ -21,7 +21,7 @@
     "demo-procurement.js",
     "demo-hr.js",
     "demo-crm.js",
-    "demo-it-asset.js",
+    "demo-resource-graph.js",
     "native/"
   ],
   "scripts": {
@@ -32,7 +32,7 @@
     "demo:procurement": "bun demo-procurement.js",
     "demo:hr": "bun demo-hr.js",
     "demo:crm": "bun demo-crm.js",
-    "demo:it-asset": "bun demo-it-asset.js"
+    "demo:resource-graph": "bun demo-resource-graph.js"
   },
   "author": "Ziyang Hu",
   "license": "MIT",

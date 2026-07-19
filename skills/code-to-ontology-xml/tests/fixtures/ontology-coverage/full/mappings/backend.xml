@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ImplementationMappingModule id="ExampleCatalog.Mappings.Backend">
+  <Mappings>
+    <ImplementationMapping id="ExampleCatalog.Implementation.Record" conceptRef="ExampleCatalog.Record">
+      <ImplementedBy>
+        <CodeRef repository="backend" language="java" kind="class" symbol="example.Record" />
+      </ImplementedBy>
+      <EvidenceRefs><EvidenceRef ref="backend:record-type" /></EvidenceRefs>
+    </ImplementationMapping>
+  </Mappings>
+</ImplementationMappingModule>

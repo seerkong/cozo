@@ -9,7 +9,7 @@
 - **独立 spot-check**：子代理的"完成 / 全绿 / 非我责任"自述只是待验证假设；编排者必须用客观命令、行为基线与 diff 审查独立确认后，才能把任务视为完成。
 - **三轴分离**：结构（TaskSpace）/ 调度（Schedule）/ 行为（Hooks）正交，见 `std/spec/track-xml-spec.md`。
 - **显式 hook 纠偏**：方向/确认/有界修复都由节点或命令生命周期上的 `cdt:` hook 触发；**无显式 hook 不隐式暂停**。
-- **知识沉淀与晋升**：track 是迭代轨迹；其中**稳定**的真理要按 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) 晋升进 owner 层（`docs/modeling`/`docs/impl`/`behaviors`/`decisions`/`memory`）。owner 文档维护**实时优先**（discuss 期就收敛），归档兜底。这是 codument 相对 track 记忆的弱环，需刻意补强。
+- **知识沉淀与晋升**：track 是迭代轨迹；其中**稳定**的真理要按 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) 晋升进 owner 层（`codument/modeling`/`codument/engineering`/`behaviors`/`decisions`/`memory`）。owner 文档维护**实时优先**（discuss 期就收敛），归档兜底。这是 codument 相对 track 记忆的弱环，需刻意补强。
 - **事实写入磁盘**：长程实现中的实证数据、失败归因、环境约束、机制漏洞和 phase/wave 结论写入 `tracks/<id>/analysis/findings.md`；新会话恢复时先读它。
 - **破坏性 git 禁令**：子代理不得使用 `git restore` / `git checkout` / `git stash` 这类会抹掉他人未提交成果的命令；只读 git 查询允许，重命名可用 `git mv`。
 - **自包含**：所有提示词/规范在 `codument/`（init 落盘），规则随项目工作区一起维护。

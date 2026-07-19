@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LifecycleModule id="ExampleCatalog.Lifecycles.Core">
+  <StateMachines>
+    <StateMachine id="ExampleCatalog.Lifecycle.Record" subject="ExampleCatalog.Record" stateProperty="lifecycleState" initial="pendingInbound">
+      <States>
+        <State id="pendingInbound" />
+        <State id="available" />
+        <State id="assigned" />
+      </States>
+      <Transitions>
+        <Transition id="ExampleCatalog.Transition.AcceptInbound" action="acceptInbound" from="pendingInbound" to="available">
+          <EvidenceRefs><EvidenceRef ref="backend:accept-inbound-transition" /></EvidenceRefs>
+        </Transition>
+        <Transition id="ExampleCatalog.Transition.Outbound" action="outbound" from="available" to="assigned">
+          <EvidenceRefs><EvidenceRef ref="backend:record-outbound-validation" /></EvidenceRefs>
+        </Transition>
+      </Transitions>
+    </StateMachine>
+  </StateMachines>
+</LifecycleModule>

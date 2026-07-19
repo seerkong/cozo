@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track xmlns:cdt="urn:codument:v1" id="add-onto-agentic-analysis-workspace" version="1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>实现与 accepted ontology 隔离的 agentic 分析状态与 provenance 工作区。</Goal>
+    <Description>新增 append-only `onto_analysis_*` storage/service/test；不暴露 promotion 或 XML 导出。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <GapRound>2</GapRound>
+    <CreatedAt>2026-07-19T05:35:00Z</CreatedAt>
+    <UpdatedAt>2026-07-19T07:03:40Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="tools" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/"/>
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/"/>
+  </Ports>
+  <TaskSpace id="space_add_onto_agentic_analysis_workspace" name="add-onto-agentic-analysis-workspace" version="1">
+    <Description>分析 schema、append-only service 与隔离测试。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="分析工作区" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="定义 `onto_analysis_*` relation、状态模型和 provenance 合同" status="DONE" order="0" priority="P0"/>
+          <Task id="T1.2" name="实现 append-only analysis store 与读取视图" status="DONE" order="1" priority="P0"/>
+          <Task id="T1.3" name="覆盖隔离、幂等、证据闭包和禁止 promotion 测试" status="DONE" order="2" priority="P0"/>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after">
+            <cdt:GapLoop max-rounds="2" verify-round="true" on-exhausted="block"/>
+          </Hook>
+          <Hook on="phase:after">
+            <cdt:AttractorCheck use="coding"/>
+          </Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

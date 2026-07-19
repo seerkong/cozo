@@ -1,0 +1,20 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/ontology-semantic-experiments">
+    <requirement id="ontology-semantic-experiments">
+      <statement>系统 SHALL 支持在现有 `onto_*` 语义候选管道上运行可复现的 `v2` 与 `v3` assisted experiment profile：两者 SHALL 只消费有界且可回链的 use-case evidence pack，写入独立 generation/artifact，保持 pending/review promotion 门禁，并记录足以比较质量与成本的实验 provenance。</statement>
+      <suite id="v2-profile" name="v2 单轮受限提案">
+        <case id="slice-bounded-proposal"><given>已索引的 semantic claims、canonical concepts 与可排序的 business use-case slices</given><when>以 `--mode assisted --experiment v2` 运行</when><then>系统 SHALL 仅对预算内的 ranked slices 调用 proposal client；每个候选必须通过既有本地 validator，且只写为 pending</then></case>
+        <case id="budget-before-call"><given>配置的 slice/call/input/output/retry 预算已耗尽或请求超过 profile 上限</given><when>调度实验</when><then>系统 SHALL 在下一次模型调用前失败并写出有界预算诊断，不得悄然扩大 token 消耗或写 partial generation</then></case>
+      </suite>
+      <suite id="v3-profile" name="v3 提案者与怀疑者">
+        <case id="critic-only-prunes"><given>v2-shaped proposal 已通过本地 validator，且同一 slice evidence 仍有效</given><when>以 `--mode assisted --experiment v3` 运行 critic phase</when><then>critic SHALL 仅对输入 candidate IDs 返回 keep/drop；系统 SHALL 拒绝新增候选、未知 ID、未知 evidence 或无效 envelope</then></case>
+        <case id="same-input-comparison"><given>v2 与 v3 使用相同 source fingerprint、ranked slice set、profile pack contract 与 model setting</given><when>生成实验 manifest</when><then>manifest SHALL 记录可比较输入 digest、phase 调用计数、缓存命中与保留/否决统计</then></case>
+      </suite>
+      <suite id="experiment-artifact-and-governance" name="实验制品与治理">
+        <case id="version-isolation"><given>执行 v2 或 v3</given><when>导出实验制品</when><then>系统 SHALL 分别写入 versioned artifact root，且不得覆盖 v1 或复用其他 generation 的 accepted/review 状态</then></case>
+        <case id="cache-without-model-text"><given>同一 profile、phase、model、prompt contract 与 evidence-pack digest 已产生本地有效结果</given><when>再次运行</when><then>系统 MAY 重用经校验的派生结果，但 SHALL 不把原始模型文本、rationale 或 provider diagnostic 写成 evidence</then></case>
+        <case id="no-automatic-promotion"><given>v2/v3 完成且产生 pending candidates</given><when>导出 XML</when><then>关系、规则、生命周期仍须显式 review accept 后才可 materialize；实验成功不得自动提升</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

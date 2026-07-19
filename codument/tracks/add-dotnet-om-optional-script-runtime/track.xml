@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-om-optional-script-runtime" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>在 Om.Core 外提供安全有界、按 canonical binding id 生成 typed callbacks 的可选 Jint 行为运行时。</Goal>
+    <Description>新增独立 Jint adapter package，覆盖所有行为 callback shape、显式 OM host capability、资源限制、稳定错误映射和 manifest readiness 集成。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <gap-round>3</gap-round>
+    <CreatedAt>2026-07-17T01:35:00Z</CreatedAt>
+    <UpdatedAt>2026-07-17T13:35:00Z</UpdatedAt>
+    <cdt:Risks>
+      <cdt:Risk>进程内脚本若暴露 CLR 或无限资源，会破坏宿主安全与可用性。</cdt:Risk>
+      <cdt:Risk>异步 host bridge 若阻塞或在取消后继续写入，会破坏事务和取消语义。</cdt:Risk>
+      <cdt:Risk>binding id 与 callback slot 映射错误会制造假 ready 或运行时类型错配。</cdt:Risk>
+    </cdt:Risks>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="om-core" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="jint-adapter" domain="source" path="vfs://@/cozo-lib-dotnet/packages/Om.Scripting.Jint/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-dotnet-om-optional-script-runtime" name="add-dotnet-om-optional-script-runtime" version="1">
+    <Description>Add an optional bounded Jint provider that composes with canonical behavior manifests and typed OM callbacks.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="建立 package 与 binding provider" status="DONE" order="0">
+        <Description>先用失败优先用例锁定 package 隔离、immutable inputs、exact binding-slot mapping 和 provider diagnostics，再实现最小 provider vertical slice。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="编写 package 与 binding contract 测试" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>覆盖 Jint 依赖隔离、immutable options/source、六类 typed callback collections、exact ordinal id、missing/duplicate/incompatible reuse 与 native/script merge conflict。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">测试证明 Jint 4.13.0 只存在于 adapter package，Om.Core/root project 无引擎依赖或脚本 schema。</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">每种 catalog kind/slot 映射到唯一正确的 BehaviorCallbackBindingSet delegate collection。</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">缺失、重复、同 id 不兼容 shape 及 native/script 冲突在 import effect 前产生稳定诊断。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="实现 Jint adapter package 与 provider" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>新增 pinned package、immutable contracts、slot validator、typed callback set builder 与 provider-neutral merge；不修改 canonical manifest schema。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">合法 catalog 与 script definitions 生成 exact binding-id typed callbacks，可直接交给现有 import facade。</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">provider 失败不修改 metadata、binding relation、registry 或 readiness。</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">公共输入、结果与 diagnostics 为 immutable C# contracts，Jint 类型不越过 package boundary。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.3" name="修复 false readiness 与 provider normalization" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>响应 P1 coding attractor：以 fresh Jint engine 实现六类 callback 的最小纯脚本执行，移除 placeholder；对 direct catalog/definition/options 的空值、非法 kind/slot 与无效限额做结构化 preflight，并按稳定 key 规范 diagnostics/bindings。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.3-AC1" checked="true">RequireReady 导入后每个 script callback 可真实执行其最小纯函数结果，不存在 ready-but-placeholder 状态。</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC2" checked="true">blank/null id/source、非法 kind/slot 和无效 options 在任何 import effect 前返回稳定结构化 diagnostics。</cdt:Criterion>
+              <cdt:Criterion id="T1.3-AC3" checked="true">反转 catalog/definition 输入顺序得到相同 diagnostics 顺序与各 typed binding id 顺序。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.4" name="预编译 callable 并规范完整 request graph" ownerAccount="agent:impl" status="DONE" order="3" priority="P0">
+            <Description>响应 P1 coding attractor 第二轮：BuildBindings 在生成 ready callback 前以 fresh no-host engine 验证每个 referenced source 可解析为 callable；同时对 record copy/init 产生的 null/default catalog、options、native callbacks、definitions、entry/callback 元素做结构化 fatal preflight。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.4-AC1" checked="true">语法错误或非 callable source 返回稳定 fatal diagnostic、零 bindings，RequireReady 无法把它标为 ready。</cdt:Criterion>
+              <cdt:Criterion id="T1.4-AC2" checked="true">null/default request graph 与 null collection elements 不产生 NullReference/LINQ 异常，只返回稳定 fatal diagnostics。</cdt:Criterion>
+              <cdt:Criterion id="T1.4-AC3" checked="true">合法 source 的 callable preflight 不执行函数体或产生 host/OM effect，原有六类执行测试继续通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="实现有界 engine 与 typed 执行" status="DONE" order="1">
+        <Description>实现 fresh engine、JSON-shaped projection/result conversion、所有 callback shape、有限资源和稳定异常。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="编写 engine、结果与错误映射测试" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>覆盖 constraint when/then/validator、computed、action、mutation、interceptor，合法/非法结果、compile/runtime/location/source-redaction 及 fresh/concurrent isolation。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">所有 callback shape 的脚本返回值精确转换为现有 typed delegate 结果。</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">非法 CLR/非 JSON 结果与 compile/runtime 错误包含 stable code、binding id、slot、phase，且不泄漏完整 source。</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC3" checked="true">global mutation 与并发调用证明每次 invocation 使用独立 engine。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="实现 fresh engine、limits 与 conversion" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>配置无 AllowClr/module loader 的 fresh Jint engine，应用 cancellation、timeout、statements、recursion 与受支持 memory limits，并实现显式 JSON conversion/error mapping。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">无限循环、递归、statement 和受支持 memory 限制可中止；不支持的 memory 配置在执行前拒绝。</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">调用前/执行中 cancellation 映射为取消而非普通 script failure。</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC3" checked="true">不存在跨 invocation engine/global state，共享对象只读且不可从脚本变异。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="实现 allowlisted async OM host" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>按 callback kind 投影 promise-returning property/temporal/neighbor/write/link/parent-action 能力；不暴露 raw runtime/store/CLR，禁止同步等待 Task。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.3-AC1" checked="true">仅允许的 host member 可见；CLR、filesystem、network、module loader 与未知 member 不可达。</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC2" checked="true">异步 host 与 Promise 由 adapter await，代码中无 `.Result`/`.Wait()` bridge。</cdt:Criterion>
+              <cdt:Criterion id="T2.3-AC3" checked="true">parent action 返回 mutation specs 供脚本显式组合，不提前应用；host writes 使用现有 transaction runtime。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.4" name="修复 P2 attractor 安全与限额 gap" ownerAccount="agent:impl" status="DONE" order="3" priority="P0">
+            <Description>落实 finite defaults 与完整 Promise timeout，移除脚本 skipConstraints 权限，强化 error redaction/location，并消除资源测试竞争。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.4-AC1" checked="true">默认配置具有有限 timeout/statements/recursion/memory，永不 settle Promise 也按稳定 timeout 中止。</cdt:Criterion>
+              <cdt:Criterion id="T2.4-AC2" checked="true">脚本不能设置 skipConstraints，公开 runtime/host error 不泄漏脚本抛出的 secret。</cdt:Criterion>
+              <cdt:Criterion id="T2.4-AC3" checked="true">资源分类测试无竞争，compile/runtime failure 具有真实 source identity/location 证据。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.5" name="约束 callable preflight 资源消耗" ownerAccount="agent:impl" status="DONE" order="4" priority="P0">
+            <Description>让绑定阶段的 source callable preflight 使用同一有限资源策略，阻止 factory expression 绕过 invocation limits。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.5-AC1" checked="true">preflight 应用 finite timeout/statements/recursion/memory 与 caller cancellation，不使用裸 engine。</cdt:Criterion>
+              <cdt:Criterion id="T2.5-AC2" checked="true">无限循环或资源爆炸的 factory source 在有界时间内返回稳定 diagnostic、零 bindings，且无 OM effect。</cdt:Criterion>
+              <cdt:Criterion id="T2.5-AC3" checked="true">合法 function/arrow source 与已有 compile/location/readiness 行为保持兼容。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="集成 readiness、事务与安全故障矩阵" status="DONE" order="2">
+        <Description>把 provider 接入 canonical import 的真实执行路径，并覆盖取消、limit、host failure 与事务 rollback。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="补齐 manifest 与 sandbox 集成测试" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>通过 canonical JSON/BehaviorCatalog 构建 script callbacks，覆盖 unresolved/default、RequireReady、native coexistence、restart rebind、ambient denial 和 resource probes。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">全部六类 callback 以 exact script binding id 导入 ready，缺失脚本保持 unresolved 或使 RequireReady 零 effect 失败。</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">native/script callbacks 可共同导入执行，same-id conflict 不会静默覆盖。</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC3" checked="true">ambient denial、timeout、statement、recursion、memory support 与 cancellation 均有可执行断言。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="验证 parent、继承与 transaction rollback" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>真实执行 script action override/call-parent、nearest mutation、inherited interceptors、host writes/links，并在 script/host/after failure 时验证 rollback。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">script parent-action composition 与继承顺序匹配现有 C# runtime semantics。</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">script 或 host failure 后 property/relation/mutation/interceptor effect 全部回滚。</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC3" checked="true">host work 中取消不会在 callback 已失败后继续发布 late effect。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.3" name="完成 adapter 文档与边界审查" ownerAccount="agent:impl" status="DONE" order="2" priority="P1">
+            <Description>在 package README/XML docs 说明脚本签名、capabilities、limits、error codes 与 hostile-code 非目标，并检查 source/schema/dependency 边界。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.3-AC1" checked="true">文档明确 in-process defense-in-depth，不宣称 OS sandbox。</cdt:Criterion>
+              <cdt:Criterion id="T3.3-AC2" checked="true">脚本 source 仍为 programmatic input，Om.Core/canonical manifest 无 script schema 或 Jint reference。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.4" name="诊断并收敛 P3 harness 挂起" ownerAccount="agent:impl" status="DONE" order="3" priority="P0">
+            <Description>使用进程级 watchdog 连续运行完整 harness，记录时长并隔离任何挂起的 restart/resource/transaction 场景。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.4-AC1" checked="true">完整 harness 在外部 120 秒 watchdog 下连续至少五次退出 0，且无残留测试进程。</cdt:Criterion>
+              <cdt:Criterion id="T3.4-AC2" checked="true">若复现挂起，定位到具体测试与等待点并修复，目标探针在自身 outer guard 内失败而非挂死进程。</cdt:Criterion>
+              <cdt:Criterion id="T3.4-AC3" checked="true">记录每轮时长、退出状态和进程清理证据，build/diff/XML 继续通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="验证与收口" status="DONE" order="3">
+        <Description>运行完整 .NET OM harness、package/dependency/XML/diff 检查和独立 gap-loop。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="运行最终验证" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>restore/build/run tests，检查 Jint isolation、无阻塞 bridge、无新增 script schema，并记录命令证据。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">build 和完整 OM harness 退出 0，XML/diff 检查通过。</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC2" checked="true">Jint 只存在 adapter package，Om.Core/root 无 Jint，代码无 `.Result`/`.Wait()` host bridge。</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC3" checked="true">所有 behavior delta cases 有可执行测试或明确结构证据。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="拒绝丢失 slot identity 的 binding 复用" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>对同一 binding id 跨 constraint when/then slot 的复用 fail closed，避免共享 delegate 报告错误 slot。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">同 ID 跨不同 callback slot 复用返回稳定 `OMS1002`、零 bindings，诊断指向确定 slot。</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">same ID/same slot 的兼容复用仍可共享，不引入现有 provider/import 回归。</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC3" checked="true">失败在 canonical import 前关闭且零 OM effect，README 说明 cross-slot 限制。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.3" name="定位并稳定完整 harness 的 120 秒时限" ownerAccount="agent:impl" status="DONE" order="2" priority="P0">
+            <Description>为完整 .NET OM harness 增加 opt-in 的测试级进度/时序诊断，隔离并以实现修复任何超过外部 120 秒 watchdog 的具体慢路径；不得降低现有语义、覆盖或时限门槛。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.3-AC1" checked="true">启用诊断时，watchdog 临近或超时可从输出确定最后执行的测试或等待点及其时长。</cdt:Criterion>
+              <cdt:Criterion id="T4.3-AC2" checked="true">在验收环境中完整 harness 连续至少五次受外部 120 秒 watchdog 监督均退出 0，并记录每轮时长、输出与无残留进程证据。</cdt:Criterion>
+              <cdt:Criterion id="T4.3-AC3" checked="true">修复不弱化、跳过或抑制既有行为用例；完整行为矩阵、package isolation 与 bounded runtime 语义继续通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks/>
+</Track>

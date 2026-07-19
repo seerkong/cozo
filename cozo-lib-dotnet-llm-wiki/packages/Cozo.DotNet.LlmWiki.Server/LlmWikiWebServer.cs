@@ -62,8 +62,18 @@ public static class LlmWikiWebServer
             var body = await ReadJsonObjectAsync(request, cancellationToken);
             var name = body["name"]?.GetValue<string>() ?? "";
             var argsNode = body["arguments"]?.AsObject() ?? new JsonObject();
-            var result = await runner.CallAsync(name, argsNode, cancellationToken);
-            return Results.Json(result, LlmWikiJson.Options);
+            try
+            {
+                var result = await runner.CallAsync(name, argsNode, cancellationToken);
+                return Results.Json(result, LlmWikiJson.Options);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new JsonObject
+                {
+                    ["error"] = ex.Message
+                });
+            }
         });
 
         MapTool(app, "/api/index", runner, "index_repo");

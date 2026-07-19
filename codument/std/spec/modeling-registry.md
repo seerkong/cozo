@@ -1,6 +1,6 @@
 # modeling 登记表规范（std/spec/modeling-registry.md）
 
-> `codument/modeling/` 是项目的**领域建模真源**（领域本体 / attractor 载体）。与 `codument/behaviors/`（行为契约）正交：behaviors 答“系统应有什么可测行为”，modeling 答“系统的结构真相是什么”（对象、类型、状态机、模块依赖、事实源、actor）。`docs/impl/` 保留为派生实现知识，不进 `codument/`。
+> `codument/modeling/` 是项目的**领域建模真源**（领域本体 / attractor 载体）。与 `codument/behaviors/`（行为契约）和 `codument/engineering/`（工程知识真源）正交：behaviors 答“系统应有什么可测行为”，modeling 答“系统的结构真相是什么”（对象、类型、状态机、模块依赖、事实源、actor），engineering 答“人和 AI 应该如何实现、维护、排障”。
 >
 > 仅当 `codument/config/modeling.xml` 的 modeling profile `enabled` 时启用；默认关，存量项目无感。
 >
@@ -34,6 +34,7 @@ codument/modeling/
 节点 schema 详规见 `std/spec/modeling-node-schema.md`。要点：
 
 - **kind 谱系**：越靠内核越用 DEPA 跨领域概念（裸名 kind：`entity`/`enum`/`state-machine`/`module`/`component`/`port`/`actor`/`policy`）；越靠 shell 越用命名空间领域 kind（`surface:route`/`backend:endpoint`/`cli:command`…）。
+- **节点属性承载**：`kind`、`fact_grade`、`single_writer`、`depends_on` 等常规语义属性写进 XNL `{}` 属性块；metadata 只留给系统级解析/合并字段。
 - **最小必备表征**（CLI 校验）：`entity` 必带 `types`+`fact_grade`+`single_writer`；`state-machine` 必带 `mermaid`；`module` 必带 `depends_on`+capsule-tree（**到文件/符号级**，非仅 contract/logic/support）；`component` 必带 `runtime`/`input`/`config`/`output` 四个 `types` 块。
 - **不重复 behaviors**：可测行为契约归 `behaviors`；modeling 的 behavior/policy 节点**引用 `behavior://…`**，不复述 case。
 
@@ -43,7 +44,7 @@ codument/modeling/
 
 ## 设计取舍
 
-- modeling 是**结构真源**层，不与代码/docs 争夺实现真源（实现真源在代码 + `docs/impl`）。
+- modeling 是**结构真源**层，不与代码/docs 争夺实现真源（实现真源在代码 + `codument/engineering`）。
 - 复用 xnl 的**节点级 merge 算法**（优于 git 行级合并），但**不持久化平行 vcs 仓库**——历史/协作交宿主 git，xnl-vfs/vcs 只当临时合并引擎。
 - 不自建 delta 节点类型与 apply 算法。
 - 默认关：无 `config/modeling.xml` 或 profile 未 enabled → 全流程跳过，行为不变。

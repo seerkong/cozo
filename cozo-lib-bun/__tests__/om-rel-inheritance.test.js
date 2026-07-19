@@ -6,23 +6,23 @@ describe('relation inheritance', () => {
     const { db, om } = await createTestDb();
     try {
       await om.defineType(db, 'Org', 'Organization');
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
-      await om.defineType(db, 'Server', 'Server', { parentType: 'ITAsset' });
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
+      await om.defineType(db, 'ApiService', 'ApiService', { parentType: 'ExecutableResource' });
 
       await om.defineAttribute(db, 'Org', 'name', 'String', true);
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true);
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true);
 
-      // Relation: Asset -> Org
-      await om.defineRelation(db, 'owned_by', 'Asset', 'Org', true);
+      // Relation: Resource -> Org
+      await om.defineRelation(db, 'owned_by', 'Resource', 'Org', true);
 
       await om.createEntity(db, 'org:1', 'Org', 'Acme Corp');
       await om.setProperty(db, 'org:1', 'name', 'Acme Corp');
 
-      await om.createEntity(db, 'srv:1', 'Server', 'Web Server 1');
-      await om.setProperty(db, 'srv:1', 'name', 'Web Server 1');
+      await om.createEntity(db, 'srv:1', 'ApiService', 'Web ApiService 1');
+      await om.setProperty(db, 'srv:1', 'name', 'Web ApiService 1');
 
-      // Server is subtype of Asset, so linking Server -> Org via owned_by should pass
+      // ApiService is subtype of Resource, so linking ApiService -> Org via owned_by should pass
       await om.linkEntities(db, 'srv:1', 'owned_by', 'org:1');
 
       // Verify the edge exists via entity view
@@ -38,23 +38,23 @@ describe('relation inheritance', () => {
   test('linkEntities succeeds when to-entity is subtype of relation toType', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
-      await om.defineType(db, 'Server', 'Server', { parentType: 'ITAsset' });
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
+      await om.defineType(db, 'ApiService', 'ApiService', { parentType: 'ExecutableResource' });
 
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true);
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true);
 
-      // Relation: Asset -> Asset (self-referencing on base type)
-      await om.defineRelation(db, 'depends_on', 'Asset', 'Asset', true);
+      // Relation: Resource -> Resource (self-referencing on base type)
+      await om.defineRelation(db, 'depends_on', 'Resource', 'Resource', true);
 
-      await om.createEntity(db, 'srv:1', 'Server', 'Web Server');
-      await om.setProperty(db, 'srv:1', 'name', 'Web Server');
+      await om.createEntity(db, 'srv:1', 'ApiService', 'Web ApiService');
+      await om.setProperty(db, 'srv:1', 'name', 'Web ApiService');
 
-      await om.createEntity(db, 'asset:1', 'Asset', 'Root Asset');
-      await om.setProperty(db, 'asset:1', 'name', 'Root Asset');
+      await om.createEntity(db, 'resource:1', 'Resource', 'Root Resource');
+      await om.setProperty(db, 'resource:1', 'name', 'Root Resource');
 
-      // Server -> Asset via depends_on: both are subtypes of Asset
-      await om.linkEntities(db, 'srv:1', 'depends_on', 'asset:1');
+      // ApiService -> Resource via depends_on: both are subtypes of Resource
+      await om.linkEntities(db, 'srv:1', 'depends_on', 'resource:1');
 
       const view = await om.getEntityView(db, 'srv:1');
       expect(view.outgoing.length).toBe(1);
@@ -67,26 +67,26 @@ describe('relation inheritance', () => {
   test('linkEntities rejects mismatched from-type', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
-      await om.defineType(db, 'Server', 'Server', { parentType: 'ITAsset' });
-      await om.defineType(db, 'Vehicle', 'Vehicle', { parentType: 'Asset' });
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
+      await om.defineType(db, 'ApiService', 'ApiService', { parentType: 'ExecutableResource' });
+      await om.defineType(db, 'Dataset', 'Dataset', { parentType: 'Resource' });
 
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true);
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true);
 
-      // Relation expects Server -> Server
-      await om.defineRelation(db, 'replicates', 'Server', 'Server', true);
+      // Relation expects ApiService -> ApiService
+      await om.defineRelation(db, 'replicates', 'ApiService', 'ApiService', true);
 
-      await om.createEntity(db, 'v:1', 'Vehicle', 'Truck A');
+      await om.createEntity(db, 'v:1', 'Dataset', 'Truck A');
       await om.setProperty(db, 'v:1', 'name', 'Truck A');
 
-      await om.createEntity(db, 'srv:1', 'Server', 'DB Server');
-      await om.setProperty(db, 'srv:1', 'name', 'DB Server');
+      await om.createEntity(db, 'srv:1', 'ApiService', 'DB ApiService');
+      await om.setProperty(db, 'srv:1', 'name', 'DB ApiService');
 
-      // Vehicle -> Server should fail: Vehicle is not a subtype of Server
+      // Dataset -> ApiService should fail: Dataset is not a subtype of ApiService
       await expect(
         om.linkEntities(db, 'v:1', 'replicates', 'srv:1')
-      ).rejects.toThrow(/expects Server -> Server, got Vehicle -> Server/);
+      ).rejects.toThrow(/expects ApiService -> ApiService, got Dataset -> ApiService/);
     } finally {
       db.close();
     }
@@ -95,26 +95,26 @@ describe('relation inheritance', () => {
   test('linkEntities rejects mismatched to-type', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
-      await om.defineType(db, 'Server', 'Server', { parentType: 'ITAsset' });
-      await om.defineType(db, 'Vehicle', 'Vehicle', { parentType: 'Asset' });
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
+      await om.defineType(db, 'ApiService', 'ApiService', { parentType: 'ExecutableResource' });
+      await om.defineType(db, 'Dataset', 'Dataset', { parentType: 'Resource' });
 
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true);
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true);
 
-      // Relation expects Server -> Server
-      await om.defineRelation(db, 'replicates', 'Server', 'Server', true);
+      // Relation expects ApiService -> ApiService
+      await om.defineRelation(db, 'replicates', 'ApiService', 'ApiService', true);
 
-      await om.createEntity(db, 'srv:1', 'Server', 'DB Server');
-      await om.setProperty(db, 'srv:1', 'name', 'DB Server');
+      await om.createEntity(db, 'srv:1', 'ApiService', 'DB ApiService');
+      await om.setProperty(db, 'srv:1', 'name', 'DB ApiService');
 
-      await om.createEntity(db, 'v:1', 'Vehicle', 'Truck A');
+      await om.createEntity(db, 'v:1', 'Dataset', 'Truck A');
       await om.setProperty(db, 'v:1', 'name', 'Truck A');
 
-      // Server -> Vehicle should fail: Vehicle is not a subtype of Server
+      // ApiService -> Dataset should fail: Dataset is not a subtype of ApiService
       await expect(
         om.linkEntities(db, 'srv:1', 'replicates', 'v:1')
-      ).rejects.toThrow(/expects Server -> Server, got Server -> Vehicle/);
+      ).rejects.toThrow(/expects ApiService -> ApiService, got ApiService -> Dataset/);
     } finally {
       db.close();
     }

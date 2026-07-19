@@ -16,25 +16,25 @@ async function requestJson(app, method, path, body) {
 test('server API: /api/governance/integrity/* happy path (seed-demo, rules, check, apply)', async () => {
   const { app, close } = createApp();
   try {
-    // Seed the integrity demo: ontology + materialize rule + orphan assets.
+    // Seed the integrity demo: ontology + materialize rule + unowned resources.
     const seed = await requestJson(app, 'POST', '/api/governance/integrity/seed-demo');
     expect(seed.res.status).toBe(200);
     expect(seed.data.ok).toBe(true);
-    expect(seed.data.rules.some((r) => r.ruleName === 'asset_must_have_owner')).toBe(true);
+    expect(seed.data.rules.some((r) => r.ruleName === 'resource_must_have_owner')).toBe(true);
 
     const rules = await requestJson(app, 'GET', '/api/governance/integrity/rules');
     expect(rules.res.status).toBe(200);
     expect(Array.isArray(rules.data.rules)).toBe(true);
-    const rule = rules.data.rules.find((r) => r.ruleName === 'asset_must_have_owner');
+    const rule = rules.data.rules.find((r) => r.ruleName === 'resource_must_have_owner');
     expect(rule.mode).toBe('materialize');
 
-    // Orphan assets violate; the owned demo asset (a:1) does not.
+    // Unowned resources violate; the owned demo resource (r:1) does not.
     const check = await requestJson(app, 'POST', '/api/governance/integrity/check', {});
     expect(check.res.status).toBe(200);
     const violatingIds = check.data.violations.map((v) => v.entityId);
-    expect(violatingIds).toContain('a:orphan-1');
-    expect(violatingIds).toContain('a:orphan-2');
-    expect(violatingIds).not.toContain('a:1');
+    expect(violatingIds).toContain('r:unowned-1');
+    expect(violatingIds).toContain('r:unowned-2');
+    expect(violatingIds).not.toContain('r:1');
 
     // One-click chase: Skolem owners materialized, violations cleared.
     const apply = await requestJson(app, 'POST', '/api/governance/integrity/apply', {});
@@ -60,7 +60,7 @@ test('server API: integrity endpoints do not break the existing governance flow'
     const access = await requestJson(app, 'POST', '/api/governance/checkAccess', {
       subjectId: 'u:1',
       action: 'read',
-      resourceId: 'a:1',
+      resourceId: 'r:1',
     });
     expect(access.res.status).toBe(200);
     expect(access.data.result.allow).toBe(true);

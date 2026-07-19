@@ -133,6 +133,56 @@ public static class RelationLogic
         return await GetNeighborsAtAsync(runtime, entityId, relName, direction, "$as_of", timestamp, cancellationToken);
     }
 
+    public static async Task<IReadOnlyList<OmEntity>> TraverseAsync(
+        CozoOmRuntime runtime,
+        string startEntityId,
+        IReadOnlyList<string>? relationPath,
+        CancellationToken cancellationToken = default)
+    {
+        var start = OmConvert.RequireName(startEntityId, nameof(startEntityId));
+        if (relationPath is null || relationPath.Count == 0)
+        {
+            var view = await EntityLogic.GetEntityViewAsync(runtime, start, cancellationToken);
+            return view is null ? [] : [new OmEntity(view.Id, view.TypeName, view.Label)];
+        }
+
+        var frontier = new[] { start };
+        IReadOnlyList<OmEntity> level = [];
+        foreach (var relation in relationPath)
+        {
+            var relationName = OmConvert.RequireName(relation, nameof(relationPath));
+            var next = new Dictionary<string, OmEntity>(StringComparer.Ordinal);
+            foreach (var entityId in frontier)
+            {
+                var neighbors = await GetNeighborsAsync(
+                    runtime,
+                    entityId,
+                    relationName,
+                    OmDirection.Outgoing,
+                    cancellationToken);
+                foreach (var neighbor in neighbors.Outgoing)
+                {
+                    next.TryAdd(neighbor.EntityId, new OmEntity(neighbor.EntityId, neighbor.TypeName, neighbor.Label));
+                }
+            }
+
+            level = next.Values.OrderBy(entity => entity.Id, StringComparer.Ordinal).ToArray();
+            if (level.Count == 0) return level;
+            frontier = level.Select(entity => entity.Id).ToArray();
+        }
+
+        return level;
+    }
+
+    internal static Task<NeighborResult> GetNeighborsAtNormalizedAsOfAsync(
+        CozoOmRuntime runtime,
+        string entityId,
+        string? relName,
+        string normalizedAsOf,
+        OmDirection direction = OmDirection.Both,
+        CancellationToken cancellationToken = default) =>
+        GetNeighborsAtAsync(runtime, entityId, relName, direction, "$as_of", normalizedAsOf, cancellationToken);
+
     public static async Task<IReadOnlyList<EdgeHistoryEntry>> GetEdgeHistoryAsync(
         CozoOmRuntime runtime,
         string fromId,

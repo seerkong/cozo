@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="reconstruct-business-ontology-agentic-exploration" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>active</Status>
+    <Goal>让受限 AI 主动探索已索引代码事实和现有业务本体，重建可审核的业务语义、诊断历史建模问题，并输出符合 ontology XML DSL 的候选本体增量。</Goal>
+    <Description>在 onto_* 基础投影之上建立只读调查工具、分析工作区、证据追查循环、诊断 DSL 和候选导出；AI 结论始终保持 pending，只有显式 review/promotion 才能进入可导出本体。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>10</Revision>
+    <CreatedAt>2026-07-19T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-19T12:30:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="mission">
+    <MaterialBundle role="input" name="backend-indexed-facts" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/" />
+    <MaterialBundle role="input" name="frontend-indexed-facts" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/" />
+    <MaterialBundle role="input" name="onto-foundation" domain="mission" path="vfs://@/codument/missions/active/add-onto-business-ontology-projection/" />
+    <MaterialBundle role="input" name="ontology-xml-dsl" domain="skill" path="vfs://@/skills/ontology-xml-dsl/" />
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/" />
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/" />
+    <MaterialBundle role="output" name="llm-wiki" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
+    <MaterialBundle role="output" name="agent-skill" domain="skill" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/skills/" />
+    <MaterialBundle role="output" name="candidate-artifacts" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v2/" />
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/" />
+  </Ports>
+
+  <TaskSpace id="space_reconstruct-business-ontology-agentic-exploration" name="reconstruct-business-ontology-agentic-exploration" version="1" cdt:child-mode="dag">
+    <Description>从事实查询合同到受控 AI 调查、候选 DSL、真实项目实验和人工验收的 mission DAG。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="调查事实面与安全查询合同" status="DONE" order="0">
+        <Description>把 ck_*、depa_*、judgment、CodeAnchor 和 onto_* 封装为可分页、可预算、只读且可追溯的领域查询，而非对模型开放任意 SQL。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="盘点可用事实、现有查询 API 与不能暴露的原始面" status="DONE" order="0" />
+          <Task id="G1-T2" name="创建并执行领域化本体调查查询 track" status="DONE" order="1">
+            <cdt:TrackLink state="bound" id="add-onto-investigation-query-contracts" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G2" name="分析工作区与治理状态" status="DONE" order="1">
+        <Description>定义 observation、hypothesis、conflict、gap、candidate 和 analysis run 的持久化/provenance，确保 AI 产物不与 accepted onto_* 混写。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行本体分析工作区与 provenance track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-onto-agentic-analysis-workspace" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G3" name="AI 调查循环与 skill" status="DONE" order="2">
+        <Description>建立 explore - verify - reconcile - model 的有界 agent loop；AI 只能通过 G1 的查询合同读取事实，并把每一步调查和证据引用写入 G2 工作区。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 agentic 业务本体重建 skill track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-agentic-business-ontology-reconstruction-skill" />
+          </Task>
+          <Task id="G3-T2" name="定义 token、查询、源码片段和并发预算，以及失败原子性" status="DONE" order="1" />
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G4" name="候选 DSL 与脏模型诊断" status="ACTIVE" order="3">
+        <Description>复用 ontology XML DSL 表达候选 type/property/relation/rule/lifecycle，并补充独立诊断报告以记录冲突、重复、缺失、跨端不一致和无法证明的假设。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行本体诊断与候选 XML 导出 track" status="ACTIVE" order="0">
+            <cdt:TrackLink state="bound" id="add-ontology-diagnosis-and-candidate-export" />
+          </Task>
+          <Task id="G4-T2" name="定义显式 review/promotion 与历史模型整治建议边界" status="NOT_STARTED" order="1" />
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G5" name="真实项目 v2 实验与验收" status="NOT_STARTED" order="4">
+        <Description>在两个数据库副本上执行受控 agentic run，比较初始 onto 投影与 AI 候选/诊断，人工审核抽样结果后决定是否继续 v3 critic 或重规划。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 agentic 本体重建 v2 真实项目实验 track" status="NOT_STARTED" order="0">
+            <cdt:TrackLink state="candidate" id="verify-agentic-business-ontology-reconstruction-v2" />
+          </Task>
+          <Task id="G5-T2" name="形成业务价值、证据覆盖、误报和人工接受率报告" status="NOT_STARTED" order="1" />
+          <Task id="G5-T3" name="根据 v2 结果决定 v3 proposal-critic 的范围或受控重规划" status="NOT_STARTED" order="2" />
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+
+  <Schedule>
+    <Dag for="space_reconstruct-business-ontology-agentic-exploration">
+      <Node id="G2"><After ref="G1" /></Node>
+      <Node id="G3"><After ref="G1" /><After ref="G2" /></Node>
+      <Node id="G4"><After ref="G2" /><After ref="G3" /></Node>
+      <Node id="G5"><After ref="G4" /></Node>
+    </Dag>
+  </Schedule>
+
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block" />
+    </Hook>
+  </Hooks>
+</Mission>

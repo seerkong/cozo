@@ -1,0 +1,108 @@
+<Track id="add-bun-om-behavior-portability" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>让 Bun OM 实现与 .NET V1 兼容的 behavior catalog、manifest、binding、readiness 与 fail-closed import/execution。</Goal>
+    <Description>以五个串行阶段建立持久 binding identity、runtime callback registration、全入口 readiness gate、原子导入与跨实现验证。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <GapRound>2</GapRound>
+    <CreatedAt>2026-07-18T07:19:08Z</CreatedAt>
+    <UpdatedAt>2026-07-18T09:32:03Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="dotnet-reference" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="bun-om" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="bun-tests" domain="source" path="vfs://@/cozo-lib-bun/__tests__/"/>
+    <MaterialBundle role="output" name="behaviors" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_add-bun-om-behavior-portability" name="add-bun-om-behavior-portability" version="1" cdt:child-mode="dag">
+    <Description>顺序建立 wire contract、runtime binding、readiness、import 和最终验证。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="V1 Contract 与持久模型" status="DONE" order="0">
+        <Description>增加 binding relation、catalog model 和 canonical manifest codec。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="实现 schema binding、catalog 与 codec" status="DONE" order="0" priority="P0">
+            <Description>对齐 .NET V1 kinds、slots、metadata matrix、排序、UTF-8 bytes 与 OMM diagnostics。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">initSchema additive 创建 om_behavior_binding</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC2" checked="true">catalog 覆盖五类 definition 与六种 slot</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC3" checked="true">canonical JSON 与 .NET V1 golden bytes 一致</cdt:Criterion>
+              <cdt:Criterion id="T1.1-AC4" checked="true">decode OMM diagnostics 与排序对齐</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Runtime Binding 与 Custom Validator" status="DONE" order="1">
+        <Description>补齐带 binding ID 的 runtime registration、custom validator 和持久序号分配。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="实现 register/rebind 与 sparse interceptor seq" status="DONE" order="0" priority="P0">
+            <Description>保持 legacy define API unbound，新增所有显式 registration，并防止 clear/restart 后 interceptor 序号碰撞。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">五类 behavior 六种 slot 可独立 register/rebind</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC2" checked="true">custom validator 可定义、注册与执行</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC3" checked="true">interceptor seq 高于持久和 runtime 最大值</cdt:Criterion>
+              <cdt:Criterion id="T2.1-AC4" checked="true">同 DB 多 runtime callback 隔离</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="全入口 Readiness Gate" status="DONE" order="2">
+        <Description>在 constraint、computed、action、parent、mutation 和 interceptor 全路径执行前检查 binding。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="实现 OMR1001 fail-closed execution" status="DONE" order="0" priority="P0">
+            <Description>在一个捕获 snapshot 上预解析整条 pipeline，禁止 unresolved 回退和部分效果。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">全部 callback slot 对 binding mismatch 返回结构化 OMR1001</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC2" checked="true">父 action、mutation batch 与 inherited interceptor 在执行前完整解析</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC3" checked="true">computed 当前/as-of/entity-view 与 constraint write paths fail closed</cdt:Criterion>
+              <cdt:Criterion id="T3.1-AC4" checked="true">legacy unbound callback 保持可执行</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P4" name="原子 Manifest Import" status="DONE" order="3">
+        <Description>实现 permissive/strict import、typed callback index、事务持久化、CAS publication 与补偿。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="实现 import 与故障原子性" status="DONE" order="0" priority="P0">
+            <Description>对齐 .NET OMI diagnostics、requireReady 和故障边界，readiness 始终重算。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">permissive import 提交 unresolved metadata/binding</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC2" checked="true">requireReady 缺失/不兼容 callback 时零副作用拒绝</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC3" checked="true">持久失败不发布 registry，publication 失败执行补偿</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC4" checked="true">import/catalog 并发只观察完整 pre/post 状态</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P5" name="跨实现验证与收口" status="DONE" order="4">
+        <Description>运行配对 golden、场景矩阵、Bun OM/full regression 与 strict validation。</Description>
+        <SubNodes>
+          <Task id="T5.1" name="验证 V1 portability parity" status="DONE" order="0" priority="P0">
+            <Description>核查五类 behavior、restart/clear/rebind、原子 import、多 runtime 隔离和源码不入 schema。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T5.1-AC1" checked="true">Bun/C# golden 与 paired behavior scenarios 通过</cdt:Criterion>
+              <cdt:Criterion id="T5.1-AC2" checked="true">Bun OM 与完整 Bun tests 通过</cdt:Criterion>
+              <cdt:Criterion id="T5.1-AC3" checked="true">codument strict validation 通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add-bun-om-behavior-portability">
+      <Node id="P2"><After ref="P1"/></Node>
+      <Node id="P3"><After ref="P2"/></Node>
+      <Node id="P4"><After ref="P3"/></Node>
+      <Node id="P5"><After ref="P4"/></Node>
+    </Dag>
+    <Parallel max-concurrent="1" spot-check="true"/>
+  </Schedule>
+  <Hooks/>
+</Track>

@@ -49,7 +49,7 @@
 | `behavior_deltas/<cap>/delta.xml` | ★必有 | 行为增量（`<behavior-patch>`） |
 | `design.md`（+`design/`） | 可选 | 方案 / 决策摘要 / 风险 / 兼容 / 迁移 |
 | `analysis/{findings,knowledge}.md` | 按需 | 规划期 planning-with-files 外部记忆 |
-| `decisions.md`（+`decisions/`） | 按需 | 决策问题 / 选项 / 答复 / 结论 |
+| `decisions.xnl`（+`decisions/` legacy） | 按需 | 决策问题 / 选项 / 答复 / 结论；旧 `decisions.md` 仅兼容读取 |
 | `memory/` | 按需 | 长期记忆候选 |
 | `reports/` | 运行期生成 | gap-loop / verify 报告 |
 
@@ -111,7 +111,7 @@
 §3.4 起草 proposal.md；auto 不确认，其他模式按需确认
 ---- /?s4
 ---- #if ?s5 cond="满足 §3.5 的 design 触发条件"
-§3.5 起草 decisions.md（如需）+ design.md；auto 不确认，其他模式按需确认
+§3.5 起草 decisions.xnl（如需）+ design.md；auto 不确认，其他模式按需确认
 ---- /?s5
 ---- #step ?s6
 §3.6 起草 track.xml（结构 + 调度）
@@ -128,8 +128,8 @@
 ### 3.0 Questioning severity 与 decision-tree pass
 
 1. **解析 severity**：从用户话语 / 参数中识别 `severity=auto|light|normal|deep`；未指定时默认 `light`。
-2. **auto（无问答）硬规则**：不得因 track-id、behavior/proposal/design/track.xml 确认、提交模式、校验模式或方向审查范围向用户提问；必须把推断依据和假设写入 `analysis/decision-tree.md` 或 `decisions.md`。
-3. **decision-tree pass**：复杂规划先写 `analysis/decision-tree.md`，列出 Root Question、Severity、Decision Frontier、Assumptions。
+2. **auto（无问答）硬规则**：不得因 track-id、behavior/proposal/design/track.xml 确认、提交模式、校验模式或方向审查范围向用户提问；必须把推断依据和假设写入 `analysis/decision-tree.xnl` 或 `decisions.xnl`。
+3. **decision-tree pass**：复杂规划先写 `analysis/decision-tree.xnl`，列出 Root Question、Severity、Decision Frontier、Assumptions。
 4. **能查证就不问**：先读代码、测试、schema、config、behaviors、modeling、engineering、decisions；只有用户意图 / 不可逆 trade-off 才进入 frontier。
 5. **默认值（auto）**：`CommitMode=manual`；默认不挂 `cdt:HumanConfirm`；每个第一层 phase 挂 `<cdt:AttractorCheck use="coding"/>`；仅当用户或上下文明确要求 gap-loop 时挂 `cdt:GapLoop`。
 6. **轴分离**：`severity=auto` 只表示无问答高自主规划；它不等于 `CommitMode=auto`。auto severity 的提交模式默认仍是 `manual`。
@@ -146,7 +146,7 @@
 
 1. **查重**：列出 `codument/tracks/` 现有目录；若提议短名与现有重复，停止并建议换名。
 2. **生成 Track ID**：小写英文 + 中横线的简短描述，**动词开头**（`add-`、`update-`、`remove-`、`refactor-`），如 `add-user-auth`、`fix-login-bug`。**不含日期**（日期只在归档时加）；若已被占用，追加 `-2`、`-3`。
-3. **按 severity 处理 ID 确认**：`auto` 模式直接采用生成的 track-id，并把命名依据写入 `analysis/decision-tree.md`；其他模式展示起草的 track-id —— "我已起草了新的 Track ID：`<track_id>`。这是否准确捕获了需求？请建议更改或确认。" 等待并修改至确认。
+3. **按 severity 处理 ID 确认**：`auto` 模式直接采用生成的 track-id，并把命名依据写入 `analysis/decision-tree.xnl`；其他模式展示起草的 track-id —— "我已起草了新的 Track ID：`<track_id>`。这是否准确捕获了需求？请建议更改或确认。" 等待并修改至确认。
 4. **建目录**：`codument/tracks/<track_id>/`。
 5. **建 `analysis/`（外部记忆）**：建 `analysis/findings.md` 与 `analysis/knowledge.md`。
    - **硬规则：仅缺失时创建，绝不覆盖已有内容**——目录已存在则不删不重写；文件已存在则绝不改写（哪怕你觉得不完整），不存在才按模板创建。
@@ -191,8 +191,8 @@
    |      |         |
    ```
 6. **建决策与记忆目录**（已存在则跳过）：
-   - `decisions/` —— archive-ready 的 durable 单文件决策（每个长期决策一个 `.md`，归档可提升 `decision://`）。
-   - 需用户确认的过程决策仍用根级 `decisions.md` 作为评审入口。
+   - `decisions/` —— archive-ready 的 legacy durable 单文件决策（每个长期决策一个 `.md`，历史归档可提升 `decision://`）。
+   - 需用户确认的过程决策使用根级 `decisions.xnl` 作为评审入口；旧 `decisions.md` 只作为 legacy fallback 读取，不再作为新建默认。
    - `memory/` —— 记忆上下文，按类型分子目录 `lessons/`、`incidents/`、`patterns/`、`summaries/`（归档且 `memory` profile 启用时提升 `memory://`）。
 7. **写 Metadata**（在 `track.xml` 的 `<Metadata>`，§3.6 一并落盘）：
 
@@ -262,7 +262,7 @@
    - **常见陷阱**：用 MODIFIED 加新关注点却不含原文本 → 归档时细节丢失。若并未明确改既有需求，请在 ADDED 下加新需求。
 
 4. **写入文件** → `codument/tracks/<track_id>/behavior_deltas/<capability>/delta.xml`。
-5. **按 severity 处理确认**：`auto` 模式不提问，直接继续，并把关键假设写入 `analysis/decision-tree.md` / `decisions.md`；其他模式询问："我已起草了行为规范。请审查：文件路径在 `codument/tracks/<track_id>/behavior_deltas/<capability>/delta.xml`。这是否准确捕获了需求？请建议更改或确认。" 等待并修改至确认。
+5. **按 severity 处理确认**：`auto` 模式不提问，直接继续，并把关键假设写入 `analysis/decision-tree.xnl` / `decisions.xnl`；其他模式询问："我已起草了行为规范。请审查：文件路径在 `codument/tracks/<track_id>/behavior_deltas/<capability>/delta.xml`。这是否准确捕获了需求？请建议更改或确认。" 等待并修改至确认。
 
 > Track 至少要有一个 delta。常见错误 **"Track must have at least one delta"**：检查 `behavior_deltas/**/*.xml` 是否存在、根是否 `<behavior-patch capability="<capability>" version="1">` 且至少一个带 `selector="behavior://..."` 的 `<upsert>` / `<delete>` / `<move>` mutation。**"root must be <behavior-patch>"**：别误写成 Markdown delta，把 Requirement/Scenario 改写为 `<requirement>`/`<statement>`/`<suite>`/`<case>`。
 
@@ -315,35 +315,56 @@ behavior delta 确认后："现在我将创建完整的变更提案"。按下面
 - **Good**：`design.md` 总览方案与影响面；`design/spec-vfs-and-xml.md`、`design/archive-memory.md` 承载子方向细节。
 - **Bad**：`design.md` 变成难维护的超长文档；子设计放在 track 目录外导致不自包含。
 
-**决策记录（decisions.md，如有需用户确认的决策）：**
+**决策记录（decisions.xnl，如有需用户确认的决策）：**
 
-1. 存在需用户确认的技术 / 产品 / 交互决策时，建 `codument/tracks/<track_id>/decisions.md`，它是决策评审主入口——**无论创建 / 设计还是后续执行阶段，只要出现新决策都追加回写到该文件**，不新建分散的决策记录。某决策若属未来仍需遵守的 durable 长期项目决策，同时在 `decisions/<slug>.md` 建单文件记录并标 `Durable` / `长期项目决策`，供 archive 提升 `decision://`。
-   - 问题标题**避免用字母作前缀**（字母仅用于选项）；每个问题标题用 `【Pn】` 标重要度，如 `### 1. 【P0】文件内容来源`。
-2. **起草 decisions.md**：先梳理待决策问题列表并标 `P0`/`P1`/`P2`，把问题、候选选项、当前建议写入。模板：
-   ```markdown
-   # Decisions
-
-   ## Usage
-   - 用于记录需要用户确认的决策问题、选项、最终结论与理由
-   - 问题标题不用字母前缀；字母只用于选项
-   - 后续执行过程中出现的新决策，也继续追加到本文件，不新建分散的决策记录
-
-   ### 1. 【P0】文件内容来源
-   - 背景：
-   - 需要决定：
-   - 选项：
-     - A) [选项 A]
-     - B) [选项 B]
-     - C) [其他（可填写）]
-   - 当前建议：
-   - 用户答复：
-   - 最终决策：
-   - 决策理由：
-   - 状态：pending
+1. 存在需用户确认的技术 / 产品 / 交互决策时，建 `codument/tracks/<track_id>/decisions.xnl`，它是决策评审主入口——**无论创建 / 设计还是后续执行阶段，只要出现新决策都追加回写到该文件**，不新建分散的过程决策记录。旧 `decisions.md` 只作为 legacy fallback 读取；不要为新 track 新建根级 `decisions.md`。某决策若属未来仍需遵守的 durable 长期项目决策，在 `decisions.xnl` 上标 `durable_candidate = true`；历史 `decisions/<slug>.md` durable 单文件记录仍可供 archive 兼容提升 `decision://`。
+2. **起草 decisions.xnl**：先梳理待决策问题列表并标 `P0`/`P1`/`P2`，把问题、候选选项、当前建议写入。模板：
+   ```xnl
+   <decision #track.example.decision_1 {
+     priority = "P0"
+     status = "pending"
+     blocks = ["design.md" "track.xml"]
+   }
+   (
+     <question ?>需要决定的问题是什么？</?>
+     <options { } [
+       <option { key = "A" recommended = true }
+       (
+         <title ?>选项 A 标题</?>
+         <description ?>选项 A 的详细说明。</?>
+         <tradeoff ?>选项 A 的代价、风险或取舍。</?>
+       )
+       >
+       <option { key = "B" }
+       (
+         <title ?>选项 B 标题</?>
+         <description ?>选项 B 的详细说明。</?>
+         <tradeoff ?>选项 B 的代价、风险或取舍。</?>
+       )
+       >
+       <option { key = "C" }
+       (
+         <title ?>其他方案</?>
+         <description ?>用户可补充的其他可行方案。</?>
+         <tradeoff ?>需要补充其影响和取舍。</?>
+       )
+       >
+     ]>
+     <recommendation ?>当前建议是什么？</?>
+     <answer { }
+     (
+       <raw-answer ?>待用户答复。</?>
+       <decision-text ?>待确认。</?>
+       <rationale ?>待补充决策理由。</?>
+       <evidence ?>支撑当前问题和推荐的代码、文档或用户要求。</?>
+     )
+     >
+   )
+   >
    ```
 3. **按问题数选交互方式**：统计尚未确认的决策问题数。
-   - **≤5 且环境支持一次性多问题 ToolCall**：用内置多问题 ToolCall 一次性发问（格式遵循 **ask-multi-question-free**）；每个问题仍在 `decisions.md` 保留条目，收到答复后回写"用户答复 / 最终决策 / 决策理由 / 状态"。
-   - **>5 或环境不支持**：不拆成多轮零散提问，引导用户**直接编辑** `decisions.md`；用户编辑后再据文档补全"最终决策 / 决策理由 / 状态"。
+   - **≤5 且环境支持一次性多问题 ToolCall**：用内置多问题 ToolCall 一次性发问（格式遵循 **ask-multi-question-free**）；每个问题仍在 `decisions.xnl` 保留条目，收到答复后回写 `<answer>` 下的 `<raw-answer>` / `<decision-text>` / `<rationale>` / `<evidence>` 以及 `status`。
+   - **>5 或环境不支持**：不拆成多轮零散提问，引导用户**直接编辑** `decisions.xnl`；用户编辑后再据文档补全 `<answer>` 下的反馈槽位和 `status`。
 
 **起草 design.md：** 最小骨架：
 ```markdown
@@ -362,7 +383,7 @@ behavior delta 确认后："现在我将创建完整的变更提案"。按下面
 - 受影响的文件 / 模块：[关键文件 / 系统]
 
 ## 决策摘要
-- 详见 `codument/tracks/<track_id>/decisions.md`
+- 详见 `codument/tracks/<track_id>/decisions.xnl`
 - 当前关键结论：[已确认的决策摘要]
 
 ## 风险 / 权衡
@@ -549,7 +570,7 @@ proposal 获批后："现在我将根据规范创建结构化实现计划（`tra
 
 > `verify-round` 一经在 §3.7 据用户答复（G/H，缺省取全局默认 false）确定，**本 track 所有 GapLoop 节点沿用同一设置**；后续追加 phase 时新挂的 `<cdt:GapLoop>` 也沿用同一 `verify-round`。它控制「首轮 `NO_GAP` 后是否再追一轮（轻量）验证轮」，运行期语义见 `gap-loop.md` §0.2.4。
 >
-> 旧 `gap_loop_round` 不再写计划：gap-loop 轮次由父层在运行期记到 `<Metadata>` 的 `gap-round`（见 `gap-loop.md`），创建阶段无需初始化。
+> 旧 `gap_loop_round` 不再写计划：gap-loop 轮次由父层在运行期记到 `<Metadata>` 的 `<GapRound>`（见 `gap-loop.md`），创建阶段无需初始化。
 
 ### 3.8 收尾
 

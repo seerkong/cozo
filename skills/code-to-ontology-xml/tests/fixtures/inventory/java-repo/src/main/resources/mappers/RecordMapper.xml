@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="example.RecordMapper">
+  <select id="findById">SELECT * FROM record WHERE id = #{id}</select>
+  <insert id="insert">INSERT INTO record(id, name, status) VALUES (#{id}, #{name}, #{status})</insert>
+  <update id="updateStatus">UPDATE record SET status = #{status} WHERE id = #{id}</update>
+  <update id="updateName">UPDATE record SET name = #{name} WHERE id = #{id}</update>
+</mapper>

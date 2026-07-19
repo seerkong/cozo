@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "repositories": [
+    {
+      "key": "backend",
+      "revision": "fixture-revision"
+    }
+  ],
+  "requiredDomains": [
+    {
+      "domain": "record-register",
+      "evidenceRefs": [],
+      "mappingRefs": [],
+      "status": "partial",
+      "typeRefs": [
+        "ExampleCatalog.Record"
+      ],
+      "waiverRef": "thin-fixture"
+    },
+    {
+      "domain": "warehouse",
+      "evidenceRefs": [],
+      "mappingRefs": [],
+      "status": "missing",
+      "typeRefs": []
+    }
+  ],
+  "candidates": [],
+  "candidateTotals": {
+    "mapped": 0,
+    "rejected": 0,
+    "unresolved": 0
+  },
+  "signalDispositions": {
+    "lifecycles": [],
+    "rules": []
+  },
+  "completion": {
+    "allowUnresolved": false
+  },
+  "waivers": [
+    {
+      "id": "thin-fixture",
+      "metrics": [
+        "mappings",
+        "evidence"
+      ],
+      "owner": "fixture-owner",
+      "reason": "Fixture deliberately demonstrates a partial domain."
+    }
+  ]
+}

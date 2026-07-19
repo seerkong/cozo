@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EvidenceModule id="invalid-id">
+  <EvidenceItems>
+    <Evidence id="invalid" repository="example" path="/absolute/path.java" grade="certain" confidence="2" />
+  </EvidenceItems>
+</EvidenceModule>

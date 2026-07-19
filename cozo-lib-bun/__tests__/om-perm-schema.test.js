@@ -57,15 +57,15 @@ describe('P3/WAVE-P3-01 (T3.1.1): permission metadata schema', () => {
       }
 
       await om.seedPermissionMetadata(db, {
-        actions: [{ action: 'read:asset', description: 'Read assets' }],
+        actions: [{ action: 'read:resource', description: 'Read resources' }],
         policies: [
           {
             policy_id: 'pol:1',
             effect: 'allow',
-            action: 'read:asset',
-            resource_type: 'Asset',
+            action: 'read:resource',
+            resource_type: 'Resource',
             enabled: true,
-            description: 'Allow reading assets',
+            description: 'Allow reading resources',
           },
         ],
         abacRules: [
@@ -76,21 +76,21 @@ describe('P3/WAVE-P3-01 (T3.1.1): permission metadata schema', () => {
             right_ref: 'admin',
           },
         ],
-        pathRules: [{ policy_id: 'pol:1', path: '/assets/*' }],
+        pathRules: [{ policy_id: 'pol:1', path: '/resources/*' }],
       });
 
       const qAction = dsl
         .query()
         .select(['description'])
         .fromStored('om_perm_action', {
-          action: dsl.param('action', 'read:asset'),
+          action: dsl.param('action', 'read:resource'),
           description: dsl.var('description'),
         })
         .limit(1)
         .build();
       const rAction = await db.run(qAction.script, qAction.params);
       expect(rAction.rows.length).toBe(1);
-      expect(rAction.rows[0][0]).toBe('Read assets');
+      expect(rAction.rows[0][0]).toBe('Read resources');
 
       const qPolicy = dsl
         .query()
@@ -108,10 +108,10 @@ describe('P3/WAVE-P3-01 (T3.1.1): permission metadata schema', () => {
       const rPolicy = await db.run(qPolicy.script, qPolicy.params);
       expect(rPolicy.rows.length).toBe(1);
       expect(rPolicy.rows[0][0]).toBe('allow');
-      expect(rPolicy.rows[0][1]).toBe('read:asset');
-      expect(rPolicy.rows[0][2]).toBe('Asset');
+      expect(rPolicy.rows[0][1]).toBe('read:resource');
+      expect(rPolicy.rows[0][2]).toBe('Resource');
       expect(rPolicy.rows[0][3] === true || rPolicy.rows[0][3] === 1).toBe(true);
-      expect(rPolicy.rows[0][4]).toBe('Allow reading assets');
+      expect(rPolicy.rows[0][4]).toBe('Allow reading resources');
 
       const qAbac = dsl
         .query()
@@ -146,7 +146,7 @@ describe('P3/WAVE-P3-01 (T3.1.1): permission metadata schema', () => {
         .where(
           dsl.and(
             dsl.eq('policy_id', dsl.param('expected_policy_id_path', 'pol:1')),
-            dsl.eq('path', dsl.param('expected_path', '/assets/*'))
+            dsl.eq('path', dsl.param('expected_path', '/resources/*'))
           )
         )
         .limit(1)

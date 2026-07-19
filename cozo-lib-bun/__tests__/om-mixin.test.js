@@ -8,7 +8,7 @@ describe('defineMixin', () => {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
 
       // Verify mixin exists by using it in defineType without error
-      await om.defineType(db, 'Asset', 'Asset', { mixins: ['Auditable'] });
+      await om.defineType(db, 'Resource', 'Resource', { mixins: ['Auditable'] });
     } finally {
       db.close();
     }
@@ -20,7 +20,7 @@ describe('defineMixin', () => {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
       await om.defineMixin(db, 'Taggable', 'Supports tags');
 
-      await om.defineType(db, 'Asset', 'Asset', { mixins: ['Auditable', 'Taggable'] });
+      await om.defineType(db, 'Resource', 'Resource', { mixins: ['Auditable', 'Taggable'] });
       // No error means both mixins were found
     } finally {
       db.close();
@@ -33,12 +33,12 @@ describe('defineType with mixins', () => {
     const { db, om } = await createTestDb();
     try {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
-      await om.defineType(db, 'Asset', 'Asset', { mixins: ['Auditable'] });
+      await om.defineType(db, 'Resource', 'Resource', { mixins: ['Auditable'] });
 
       // Verify the type was created
       const hierarchy = await om.getTypeHierarchy(db);
       const typeNames = Object.keys(hierarchy.types);
-      expect(typeNames).toContain('Asset');
+      expect(typeNames).toContain('Resource');
     } finally {
       db.close();
     }
@@ -48,7 +48,7 @@ describe('defineType with mixins', () => {
     const { db, om } = await createTestDb();
     try {
       await expect(
-        om.defineType(db, 'Asset', 'Asset', { mixins: ['NonExistentMixin'] })
+        om.defineType(db, 'Resource', 'Resource', { mixins: ['NonExistentMixin'] })
       ).rejects.toThrow("Mixin 'NonExistentMixin' does not exist");
     } finally {
       db.close();
@@ -61,7 +61,7 @@ describe('defineType with mixins', () => {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
 
       await expect(
-        om.defineType(db, 'Asset', 'Asset', { mixins: ['Auditable', 'Ghost'] })
+        om.defineType(db, 'Resource', 'Resource', { mixins: ['Auditable', 'Ghost'] })
       ).rejects.toThrow("Mixin 'Ghost' does not exist");
     } finally {
       db.close();
@@ -72,14 +72,14 @@ describe('defineType with mixins', () => {
     const { db, om } = await createTestDb();
     try {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineType(db, 'Server', 'Server', {
-        parentType: 'Asset',
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineType(db, 'ApiService', 'ApiService', {
+        parentType: 'Resource',
         mixins: ['Auditable'],
       });
 
-      const ancestors = await om.getAncestors(db, 'Server');
-      expect(ancestors).toEqual(['Asset']);
+      const ancestors = await om.getAncestors(db, 'ApiService');
+      expect(ancestors).toEqual(['Resource']);
     } finally {
       db.close();
     }
@@ -91,10 +91,10 @@ describe('defineType with mixins', () => {
       await om.defineMixin(db, 'Auditable', 'Tracks audit fields');
       await om.defineAttribute(db, 'Auditable', 'created_by', 'String', false);
 
-      await om.defineType(db, 'Asset', 'Asset', { mixins: ['Auditable'] });
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true);
+      await om.defineType(db, 'Resource', 'Resource', { mixins: ['Auditable'] });
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true);
 
-      await om.createEntity(db, 'a:1', 'Asset', 'My Asset');
+      await om.createEntity(db, 'a:1', 'Resource', 'My Resource');
       await om.setProperty(db, 'a:1', 'name', 'Test');
       // Should be able to set mixin-inherited attribute
       await om.setProperty(db, 'a:1', 'created_by', 'admin');

@@ -13,7 +13,11 @@
 
 ```xnl
 <!-- tracks/<id>/modeling_deltas/domain/resource.xnl -->
-<object #resource.skill_tool kind="entity" fact_grade="authoritative_fact" single_writer="resource.store" [
+<object #resource.skill_tool {
+  kind = "entity"
+  fact_grade = "authoritative_fact"
+  single_writer = "resource.store"
+} [
   <desc ?>聚合型资源：可编辑/打包/恢复的文本文件集合。</?>
   <types ?ts1>
   interface SkillTool { key: string; appId: string; status: SkillToolStatus; isArchived: boolean }
@@ -44,7 +48,7 @@
 3. 按下方**冲突解决策略**处理冲突。
 4. 合并结果写回 `codument/modeling` 工作树，由宿主 git 提交。`.tmp/` 临时产物不入库。
 5. 跑 `codument modeling lint`（分形拆分）。
-6. 模型把设计方案按类目回写 `docs/impl/`。
+6. 模型把设计方案按类目回写 `codument/engineering/`。
 
 ## 冲突解决策略（保守默认 + 可配）
 

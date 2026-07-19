@@ -34,13 +34,13 @@ describe('Phase 8: description support', () => {
   test('defineAttribute with description stores it', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineAttribute(db, 'Asset', 'name', 'String', true, 'The asset name');
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineAttribute(db, 'Resource', 'name', 'String', true, 'The resource name');
 
-      const defs = await om.getAttributeDefinitions(db, 'Asset');
+      const defs = await om.getAttributeDefinitions(db, 'Resource');
       const nameDef = defs.get('name');
       expect(nameDef).toBeTruthy();
-      expect(nameDef.description).toBe('The asset name');
+      expect(nameDef.description).toBe('The resource name');
     } finally {
       db.close();
     }
@@ -49,10 +49,10 @@ describe('Phase 8: description support', () => {
   test('defineAttribute without description does not set description', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineAttribute(db, 'Asset', 'name', 'String', false);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineAttribute(db, 'Resource', 'name', 'String', false);
 
-      const defs = await om.getAttributeDefinitions(db, 'Asset');
+      const defs = await om.getAttributeDefinitions(db, 'Resource');
       const nameDef = defs.get('name');
       expect(nameDef).toBeTruthy();
       expect(nameDef.description).toBeUndefined();
@@ -64,18 +64,18 @@ describe('Phase 8: description support', () => {
   test('description inherits with correct precedence', async () => {
     const { db, om } = await createTestDbWithHierarchy();
     try {
-      await om.defineAttribute(db, 'Asset', 'name', 'String', false, 'Base name');
-      await om.defineAttribute(db, 'ITAsset', 'name', 'String', false, 'IT name');
+      await om.defineAttribute(db, 'Resource', 'name', 'String', false, 'Base name');
+      await om.defineAttribute(db, 'ExecutableResource', 'name', 'String', false, 'IT name');
 
-      const assetDefs = await om.getAttributeDefinitions(db, 'Asset');
-      expect(assetDefs.get('name').description).toBe('Base name');
+      const resourceDefs = await om.getAttributeDefinitions(db, 'Resource');
+      expect(resourceDefs.get('name').description).toBe('Base name');
 
-      const itDefs = await om.getAttributeDefinitions(db, 'ITAsset');
+      const itDefs = await om.getAttributeDefinitions(db, 'ExecutableResource');
       expect(itDefs.get('name').description).toBe('IT name');
 
-      // Server inherits from ITAsset (nearest ancestor wins)
-      const serverDefs = await om.getAttributeDefinitions(db, 'Server');
-      expect(serverDefs.get('name').description).toBe('IT name');
+      // ApiService inherits from ExecutableResource (nearest ancestor wins)
+      const apiServiceDefs = await om.getAttributeDefinitions(db, 'ApiService');
+      expect(apiServiceDefs.get('name').description).toBe('IT name');
     } finally {
       db.close();
     }
@@ -84,8 +84,8 @@ describe('Phase 8: description support', () => {
   test('defineRelation with description stores it in om_rel_desc', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineRelation(db, 'depends_on', 'Asset', 'Asset', true, 'Dependency link');
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineRelation(db, 'depends_on', 'Resource', 'Resource', true, 'Dependency link');
 
       const q = dsl.query()
         .select(['description'])
@@ -106,8 +106,8 @@ describe('Phase 8: description support', () => {
   test('defineRelation without description does not write to om_rel_desc', async () => {
     const { db, om } = await createTestDb();
     try {
-      await om.defineType(db, 'Asset', 'Asset');
-      await om.defineRelation(db, 'depends_on', 'Asset', 'Asset', true);
+      await om.defineType(db, 'Resource', 'Resource');
+      await om.defineRelation(db, 'depends_on', 'Resource', 'Resource', true);
 
       const q = dsl.query()
         .select(['description'])

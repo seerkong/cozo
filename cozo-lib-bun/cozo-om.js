@@ -4,37 +4,2030 @@ const ALLOWED_VALUE_TYPES = new Set(['String', 'Number', 'Bool', 'Json', 'Validi
 const dsl = require('./cozo-dsl');
 const { query, param } = dsl;
 
-// In-memory registries for Phase 2+ behavior layer.
-// Handlers are JavaScript functions and are NOT persisted in CozoDB.
-const _actionRegistry = new Map();
-const _mutationRegistry = new Map();
-const _interceptorRegistry = new Map();
-const _constraintRegistry = new Map();
-const _computedRegistry = new Map();
+const _OM_RUNTIME_BRAND = Symbol('cozo.om.runtime');
+const _OM_RESOLUTION_SCOPE_BRAND = Symbol('cozo.om.resolution-scope');
+const _OM_REGISTRY_OWNER = Symbol('cozo.om.registry-owner');
+const _OM_BOUND_REGISTRY_SNAPSHOT = Symbol('cozo.om.bound-registry-snapshot');
+const _BEHAVIOR_SCOPE = Symbol('cozo.om.behavior-scope');
 
-function clearRegistry() {
-  _actionRegistry.clear();
-  _mutationRegistry.clear();
-  _interceptorRegistry.clear();
-  _constraintRegistry.clear();
-  _computedRegistry.clear();
+function _emptyRegistrySnapshot() {
+  return Object.freeze({
+    actions: new Map(),
+    mutations: new Map(),
+    interceptors: new Map(),
+    constraints: new Map(),
+    validators: new Map(),
+    computed: new Map(),
+  });
+}
+
+function _createBehaviorGate() {
+  let tail = Promise.resolve();
+  let pending = 0;
+  return {
+    isIdle() {
+      return pending === 0;
+    },
+    async enter() {
+      pending++;
+      let releaseNext;
+      const next = new Promise((resolve) => {
+        releaseNext = resolve;
+      });
+      const previous = tail;
+      tail = previous.then(() => next);
+      await previous;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        pending--;
+        releaseNext();
+      };
+    },
+  };
+}
+
+function _createRegistryOwner() {
+  return {
+    snapshot: _emptyRegistrySnapshot(),
+    behaviorGate: _createBehaviorGate(),
+  };
+}
+
+const _legacyRegistryOwner = _createRegistryOwner();
+
+function _isOmRuntime(value) {
+  return !!value && value[_OM_RUNTIME_BRAND] === true;
+}
+
+function _isResolutionScope(value) {
+  return !!value && value[_OM_RESOLUTION_SCOPE_BRAND] === true;
+}
+
+function _runnerOf(value) {
+  return _isOmRuntime(value) || _isResolutionScope(value) ? value.runner : value;
 }
 
 function ensureRunner(runner) {
-  if (!runner || typeof runner.run !== 'function') {
+  const rawRunner = _runnerOf(runner);
+  if (!rawRunner || typeof rawRunner.run !== 'function') {
     throw new Error('Runner must provide a run(script, params?) method');
+  }
+  return rawRunner;
+}
+
+function createOmRuntime(runner) {
+  const rawRunner = ensureRunner(runner);
+  return Object.freeze({
+    [_OM_RUNTIME_BRAND]: true,
+    runner: rawRunner,
+    [_OM_REGISTRY_OWNER]: _createRegistryOwner(),
+  });
+}
+
+function _registryOwnerOf(value) {
+  if (_isOmRuntime(value) || _isResolutionScope(value)) {
+    return value[_OM_REGISTRY_OWNER];
+  }
+  return _legacyRegistryOwner;
+}
+
+function _captureResolutionScope(value) {
+  if (_isResolutionScope(value)) return value;
+  const registryOwner = _registryOwnerOf(value);
+  const registrySnapshot = _isOmRuntime(value)
+    && Object.prototype.hasOwnProperty.call(value, _OM_BOUND_REGISTRY_SNAPSHOT)
+    ? value[_OM_BOUND_REGISTRY_SNAPSHOT]
+    : registryOwner.snapshot;
+  return Object.freeze({
+    [_OM_RESOLUTION_SCOPE_BRAND]: true,
+    runner: ensureRunner(value),
+    [_OM_REGISTRY_OWNER]: registryOwner,
+    registrySnapshot,
+  });
+}
+
+function _scopeWithRunner(scope, runner) {
+  const next = {
+    [_OM_RESOLUTION_SCOPE_BRAND]: true,
+    runner: ensureRunner(runner),
+    [_OM_REGISTRY_OWNER]: scope[_OM_REGISTRY_OWNER],
+    registrySnapshot: scope.registrySnapshot,
+  };
+  if (scope.behaviorBindingSnapshot instanceof Map) {
+    next.behaviorBindingSnapshot = scope.behaviorBindingSnapshot;
+  }
+  return Object.freeze(next);
+}
+
+function _registrySnapshotOf(value) {
+  if (_isResolutionScope(value)) return value.registrySnapshot;
+  if (_isOmRuntime(value)
+      && Object.prototype.hasOwnProperty.call(value, _OM_BOUND_REGISTRY_SNAPSHOT)) {
+    return value[_OM_BOUND_REGISTRY_SNAPSHOT];
+  }
+  return _registryOwnerOf(value).snapshot;
+}
+
+async function _withBehaviorGate(value, callback) {
+  const release = await _registryOwnerOf(value).behaviorGate.enter();
+  try {
+    return await callback();
+  } finally {
+    release();
   }
 }
 
+function _runtimeForScope(scope) {
+  return Object.freeze({
+    [_OM_RUNTIME_BRAND]: true,
+    runner: scope.runner,
+    [_OM_REGISTRY_OWNER]: scope[_OM_REGISTRY_OWNER],
+    [_OM_BOUND_REGISTRY_SNAPSHOT]: scope.registrySnapshot,
+  });
+}
+
+function _publishRegistry(owner, key, update) {
+  const current = owner.snapshot;
+  const nextRegistry = update(current[key]);
+  owner.snapshot = Object.freeze({ ...current, [key]: nextRegistry });
+}
+
+function _setTypeBehavior(owner, registryKey, typeName, behaviorName, value) {
+  _publishRegistry(owner, registryKey, (currentRegistry) => {
+    const nextRegistry = new Map(currentRegistry);
+    const nextTypeMap = new Map(currentRegistry.get(typeName) || []);
+    nextTypeMap.set(behaviorName, value);
+    nextRegistry.set(typeName, nextTypeMap);
+    return nextRegistry;
+  });
+}
+
+function _deleteTypeBehavior(owner, registryKey, typeName, behaviorName) {
+  _publishRegistry(owner, registryKey, (currentRegistry) => {
+    const currentTypeMap = currentRegistry.get(typeName);
+    if (!currentTypeMap || !currentTypeMap.has(behaviorName)) return currentRegistry;
+    const nextRegistry = new Map(currentRegistry);
+    const nextTypeMap = new Map(currentTypeMap);
+    nextTypeMap.delete(behaviorName);
+    if (nextTypeMap.size) {
+      nextRegistry.set(typeName, nextTypeMap);
+    } else {
+      nextRegistry.delete(typeName);
+    }
+    return nextRegistry;
+  });
+}
+
+function clearRegistry(runtime) {
+  if (runtime === undefined) {
+    _legacyRegistryOwner.snapshot = _emptyRegistrySnapshot();
+    return;
+  }
+  if (!_isOmRuntime(runtime)) {
+    throw new Error('clearRegistry expects an OM runtime created by createOmRuntime');
+  }
+  const owner = runtime[_OM_REGISTRY_OWNER];
+  if (owner.behaviorGate.isIdle()) {
+    owner.snapshot = _emptyRegistrySnapshot();
+    return;
+  }
+  return _withBehaviorGate(runtime, () => {
+    owner.snapshot = _emptyRegistrySnapshot();
+  });
+}
+
 async function runRows(runner, script, params) {
-  ensureRunner(runner);
-  const result = await runner.run(script, params || {});
+  const rawRunner = ensureRunner(runner);
+  const result = await rawRunner.run(script, params || {});
   return result && Array.isArray(result.rows) ? result.rows : [];
 }
 
 async function runDslRows(runner, builder) {
   const { script, params } = builder.build();
   return runRows(runner, script, params);
+}
+
+const _BEHAVIOR_KINDS = ['constraint', 'computed', 'action', 'mutation', 'interceptor'];
+const _BEHAVIOR_SLOTS = ['when', 'then', 'validator', 'compute', 'handler', 'executor'];
+const _BEHAVIOR_READINESS = ['unbound', 'unresolved', 'ready'];
+const _NON_INTERCEPTOR_PHASE = '';
+const _NON_INTERCEPTOR_SEQ = -1;
+
+class BehaviorUnresolvedError extends Error {
+  constructor(diagnostic) {
+    const safeDiagnostic = Object.freeze({ ...diagnostic });
+    super(
+      `Behavior callback is unresolved: ${safeDiagnostic.behaviorKey} `
+      + `slot=${safeDiagnostic.slot} bindingId=${safeDiagnostic.bindingId}`
+    );
+    this.name = 'BehaviorUnresolvedError';
+    this.diagnostic = safeDiagnostic;
+    Object.assign(this, safeDiagnostic);
+  }
+}
+
+class BehaviorImportError extends Error {
+  constructor(message, originalFailure, compensationFailures = []) {
+    super(message, { cause: originalFailure });
+    this.name = 'BehaviorImportError';
+    this.originalFailure = originalFailure;
+    this.compensationFailures = Object.freeze([...compensationFailures]);
+  }
+}
+
+class BehaviorRegistryPublicationConflictError extends Error {
+  constructor() {
+    super('Behavior registry changed after import staging; staged publication was rejected.');
+    this.name = 'BehaviorRegistryPublicationConflictError';
+  }
+}
+
+function _ordinalCompare(left, right) {
+  const a = String(left);
+  const b = String(right);
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function _behaviorKindOrder(kind) {
+  return _BEHAVIOR_KINDS.indexOf(kind);
+}
+
+function _behaviorSlotOrder(slot) {
+  return _BEHAVIOR_SLOTS.indexOf(slot);
+}
+
+function _behaviorReadinessOrder(readiness) {
+  return _BEHAVIOR_READINESS.indexOf(readiness);
+}
+
+function _compareBehaviorEntries(left, right) {
+  return _behaviorKindOrder(left.kind) - _behaviorKindOrder(right.kind)
+    || _ordinalCompare(left.ownerType, right.ownerType)
+    || _ordinalCompare(left.name, right.name)
+    || _ordinalCompare(left.interceptorPhase || '', right.interceptorPhase || '')
+    || (left.interceptorSeq == null ? _NON_INTERCEPTOR_SEQ : left.interceptorSeq)
+      - (right.interceptorSeq == null ? _NON_INTERCEPTOR_SEQ : right.interceptorSeq);
+}
+
+function _compareBehaviorCallbacks(left, right) {
+  return _behaviorSlotOrder(left.slot) - _behaviorSlotOrder(right.slot)
+    || _ordinalCompare(left.bindingId || '', right.bindingId || '')
+    || _behaviorReadinessOrder(left.readiness) - _behaviorReadinessOrder(right.readiness);
+}
+
+function _freezeBehaviorCatalog(catalog) {
+  const behaviors = catalog.behaviors.map((entry) => Object.freeze({
+    ...entry,
+    callbacks: Object.freeze(entry.callbacks.map((callback) => Object.freeze({ ...callback }))),
+  }));
+  return Object.freeze({ behaviors: Object.freeze(behaviors) });
+}
+
+function _normalizeBehaviorCatalog(catalog) {
+  if (!catalog || !Array.isArray(catalog.behaviors)) {
+    throw new TypeError('Behavior catalog must provide a behaviors array');
+  }
+  return _freezeBehaviorCatalog({
+    behaviors: catalog.behaviors.map((entry) => ({
+      kind: entry.kind,
+      ownerType: entry.ownerType,
+      name: entry.name,
+      constraintType: entry.constraintType == null ? null : entry.constraintType,
+      message: entry.message == null ? null : entry.message,
+      description: entry.description == null ? null : entry.description,
+      interceptorPhase: entry.interceptorPhase == null ? null : entry.interceptorPhase,
+      interceptorSeq: entry.interceptorSeq == null ? null : entry.interceptorSeq,
+      callbacks: (Array.isArray(entry.callbacks) ? entry.callbacks : []).map((callback) => ({
+        slot: callback.slot,
+        bindingId: callback.bindingId == null ? null : callback.bindingId,
+        readiness: callback.readiness,
+      })).sort(_compareBehaviorCallbacks),
+    })).sort(_compareBehaviorEntries),
+  });
+}
+
+function _bindingKey(kind, ownerType, behaviorName, slot, phase, seq) {
+  return [kind, ownerType, behaviorName, slot, phase, seq].join('\u001f');
+}
+
+function _requireRegistrationRuntime(runtime, apiName) {
+  if (!_isOmRuntime(runtime)) {
+    throw new TypeError(`${apiName} expects an OM runtime created by createOmRuntime`);
+  }
+  return runtime[_OM_REGISTRY_OWNER];
+}
+
+function _requireBehaviorKey(value, fieldName) {
+  const key = String(value || '').trim();
+  if (!key) throw new TypeError(`${fieldName} is required`);
+  return key;
+}
+
+function _requireCallback(value, fieldName) {
+  if (typeof value !== 'function') {
+    throw new TypeError(`${fieldName} must be a function`);
+  }
+  return value;
+}
+
+function _requireBindingId(value, fieldName = 'bindingId') {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new TypeError(`${fieldName} must be a non-empty string`);
+  }
+  return value;
+}
+
+function _registrationArgs(bindingOrCallback, maybeCallback, callbackName) {
+  if (typeof bindingOrCallback === 'function' && maybeCallback === undefined) {
+    return {
+      bindingId: null,
+      callback: _requireCallback(bindingOrCallback, callbackName),
+    };
+  }
+  return {
+    bindingId: _requireBindingId(bindingOrCallback),
+    callback: _requireCallback(maybeCallback, callbackName),
+  };
+}
+
+function registerConstraint(runtime, typeName, constraintName, ...args) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerConstraint');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const cn = _requireBehaviorKey(constraintName, 'Constraint name');
+  let when;
+  let then;
+  let whenBindingId = null;
+  let thenBindingId = null;
+
+  if (args.length === 2) {
+    [when, then] = args;
+  } else if (args.length === 4) {
+    [whenBindingId, when, thenBindingId, then] = args;
+    whenBindingId = _requireBindingId(whenBindingId, 'whenBindingId');
+    thenBindingId = _requireBindingId(thenBindingId, 'thenBindingId');
+  } else {
+    throw new TypeError(
+      'registerConstraint expects (runtime, typeName, constraintName, when, then) '
+      + 'or (runtime, typeName, constraintName, whenBindingId, when, thenBindingId, then)'
+    );
+  }
+
+  _setTypeBehavior(owner, 'constraints', tn, cn, {
+    when: _requireCallback(when, 'when'),
+    then: _requireCallback(then, 'then'),
+    whenBindingId,
+    thenBindingId,
+    ownerType: tn,
+  });
+}
+
+function registerValidator(
+  runtime,
+  typeName,
+  constraintName,
+  bindingOrValidator,
+  maybeValidator
+) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerValidator');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const cn = _requireBehaviorKey(constraintName, 'Constraint name');
+  const { bindingId, callback } = _registrationArgs(
+    bindingOrValidator,
+    maybeValidator,
+    'validator'
+  );
+  _setTypeBehavior(owner, 'validators', tn, cn, {
+    validator: callback,
+    bindingId,
+    ownerType: tn,
+  });
+}
+
+function registerComputed(runtime, typeName, attrName, bindingOrCompute, maybeCompute) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerComputed');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const an = _requireBehaviorKey(attrName, 'Attribute name');
+  const { bindingId, callback } = _registrationArgs(
+    bindingOrCompute,
+    maybeCompute,
+    'compute'
+  );
+  _setTypeBehavior(owner, 'computed', tn, an, {
+    computeFn: callback,
+    bindingId,
+    ownerType: tn,
+  });
+}
+
+function registerAction(runtime, typeName, actionName, bindingOrHandler, maybeHandler) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerAction');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const an = _requireBehaviorKey(actionName, 'Action name');
+  const { bindingId, callback } = _registrationArgs(
+    bindingOrHandler,
+    maybeHandler,
+    'handler'
+  );
+  _setTypeBehavior(owner, 'actions', tn, an, {
+    handler: callback,
+    bindingId,
+    ownerType: tn,
+  });
+}
+
+function registerMutation(runtime, typeName, mutationName, bindingOrExecutor, maybeExecutor) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerMutation');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const mn = _requireBehaviorKey(mutationName, 'Mutation name');
+  const { bindingId, callback } = _registrationArgs(
+    bindingOrExecutor,
+    maybeExecutor,
+    'executor'
+  );
+  _setTypeBehavior(owner, 'mutations', tn, mn, {
+    executor: callback,
+    bindingId,
+    ownerType: tn,
+  });
+}
+
+function registerInterceptor(
+  runtime,
+  typeName,
+  actionName,
+  phase,
+  seq,
+  bindingOrHandler,
+  handlerOrDescription,
+  maybeDescription
+) {
+  const owner = _requireRegistrationRuntime(runtime, 'registerInterceptor');
+  const tn = _requireBehaviorKey(typeName, 'Type name');
+  const an = _requireBehaviorKey(actionName, 'Action name');
+  const ph = _normalizeInterceptorPhase(phase);
+  if (!Number.isInteger(seq) || seq < 0) {
+    throw new TypeError('Interceptor seq must be a non-negative integer');
+  }
+
+  const unbound = typeof bindingOrHandler === 'function';
+  const bindingId = unbound ? null : _requireBindingId(bindingOrHandler);
+  const handler = _requireCallback(
+    unbound ? bindingOrHandler : handlerOrDescription,
+    'handler'
+  );
+  const description = String(
+    unbound ? handlerOrDescription || '' : maybeDescription || ''
+  );
+  const currentTypeMap = owner.snapshot.interceptors.get(tn);
+  const current = currentTypeMap && currentTypeMap.get(an);
+  const next = {
+    before: [...(current ? current.before : [])],
+    after: [...(current ? current.after : [])],
+  };
+  const registration = {
+    handler,
+    seq,
+    description,
+    ownerType: tn,
+    bindingId,
+  };
+  const index = next[ph].findIndex((candidate) => candidate.seq === seq);
+  if (index >= 0) {
+    next[ph][index] = registration;
+  } else {
+    next[ph].push(registration);
+    next[ph].sort((left, right) => left.seq - right.seq);
+  }
+  _setTypeBehavior(owner, 'interceptors', tn, an, next);
+}
+
+function _runtimeBindingId(snapshot, kind, ownerType, behaviorName, slot, phase, seq) {
+  let registration = null;
+  if (kind === 'constraint') {
+    if (slot === 'validator') {
+      const owner = snapshot.validators && snapshot.validators.get(ownerType);
+      registration = owner && owner.get(behaviorName);
+    } else {
+      const owner = snapshot.constraints.get(ownerType);
+      registration = owner && owner.get(behaviorName);
+      if (registration) {
+        return slot === 'when'
+          ? registration.whenBindingId || null
+          : registration.thenBindingId || null;
+      }
+    }
+  } else if (kind === 'computed') {
+    const owner = snapshot.computed.get(ownerType);
+    registration = owner && owner.get(behaviorName);
+  } else if (kind === 'action') {
+    const owner = snapshot.actions.get(ownerType);
+    registration = owner && owner.get(behaviorName);
+  } else if (kind === 'mutation') {
+    const owner = snapshot.mutations.get(ownerType);
+    registration = owner && owner.get(behaviorName);
+  } else if (kind === 'interceptor') {
+    const owner = snapshot.interceptors.get(ownerType);
+    const behavior = owner && owner.get(behaviorName);
+    registration = behavior
+      && (behavior[phase] || []).find((candidate) => candidate.seq === seq);
+  }
+  return registration && typeof registration.bindingId === 'string'
+    ? registration.bindingId
+    : null;
+}
+
+async function _captureBehaviorResolutionScopeUnlocked(value) {
+  if (_isResolutionScope(value) && value.behaviorBindingSnapshot instanceof Map) {
+    return value;
+  }
+  const scope = _captureResolutionScope(value);
+  const bindingRows = await runRows(
+    scope,
+    '?[kind, owner, name, slot, phase, seq, binding_id] := *om_behavior_binding{behavior_kind: kind, owner_type: owner, behavior_name: name, callback_slot: slot, phase, seq, binding_id}'
+  );
+  const bindings = new Map(bindingRows.map(
+    ([kind, owner, name, slot, phase, seq, bindingId]) => [
+      _bindingKey(kind, owner, name, slot, phase, seq),
+      bindingId == null ? '' : String(bindingId),
+    ]
+  ));
+  return Object.freeze({
+    [_OM_RESOLUTION_SCOPE_BRAND]: true,
+    runner: scope.runner,
+    [_OM_REGISTRY_OWNER]: scope[_OM_REGISTRY_OWNER],
+    registrySnapshot: scope.registrySnapshot,
+    behaviorBindingSnapshot: bindings,
+  });
+}
+
+async function _captureBehaviorResolutionScope(value) {
+  if (_isResolutionScope(value) && value.behaviorBindingSnapshot instanceof Map) {
+    return value;
+  }
+  const gate = _registryOwnerOf(value).behaviorGate;
+  const invocationScope = gate.isIdle() ? _captureResolutionScope(value) : null;
+  return _withBehaviorGate(value, () =>
+    _captureBehaviorResolutionScopeUnlocked(invocationScope || value)
+  );
+}
+
+function _displayBehaviorKey(kind, ownerType, behaviorName, phase, seq) {
+  return kind === 'interceptor'
+    ? `${kind}:${ownerType}/${behaviorName}/${phase}/${seq}`
+    : `${kind}:${ownerType}/${behaviorName}`;
+}
+
+function _unresolvedDiagnostic(kind, ownerType, behaviorName, slot, bindingId, phase, seq) {
+  const isInterceptor = kind === 'interceptor';
+  return {
+    code: 'OMR1001',
+    kind,
+    ownerType,
+    behaviorKey: _displayBehaviorKey(kind, ownerType, behaviorName, phase, seq),
+    slot,
+    bindingId,
+    interceptorPhase: isInterceptor ? phase : null,
+    interceptorSeq: isInterceptor ? seq : null,
+  };
+}
+
+function _ensureReadyIfBound(
+  scope,
+  kind,
+  ownerType,
+  behaviorName,
+  slot,
+  phase = _NON_INTERCEPTOR_PHASE,
+  seq = _NON_INTERCEPTOR_SEQ
+) {
+  const bindings = scope.behaviorBindingSnapshot;
+  if (!(bindings instanceof Map)) {
+    throw new Error('Behavior binding snapshot was not captured');
+  }
+  const key = _bindingKey(kind, ownerType, behaviorName, slot, phase, seq);
+  if (!bindings.has(key)) return;
+  const bindingId = bindings.get(key);
+  const runtimeBindingId = _runtimeBindingId(
+    scope.registrySnapshot,
+    kind,
+    ownerType,
+    behaviorName,
+    slot,
+    phase,
+    seq
+  );
+  if (runtimeBindingId !== bindingId) {
+    throw new BehaviorUnresolvedError(
+      _unresolvedDiagnostic(kind, ownerType, behaviorName, slot, bindingId, phase, seq)
+    );
+  }
+}
+
+function _projectBehaviorCallback(snapshot, bindings, kind, ownerType, name, slot, phase, seq) {
+  const key = _bindingKey(kind, ownerType, name, slot, phase, seq);
+  const bindingId = bindings.has(key) ? bindings.get(key) : null;
+  if (bindingId === null) {
+    return { slot, bindingId: null, readiness: 'unbound' };
+  }
+  const runtimeBindingId = _runtimeBindingId(
+    snapshot,
+    kind,
+    ownerType,
+    name,
+    slot,
+    phase,
+    seq
+  );
+  return {
+    slot,
+    bindingId,
+    readiness: runtimeBindingId === bindingId ? 'ready' : 'unresolved',
+  };
+}
+
+async function _getBehaviorCatalogUnlocked(runner, registrySnapshot = null) {
+  const scope = _captureResolutionScope(runner);
+  const constraintRows = await runRows(
+    scope,
+    '?[owner, name, constraint_type, message] := *om_constraint_def{type_name: owner, constraint_name: name, constraint_type, message}'
+  );
+  const computedRows = await runRows(
+    scope,
+    '?[owner, name, description] := *om_computed_def{type_name: owner, attr_name: name, description}'
+  );
+  const actionRows = await runRows(
+    scope,
+    '?[owner, name, description] := *om_action_def{type_name: owner, action_name: name, description}'
+  );
+  const mutationRows = await runRows(
+    scope,
+    '?[owner, name, description] := *om_mutation_def{type_name: owner, mutation_name: name, description}'
+  );
+  const interceptorRows = await runRows(
+    scope,
+    '?[owner, name, phase, seq, description] := *om_interceptor_def{type_name: owner, action_name: name, phase, seq, description}'
+  );
+  const bindingRows = await runRows(
+    scope,
+    '?[kind, owner, name, slot, phase, seq, binding_id] := *om_behavior_binding{behavior_kind: kind, owner_type: owner, behavior_name: name, callback_slot: slot, phase, seq, binding_id}'
+  );
+
+  const bindings = new Map(bindingRows.map(
+    ([kind, owner, name, slot, phase, seq, bindingId]) => [
+      _bindingKey(kind, owner, name, slot, phase, seq),
+      bindingId,
+    ]
+  ));
+  const snapshot = registrySnapshot || scope.registrySnapshot;
+  const behaviors = [];
+
+  for (const [owner, name, constraintType, message] of constraintRows) {
+    const slots = new Set(
+      String(constraintType).toLowerCase() === 'custom'
+        ? ['validator']
+        : ['when', 'then']
+    );
+    for (const [kind, bindingOwner, bindingName, slot] of bindingRows) {
+      if (kind === 'constraint' && bindingOwner === owner && bindingName === name) {
+        slots.add(slot);
+      }
+    }
+    behaviors.push({
+      kind: 'constraint',
+      ownerType: owner == null ? '' : String(owner),
+      name: name == null ? '' : String(name),
+      constraintType: constraintType == null ? '' : String(constraintType),
+      message: message == null ? '' : String(message),
+      description: null,
+      interceptorPhase: null,
+      interceptorSeq: null,
+      callbacks: [...slots].sort(
+        (left, right) => _behaviorSlotOrder(left) - _behaviorSlotOrder(right)
+      ).map((slot) => _projectBehaviorCallback(
+        snapshot,
+        bindings,
+        'constraint',
+        owner,
+        name,
+        slot,
+        _NON_INTERCEPTOR_PHASE,
+        _NON_INTERCEPTOR_SEQ
+      )),
+    });
+  }
+
+  const addSingleSlotDefinitions = (rows, kind, slot) => {
+    for (const [owner, name, description] of rows) {
+      behaviors.push({
+        kind,
+        ownerType: owner == null ? '' : String(owner),
+        name: name == null ? '' : String(name),
+        constraintType: null,
+        message: null,
+        description: description == null ? '' : String(description),
+        interceptorPhase: null,
+        interceptorSeq: null,
+        callbacks: [_projectBehaviorCallback(
+          snapshot,
+          bindings,
+          kind,
+          owner,
+          name,
+          slot,
+          _NON_INTERCEPTOR_PHASE,
+          _NON_INTERCEPTOR_SEQ
+        )],
+      });
+    }
+  };
+  addSingleSlotDefinitions(computedRows, 'computed', 'compute');
+  addSingleSlotDefinitions(actionRows, 'action', 'handler');
+  addSingleSlotDefinitions(mutationRows, 'mutation', 'executor');
+
+  for (const [owner, name, phase, seq, description] of interceptorRows) {
+    behaviors.push({
+      kind: 'interceptor',
+      ownerType: owner == null ? '' : String(owner),
+      name: name == null ? '' : String(name),
+      constraintType: null,
+      message: null,
+      description: description == null ? '' : String(description),
+      interceptorPhase: phase == null ? '' : String(phase),
+      interceptorSeq: Number(seq),
+      callbacks: [_projectBehaviorCallback(
+        snapshot,
+        bindings,
+        'interceptor',
+        owner,
+        name,
+        'handler',
+        phase,
+        Number(seq)
+      )],
+    });
+  }
+
+  return _normalizeBehaviorCatalog({ behaviors });
+}
+
+async function getBehaviorCatalog(runner) {
+  return _withBehaviorGate(runner, async () => {
+    const snapshot = _registrySnapshotOf(runner);
+    return _getBehaviorCatalogUnlocked(runner, snapshot);
+  });
+}
+
+function _jsonHex(codeUnit) {
+  return codeUnit.toString(16).toUpperCase().padStart(4, '0');
+}
+
+function _systemTextJsonString(value) {
+  const input = String(value);
+  let output = '"';
+  for (let index = 0; index < input.length; index++) {
+    const codeUnit = input.charCodeAt(index);
+    if (codeUnit >= 0xD800 && codeUnit <= 0xDBFF) {
+      const low = index + 1 < input.length ? input.charCodeAt(index + 1) : -1;
+      if (low >= 0xDC00 && low <= 0xDFFF) {
+        output += `\\u${_jsonHex(codeUnit)}\\u${_jsonHex(low)}`;
+        index++;
+      } else {
+        output += '\\uFFFD';
+      }
+      continue;
+    }
+    if (codeUnit >= 0xDC00 && codeUnit <= 0xDFFF) {
+      output += '\\uFFFD';
+      continue;
+    }
+    switch (codeUnit) {
+      case 0x08:
+        output += '\\b';
+        break;
+      case 0x09:
+        output += '\\t';
+        break;
+      case 0x0A:
+        output += '\\n';
+        break;
+      case 0x0C:
+        output += '\\f';
+        break;
+      case 0x0D:
+        output += '\\r';
+        break;
+      case 0x5C:
+        output += '\\\\';
+        break;
+      default: {
+        const mustEscape = codeUnit < 0x20
+          || codeUnit > 0x7E
+          || codeUnit === 0x22
+          || codeUnit === 0x26
+          || codeUnit === 0x27
+          || codeUnit === 0x2B
+          || codeUnit === 0x3C
+          || codeUnit === 0x3E
+          || codeUnit === 0x60;
+        output += mustEscape ? `\\u${_jsonHex(codeUnit)}` : input[index];
+        break;
+      }
+    }
+  }
+  return `${output}"`;
+}
+
+function _jsonNullableString(value) {
+  return value == null ? 'null' : _systemTextJsonString(value);
+}
+
+function encodeBehaviorManifestJson(catalog) {
+  const normalized = _normalizeBehaviorCatalog(catalog);
+  const behaviors = normalized.behaviors.map((behavior) => {
+    const callbacks = behavior.callbacks.map((callback) =>
+      `{"slot":${_systemTextJsonString(callback.slot)},`
+      + `"bindingId":${_jsonNullableString(callback.bindingId)},`
+      + `"readiness":${_systemTextJsonString(callback.readiness)}}`
+    ).join(',');
+    return `{"kind":${_systemTextJsonString(behavior.kind)},`
+      + `"ownerType":${_systemTextJsonString(behavior.ownerType)},`
+      + `"name":${_systemTextJsonString(behavior.name)},`
+      + `"constraintType":${_jsonNullableString(behavior.constraintType)},`
+      + `"message":${_jsonNullableString(behavior.message)},`
+      + `"description":${_jsonNullableString(behavior.description)},`
+      + `"interceptorPhase":${_jsonNullableString(behavior.interceptorPhase)},`
+      + `"interceptorSeq":${behavior.interceptorSeq == null ? 'null' : behavior.interceptorSeq},`
+      + `"callbacks":[${callbacks}]}`;
+  }).join(',');
+  return new TextEncoder().encode(`{"version":1,"behaviors":[${behaviors}]}`);
+}
+
+function _manifestDiagnostic(code, path, message) {
+  return Object.freeze({ code, path, message });
+}
+
+function _sortManifestDiagnostics(diagnostics) {
+  return diagnostics.sort((left, right) =>
+    _ordinalCompare(left.code, right.code)
+    || _ordinalCompare(left.path, right.path)
+    || _ordinalCompare(left.message, right.message)
+  );
+}
+
+function _manifestFailure(diagnostics) {
+  const ordered = Object.freeze(_sortManifestDiagnostics(diagnostics).map(
+    (diagnostic) => Object.freeze({ ...diagnostic })
+  ));
+  return Object.freeze({ catalog: null, diagnostics: ordered, success: false });
+}
+
+function _readRequiredManifestString(element, propertyName, path, diagnostics) {
+  if (Object.prototype.hasOwnProperty.call(element, propertyName)
+      && typeof element[propertyName] === 'string') {
+    return element[propertyName];
+  }
+  diagnostics.push(_manifestDiagnostic(
+    'OMM1001',
+    `${path}.${propertyName}`,
+    `Property '${propertyName}' must be a string.`
+  ));
+  return null;
+}
+
+function _readOptionalManifestString(element, propertyName, path, diagnostics) {
+  if (!Object.prototype.hasOwnProperty.call(element, propertyName)
+      || element[propertyName] === null) {
+    return null;
+  }
+  if (typeof element[propertyName] === 'string') {
+    return element[propertyName];
+  }
+  diagnostics.push(_manifestDiagnostic(
+    'OMM1001',
+    `${path}.${propertyName}`,
+    `Property '${propertyName}' must be a string or null.`
+  ));
+  return null;
+}
+
+function _readOptionalManifestInt(element, propertyName, path, diagnostics) {
+  if (!Object.prototype.hasOwnProperty.call(element, propertyName)
+      || element[propertyName] === null) {
+    return null;
+  }
+  const value = element[propertyName];
+  if (Number.isInteger(value) && value >= -2147483648 && value <= 2147483647) {
+    return value;
+  }
+  diagnostics.push(_manifestDiagnostic(
+    'OMM1001',
+    `${path}.${propertyName}`,
+    `Property '${propertyName}' must be an integer or null.`
+  ));
+  return null;
+}
+
+function _parseBehaviorKind(value, path, diagnostics) {
+  if (_BEHAVIOR_KINDS.includes(value)) return value;
+  if (value !== null) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1101',
+      path,
+      `Behavior kind '${value}' is unknown.`
+    ));
+  }
+  return null;
+}
+
+function _parseBehaviorSlot(value, path, diagnostics) {
+  if (_BEHAVIOR_SLOTS.includes(value)) return value;
+  if (value !== null) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1102',
+      path,
+      `Callback slot '${value}' is unknown.`
+    ));
+  }
+  return null;
+}
+
+function _parseBehaviorReadiness(value, path, diagnostics) {
+  if (_BEHAVIOR_READINESS.includes(value)) return value;
+  if (value !== null) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1103',
+      path,
+      `Callback readiness '${value}' is unknown.`
+    ));
+  }
+  return null;
+}
+
+function _requireManifestString(kind, propertyName, value, path, diagnostics) {
+  if (value === null) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1203',
+      `${path}.${propertyName}`,
+      `Property '${propertyName}' must be a string for behavior kind '${kind}'.`
+    ));
+  }
+}
+
+function _requireManifestNull(kind, propertyName, value, path, diagnostics) {
+  if (value !== null) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1203',
+      `${path}.${propertyName}`,
+      `Property '${propertyName}' must be null for behavior kind '${kind}'.`
+    ));
+  }
+}
+
+function _validateBehaviorMetadata(
+  kind,
+  constraintType,
+  message,
+  description,
+  phase,
+  seq,
+  path,
+  diagnostics
+) {
+  if (kind === 'constraint') {
+    _requireManifestString(kind, 'constraintType', constraintType, path, diagnostics);
+    _requireManifestNull(kind, 'description', description, path, diagnostics);
+    _requireManifestNull(kind, 'interceptorPhase', phase, path, diagnostics);
+    _requireManifestNull(kind, 'interceptorSeq', seq, path, diagnostics);
+  } else if (kind === 'computed' || kind === 'action' || kind === 'mutation') {
+    _requireManifestNull(kind, 'constraintType', constraintType, path, diagnostics);
+    _requireManifestNull(kind, 'message', message, path, diagnostics);
+    _requireManifestNull(kind, 'interceptorPhase', phase, path, diagnostics);
+    _requireManifestNull(kind, 'interceptorSeq', seq, path, diagnostics);
+  } else if (kind === 'interceptor') {
+    _requireManifestNull(kind, 'constraintType', constraintType, path, diagnostics);
+    _requireManifestNull(kind, 'message', message, path, diagnostics);
+    if ((phase !== 'before' && phase !== 'after') || seq === null || seq < 0) {
+      diagnostics.push(_manifestDiagnostic(
+        'OMM1201',
+        path,
+        'Interceptor keys require phase before/after and a non-negative sequence.'
+      ));
+    }
+  }
+}
+
+function _validateBehaviorSlot(kind, slot, path, diagnostics) {
+  const valid = kind === 'constraint'
+    ? slot === 'when' || slot === 'then' || slot === 'validator'
+    : kind === 'computed'
+      ? slot === 'compute'
+      : kind === 'action' || kind === 'interceptor'
+        ? slot === 'handler'
+        : kind === 'mutation' && slot === 'executor';
+  if (!valid) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1202',
+      path,
+      `Callback slot '${slot}' is invalid for behavior kind '${kind}'.`
+    ));
+  }
+}
+
+function _displayBehaviorKey(kind, ownerType, name, phase, seq) {
+  return kind === 'interceptor'
+    ? `${kind}:${ownerType || ''}/${name || ''}/${phase || ''}/${seq == null ? '' : seq}`
+    : `${kind}:${ownerType || ''}/${name || ''}`;
+}
+
+function _readBehaviorCallback(element, path, diagnostics) {
+  if (element === null || Array.isArray(element) || typeof element !== 'object') {
+    diagnostics.push(_manifestDiagnostic('OMM1001', path, 'Callback entry must be an object.'));
+    return null;
+  }
+  const slotValue = _readRequiredManifestString(element, 'slot', path, diagnostics);
+  const slot = _parseBehaviorSlot(slotValue, `${path}.slot`, diagnostics);
+  const bindingId = _readOptionalManifestString(element, 'bindingId', path, diagnostics);
+  const readinessValue = _readRequiredManifestString(element, 'readiness', path, diagnostics);
+  const readiness = _parseBehaviorReadiness(
+    readinessValue,
+    `${path}.readiness`,
+    diagnostics
+  );
+  if (slot === null || readiness === null) return null;
+
+  const bindingValid = readiness === 'unbound'
+    ? bindingId === null
+    : typeof bindingId === 'string' && bindingId.trim().length > 0;
+  if (!bindingValid) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1202',
+      path,
+      'Unbound callbacks require a null bindingId; unresolved and ready callbacks require a non-empty bindingId.'
+    ));
+  }
+  return { slot, bindingId, readiness };
+}
+
+function _readBehaviorEntry(element, path, diagnostics, bindingKeys) {
+  if (element === null || Array.isArray(element) || typeof element !== 'object') {
+    diagnostics.push(_manifestDiagnostic('OMM1001', path, 'Behavior entry must be an object.'));
+    return null;
+  }
+
+  const kindValue = _readRequiredManifestString(element, 'kind', path, diagnostics);
+  const kind = _parseBehaviorKind(kindValue, `${path}.kind`, diagnostics);
+  const ownerType = _readRequiredManifestString(element, 'ownerType', path, diagnostics);
+  const name = _readRequiredManifestString(element, 'name', path, diagnostics);
+  if (ownerType === null || name === null || ownerType.trim() === '' || name.trim() === '') {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1201',
+      path,
+      'Behavior ownerType and name must be non-empty strings.'
+    ));
+  }
+
+  const constraintType = _readOptionalManifestString(
+    element,
+    'constraintType',
+    path,
+    diagnostics
+  );
+  const message = _readOptionalManifestString(element, 'message', path, diagnostics);
+  const description = _readOptionalManifestString(element, 'description', path, diagnostics);
+  const phase = _readOptionalManifestString(element, 'interceptorPhase', path, diagnostics);
+  const seq = _readOptionalManifestInt(element, 'interceptorSeq', path, diagnostics);
+  if (kind !== null) {
+    _validateBehaviorMetadata(
+      kind,
+      constraintType,
+      message,
+      description,
+      phase,
+      seq,
+      path,
+      diagnostics
+    );
+  }
+
+  const callbacks = [];
+  if (!Array.isArray(element.callbacks)) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1001',
+      `${path}.callbacks`,
+      'Behavior callbacks must be an array.'
+    ));
+  } else {
+    element.callbacks.forEach((callbackElement, index) => {
+      const callbackPath = `${path}.callbacks[${index}]`;
+      const callback = _readBehaviorCallback(callbackElement, callbackPath, diagnostics);
+      if (callback !== null && kind !== null) {
+        _validateBehaviorSlot(kind, callback.slot, callbackPath, diagnostics);
+        const key = [
+          kind,
+          ownerType || '',
+          name || '',
+          phase || '',
+          seq == null ? '' : seq,
+          callback.slot,
+        ].join('\u001f');
+        if (bindingKeys.has(key)) {
+          diagnostics.push(_manifestDiagnostic(
+            'OMM1301',
+            callbackPath,
+            `Callback binding key '${_displayBehaviorKey(
+              kind,
+              ownerType,
+              name,
+              phase,
+              seq
+            )}/${callback.slot}' is duplicated or conflicting.`
+          ));
+        }
+        bindingKeys.add(key);
+        callbacks.push(callback);
+      }
+    });
+  }
+
+  if (kind === null) return null;
+  return {
+    kind,
+    ownerType: ownerType || '',
+    name: name || '',
+    constraintType,
+    message,
+    description,
+    interceptorPhase: phase,
+    interceptorSeq: seq,
+    callbacks,
+  };
+}
+
+function decodeBehaviorManifestJson(json) {
+  if (json === null || json === undefined) {
+    return _manifestFailure([
+      _manifestDiagnostic('OMM1000', '$', 'Manifest JSON is required.'),
+    ]);
+  }
+
+  let source;
+  try {
+    source = typeof json === 'string' ? json : new TextDecoder().decode(json);
+  } catch (_) {
+    return _manifestFailure([
+      _manifestDiagnostic('OMM1000', '$', 'Manifest JSON is malformed at line 0, byte 0.'),
+    ]);
+  }
+
+  let root;
+  try {
+    root = JSON.parse(source);
+  } catch (_) {
+    return _manifestFailure([
+      _manifestDiagnostic('OMM1000', '$', 'Manifest JSON is malformed at line 0, byte 0.'),
+    ]);
+  }
+
+  const diagnostics = [];
+  if (root === null || Array.isArray(root) || typeof root !== 'object') {
+    return _manifestFailure([
+      _manifestDiagnostic('OMM1001', '$', 'Manifest root must be an object.'),
+    ]);
+  }
+
+  if (!Number.isInteger(root.version)
+      || root.version < -2147483648
+      || root.version > 2147483647) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1001',
+      '$.version',
+      'Manifest version must be an integer.'
+    ));
+  } else if (root.version !== 1) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1002',
+      '$.version',
+      `Manifest version '${root.version}' is not supported.`
+    ));
+  }
+
+  if (!Array.isArray(root.behaviors)) {
+    diagnostics.push(_manifestDiagnostic(
+      'OMM1001',
+      '$.behaviors',
+      'Manifest behaviors must be an array.'
+    ));
+    return _manifestFailure(diagnostics);
+  }
+
+  const entries = [];
+  const behaviorKeys = new Set();
+  const bindingKeys = new Set();
+  root.behaviors.forEach((behaviorElement, index) => {
+    const path = `$.behaviors[${index}]`;
+    const entry = _readBehaviorEntry(behaviorElement, path, diagnostics, bindingKeys);
+    if (entry !== null) {
+      const key = [
+        entry.kind,
+        entry.ownerType,
+        entry.name,
+        entry.interceptorPhase || '',
+        entry.interceptorSeq == null ? '' : entry.interceptorSeq,
+      ].join('\u001f');
+      if (behaviorKeys.has(key)) {
+        diagnostics.push(_manifestDiagnostic(
+          'OMM1302',
+          path,
+          `Behavior key '${_displayBehaviorKey(
+            entry.kind,
+            entry.ownerType,
+            entry.name,
+            entry.interceptorPhase,
+            entry.interceptorSeq
+          )}' is duplicated or conflicting.`
+        ));
+      }
+      behaviorKeys.add(key);
+      entries.push(entry);
+    }
+  });
+
+  if (diagnostics.length > 0) {
+    return _manifestFailure(diagnostics);
+  }
+  return Object.freeze({
+    catalog: _normalizeBehaviorCatalog({ behaviors: entries }),
+    diagnostics: Object.freeze([]),
+    success: true,
+  });
+}
+
+async function exportBehaviorManifestJson(runner) {
+  return encodeBehaviorManifestJson(await getBehaviorCatalog(runner));
+}
+
+function _importDiagnostic(code, entry, callback, bindingId, message, path = null) {
+  return Object.freeze({
+    code,
+    path: path || (entry
+      ? _displayBehaviorKey(
+        entry.kind,
+        entry.ownerType,
+        entry.name,
+        entry.interceptorPhase,
+        entry.interceptorSeq
+      )
+      : '$callbacks'),
+    message,
+    kind: entry ? entry.kind : null,
+    ownerType: entry ? entry.ownerType : null,
+    behaviorName: entry ? entry.name : null,
+    slot: callback ? callback.slot : null,
+    bindingId: bindingId == null ? (callback ? callback.bindingId : null) : bindingId,
+    interceptorPhase: entry ? entry.interceptorPhase : null,
+    interceptorSeq: entry ? entry.interceptorSeq : null,
+  });
+}
+
+function _sortImportDiagnostics(diagnostics) {
+  return diagnostics.sort((left, right) =>
+    _ordinalCompare(left.code, right.code)
+    || _ordinalCompare(left.path, right.path)
+    || _ordinalCompare(left.message, right.message)
+  );
+}
+
+function _freezeImportResult(applied, diagnostics = [], unresolved = []) {
+  return Object.freeze({
+    applied,
+    diagnostics: Object.freeze(
+      _sortImportDiagnostics([...diagnostics]).map((item) => Object.freeze({ ...item }))
+    ),
+    unresolved: Object.freeze(
+      [...unresolved].sort((left, right) =>
+        _behaviorKindOrder(left.kind) - _behaviorKindOrder(right.kind)
+        || _ordinalCompare(left.ownerType, right.ownerType)
+        || _ordinalCompare(left.behaviorKey, right.behaviorKey)
+        || _behaviorSlotOrder(left.slot) - _behaviorSlotOrder(right.slot)
+      ).map((item) => Object.freeze({ ...item }))
+    ),
+  });
+}
+
+const _CALLBACK_SET_KINDS = Object.freeze([
+  ['constraints', 'constraint'],
+  ['validators', 'validator'],
+  ['computed', 'computed'],
+  ['actions', 'action'],
+  ['mutations', 'mutation'],
+  ['interceptors', 'interceptor'],
+]);
+
+function _createBehaviorCallbackIndex(callbacks) {
+  const source = callbacks == null ? {} : callbacks;
+  const diagnostics = [];
+  const indexes = {};
+  const allBindingIds = new Set();
+
+  if (typeof source !== 'object' || Array.isArray(source)) {
+    diagnostics.push(_importDiagnostic(
+      'OMI1001',
+      null,
+      null,
+      null,
+      'Typed callback binding set must be an object.'
+    ));
+    return { indexes, allBindingIds, diagnostics };
+  }
+
+  for (const [property, label] of _CALLBACK_SET_KINDS) {
+    const values = source[property] == null ? [] : source[property];
+    const index = new Map();
+    indexes[property] = index;
+    if (!Array.isArray(values)) {
+      diagnostics.push(_importDiagnostic(
+        'OMI1001',
+        null,
+        null,
+        null,
+        `Typed callback collection '${property}' must be an array.`
+      ));
+      continue;
+    }
+    for (const item of values) {
+      const bindingId = item && typeof item.bindingId === 'string'
+        ? item.bindingId
+        : null;
+      const callback = item && item.callback;
+      if (!bindingId || !bindingId.trim() || typeof callback !== 'function') {
+        diagnostics.push(_importDiagnostic(
+          'OMI1001',
+          null,
+          null,
+          bindingId,
+          'Typed callback binding requires a non-empty id and delegate.'
+        ));
+        continue;
+      }
+      allBindingIds.add(bindingId);
+      if (index.has(bindingId)) {
+        diagnostics.push(_importDiagnostic(
+          'OMI1002',
+          null,
+          null,
+          bindingId,
+          `Typed callback binding '${bindingId}' is duplicated for the same delegate type.`
+        ));
+        continue;
+      }
+      index.set(bindingId, Object.freeze({ bindingId, callback, type: label }));
+    }
+  }
+  return { indexes, allBindingIds, diagnostics };
+}
+
+function _expectedConstraintSlots(constraintType) {
+  return constraintType === 'custom' ? ['validator'] : ['when', 'then'];
+}
+
+async function _validateImportCatalog(runtime, catalog) {
+  const diagnostics = [];
+  for (const entry of catalog.behaviors) {
+    let canonicalOwner = null;
+    try {
+      canonicalOwner = await resolveType(runtime, entry.ownerType);
+    } catch (_) {
+      canonicalOwner = null;
+    }
+    if (canonicalOwner !== entry.ownerType
+        || !(canonicalOwner && await _typeExists(runtime, canonicalOwner))) {
+      diagnostics.push(_importDiagnostic(
+        'OMI1101',
+        entry,
+        null,
+        null,
+        `Owner type '${entry.ownerType}' does not exist as a canonical type.`
+      ));
+    }
+
+    if (entry.kind === 'constraint') {
+      const constraintType = String(entry.constraintType || '').trim().toLowerCase();
+      if (!['conditional', 'cross-entity', 'computed-dep', 'custom'].includes(
+        constraintType
+      )) {
+        diagnostics.push(_importDiagnostic(
+          'OMI1102',
+          entry,
+          null,
+          null,
+          `Constraint type '${entry.constraintType}' is unsupported.`
+        ));
+      } else {
+        const expected = _expectedConstraintSlots(constraintType);
+        const actual = new Set(entry.callbacks.map((callback) => callback.slot));
+        const missing = expected.filter((slot) => !actual.has(slot));
+        const extra = ['when', 'then', 'validator'].filter(
+          (slot) => actual.has(slot) && !expected.includes(slot)
+        );
+        if (missing.length || extra.length) {
+          const format = (slots) => slots.length ? slots.join(', ') : 'none';
+          diagnostics.push(_importDiagnostic(
+            'OMI1104',
+            entry,
+            null,
+            null,
+            `Constraint type '${constraintType}' requires exactly callback slots `
+            + `[${format(expected)}]; missing slots [${format(missing)}]; `
+            + `extra slots [${format(extra)}].`,
+            `${_displayBehaviorKey(
+              entry.kind,
+              entry.ownerType,
+              entry.name,
+              entry.interceptorPhase,
+              entry.interceptorSeq
+            )}.callbacks`
+          ));
+        }
+      }
+    }
+
+    if (entry.callbacks.length === 0) {
+      diagnostics.push(_importDiagnostic(
+        'OMI1103',
+        entry,
+        null,
+        null,
+        'Behavior entry must declare at least one callback slot.'
+      ));
+    }
+  }
+  return diagnostics;
+}
+
+function _snapshotSetTypeBehavior(snapshot, registryKey, ownerType, behaviorName, value) {
+  const currentRegistry = snapshot[registryKey];
+  const nextRegistry = new Map(currentRegistry);
+  const nextTypeMap = new Map(currentRegistry.get(ownerType) || []);
+  nextTypeMap.set(behaviorName, value);
+  nextRegistry.set(ownerType, nextTypeMap);
+  return Object.freeze({ ...snapshot, [registryKey]: nextRegistry });
+}
+
+function _snapshotDeleteTypeBehavior(snapshot, registryKey, ownerType, behaviorName) {
+  const currentRegistry = snapshot[registryKey];
+  const currentTypeMap = currentRegistry.get(ownerType);
+  if (!currentTypeMap || !currentTypeMap.has(behaviorName)) return snapshot;
+  const nextRegistry = new Map(currentRegistry);
+  const nextTypeMap = new Map(currentTypeMap);
+  nextTypeMap.delete(behaviorName);
+  if (nextTypeMap.size) nextRegistry.set(ownerType, nextTypeMap);
+  else nextRegistry.delete(ownerType);
+  return Object.freeze({ ...snapshot, [registryKey]: nextRegistry });
+}
+
+function _snapshotDeleteInterceptor(snapshot, entry) {
+  const ownerMap = snapshot.interceptors.get(entry.ownerType);
+  const current = ownerMap && ownerMap.get(entry.name);
+  if (!current) return snapshot;
+  const phase = entry.interceptorPhase;
+  const next = {
+    before: [...current.before],
+    after: [...current.after],
+  };
+  next[phase] = next[phase].filter((candidate) => candidate.seq !== entry.interceptorSeq);
+  if (!next.before.length && !next.after.length) {
+    return _snapshotDeleteTypeBehavior(
+      snapshot,
+      'interceptors',
+      entry.ownerType,
+      entry.name
+    );
+  }
+  return _snapshotSetTypeBehavior(
+    snapshot,
+    'interceptors',
+    entry.ownerType,
+    entry.name,
+    next
+  );
+}
+
+function _snapshotSetInterceptor(snapshot, entry, callback, bindingId) {
+  const ownerMap = snapshot.interceptors.get(entry.ownerType);
+  const current = ownerMap && ownerMap.get(entry.name);
+  const next = {
+    before: [...(current ? current.before : [])],
+    after: [...(current ? current.after : [])],
+  };
+  next[entry.interceptorPhase].push({
+    handler: callback,
+    seq: entry.interceptorSeq,
+    description: entry.description || '',
+    ownerType: entry.ownerType,
+    bindingId,
+  });
+  next[entry.interceptorPhase].sort((left, right) => left.seq - right.seq);
+  return _snapshotSetTypeBehavior(
+    snapshot,
+    'interceptors',
+    entry.ownerType,
+    entry.name,
+    next
+  );
+}
+
+function _resolveImportedCallback(
+  callbackIndexes,
+  collection,
+  entry,
+  callback,
+  unresolved,
+  diagnostics
+) {
+  if (callback.bindingId === null) {
+    diagnostics.push(_importDiagnostic(
+      'OMI2001',
+      entry,
+      callback,
+      null,
+      'Unbound callback cannot be made ready by manifest data.'
+    ));
+    return null;
+  }
+
+  const binding = callbackIndexes.indexes[collection].get(callback.bindingId);
+  if (binding) return binding.callback;
+  unresolved.push(_unresolvedDiagnostic(
+    entry.kind,
+    entry.ownerType,
+    entry.name,
+    callback.slot,
+    callback.bindingId,
+    entry.interceptorPhase || _NON_INTERCEPTOR_PHASE,
+    entry.interceptorSeq == null ? _NON_INTERCEPTOR_SEQ : entry.interceptorSeq
+  ));
+  const incompatible = callbackIndexes.allBindingIds.has(callback.bindingId);
+  diagnostics.push(_importDiagnostic(
+    incompatible ? 'OMI1202' : 'OMI1201',
+    entry,
+    callback,
+    callback.bindingId,
+    incompatible
+      ? `Binding '${callback.bindingId}' has an incompatible delegate type.`
+      : `Binding '${callback.bindingId}' has no supplied typed callback.`
+  ));
+  return null;
+}
+
+function _missingImportedConstraint() {
+  throw new Error('Unresolved imported constraint callback was invoked.');
+}
+
+function _stageImportedRegistry(source, catalog, callbackIndexes) {
+  let snapshot = source;
+  const unresolved = [];
+  const diagnostics = [];
+
+  for (const entry of catalog.behaviors) {
+    if (entry.kind === 'constraint') {
+      snapshot = _snapshotDeleteTypeBehavior(
+        snapshot,
+        'constraints',
+        entry.ownerType,
+        entry.name
+      );
+      snapshot = _snapshotDeleteTypeBehavior(
+        snapshot,
+        'validators',
+        entry.ownerType,
+        entry.name
+      );
+      if (String(entry.constraintType).trim().toLowerCase() === 'custom') {
+        const callback = entry.callbacks[0];
+        const validator = _resolveImportedCallback(
+          callbackIndexes,
+          'validators',
+          entry,
+          callback,
+          unresolved,
+          diagnostics
+        );
+        if (validator) {
+          snapshot = _snapshotSetTypeBehavior(
+            snapshot,
+            'validators',
+            entry.ownerType,
+            entry.name,
+            {
+              validator,
+              bindingId: callback.bindingId,
+              ownerType: entry.ownerType,
+            }
+          );
+        }
+      } else {
+        const bySlot = new Map(entry.callbacks.map((callback) => [callback.slot, callback]));
+        const whenCallback = bySlot.get('when');
+        const thenCallback = bySlot.get('then');
+        const when = _resolveImportedCallback(
+          callbackIndexes,
+          'constraints',
+          entry,
+          whenCallback,
+          unresolved,
+          diagnostics
+        );
+        const then = _resolveImportedCallback(
+          callbackIndexes,
+          'constraints',
+          entry,
+          thenCallback,
+          unresolved,
+          diagnostics
+        );
+        snapshot = _snapshotSetTypeBehavior(
+          snapshot,
+          'constraints',
+          entry.ownerType,
+          entry.name,
+          {
+            constraintType: entry.constraintType,
+            message: entry.message || '',
+            when: when || _missingImportedConstraint,
+            then: then || _missingImportedConstraint,
+            whenBindingId: when ? whenCallback.bindingId : null,
+            thenBindingId: then ? thenCallback.bindingId : null,
+            ownerType: entry.ownerType,
+          }
+        );
+      }
+      continue;
+    }
+
+    const callback = entry.callbacks[0];
+    const collection = entry.kind === 'computed'
+      ? 'computed'
+      : entry.kind === 'action'
+        ? 'actions'
+        : entry.kind === 'mutation'
+          ? 'mutations'
+          : 'interceptors';
+    const registryKey = entry.kind === 'computed'
+      ? 'computed'
+      : entry.kind === 'action'
+        ? 'actions'
+        : entry.kind === 'mutation'
+          ? 'mutations'
+          : 'interceptors';
+    snapshot = entry.kind === 'interceptor'
+      ? _snapshotDeleteInterceptor(snapshot, entry)
+      : _snapshotDeleteTypeBehavior(snapshot, registryKey, entry.ownerType, entry.name);
+    const imported = _resolveImportedCallback(
+      callbackIndexes,
+      collection,
+      entry,
+      callback,
+      unresolved,
+      diagnostics
+    );
+    if (!imported) continue;
+
+    if (entry.kind === 'computed') {
+      snapshot = _snapshotSetTypeBehavior(snapshot, registryKey, entry.ownerType, entry.name, {
+        computeFn: imported,
+        description: entry.description || '',
+        bindingId: callback.bindingId,
+        ownerType: entry.ownerType,
+      });
+    } else if (entry.kind === 'action') {
+      snapshot = _snapshotSetTypeBehavior(snapshot, registryKey, entry.ownerType, entry.name, {
+        handler: imported,
+        description: entry.description || '',
+        bindingId: callback.bindingId,
+        ownerType: entry.ownerType,
+      });
+    } else if (entry.kind === 'mutation') {
+      snapshot = _snapshotSetTypeBehavior(snapshot, registryKey, entry.ownerType, entry.name, {
+        executor: imported,
+        description: entry.description || '',
+        bindingId: callback.bindingId,
+        ownerType: entry.ownerType,
+      });
+    } else {
+      snapshot = _snapshotSetInterceptor(
+        snapshot,
+        entry,
+        imported,
+        callback.bindingId
+      );
+    }
+  }
+
+  return { snapshot, unresolved, diagnostics };
+}
+
+function _sameBehaviorKey(left, right) {
+  return left.kind === right.kind
+    && left.ownerType === right.ownerType
+    && left.name === right.name
+    && left.interceptorPhase === right.interceptorPhase
+    && left.interceptorSeq === right.interceptorSeq;
+}
+
+async function _listBehaviorBindingRows(runner) {
+  return runRows(
+    runner,
+    '?[kind, owner, name, slot, phase, seq, binding_id] := *om_behavior_binding{behavior_kind: kind, owner_type: owner, behavior_name: name, callback_slot: slot, phase, seq, binding_id}'
+  );
+}
+
+function _bindingRowMatchesEntry(row, entry) {
+  const [kind, owner, name, , phase, seq] = row;
+  return kind === entry.kind
+    && owner === entry.ownerType
+    && name === entry.name
+    && (entry.kind !== 'interceptor'
+      || phase === entry.interceptorPhase && Number(seq) === entry.interceptorSeq);
+}
+
+async function _putBehaviorMetadata(runner, entry) {
+  const common = {
+    type_name: entry.ownerType,
+    description: entry.description || '',
+  };
+  if (entry.kind === 'constraint') {
+    return runRows(
+      runner,
+      '?[type_name, constraint_name, constraint_type, message] <- [[$type_name, $constraint_name, $constraint_type, $message]]\n:put om_constraint_def {type_name, constraint_name => constraint_type, message}',
+      {
+        type_name: entry.ownerType,
+        constraint_name: entry.name,
+        constraint_type: entry.constraintType || '',
+        message: entry.message || '',
+      }
+    );
+  }
+  if (entry.kind === 'computed') {
+    return runRows(
+      runner,
+      '?[type_name, attr_name, description] <- [[$type_name, $attr_name, $description]]\n:put om_computed_def {type_name, attr_name => description}',
+      { ...common, attr_name: entry.name }
+    );
+  }
+  if (entry.kind === 'action') {
+    return runRows(
+      runner,
+      '?[type_name, action_name, description] <- [[$type_name, $action_name, $description]]\n:put om_action_def {type_name, action_name => description}',
+      { ...common, action_name: entry.name }
+    );
+  }
+  if (entry.kind === 'mutation') {
+    return runRows(
+      runner,
+      '?[type_name, mutation_name, description] <- [[$type_name, $mutation_name, $description]]\n:put om_mutation_def {type_name, mutation_name => description}',
+      { ...common, mutation_name: entry.name }
+    );
+  }
+  return runRows(
+    runner,
+    '?[type_name, action_name, phase, seq, description] <- [[$type_name, $action_name, $phase, $seq, $description]]\n:put om_interceptor_def {type_name, action_name, phase, seq => description}',
+    {
+      ...common,
+      action_name: entry.name,
+      phase: entry.interceptorPhase,
+      seq: entry.interceptorSeq,
+    }
+  );
+}
+
+async function _removeBehaviorMetadata(runner, entry) {
+  const params = { type_name: entry.ownerType };
+  if (entry.kind === 'constraint') {
+    return runRows(
+      runner,
+      '?[type_name, constraint_name] <- [[$type_name, $constraint_name]]\n:rm om_constraint_def {type_name, constraint_name}',
+      { ...params, constraint_name: entry.name }
+    );
+  }
+  if (entry.kind === 'computed') {
+    return runRows(
+      runner,
+      '?[type_name, attr_name] <- [[$type_name, $attr_name]]\n:rm om_computed_def {type_name, attr_name}',
+      { ...params, attr_name: entry.name }
+    );
+  }
+  if (entry.kind === 'action') {
+    return runRows(
+      runner,
+      '?[type_name, action_name] <- [[$type_name, $action_name]]\n:rm om_action_def {type_name, action_name}',
+      { ...params, action_name: entry.name }
+    );
+  }
+  if (entry.kind === 'mutation') {
+    return runRows(
+      runner,
+      '?[type_name, mutation_name] <- [[$type_name, $mutation_name]]\n:rm om_mutation_def {type_name, mutation_name}',
+      { ...params, mutation_name: entry.name }
+    );
+  }
+  return runRows(
+    runner,
+    '?[type_name, action_name, phase, seq] <- [[$type_name, $action_name, $phase, $seq]]\n:rm om_interceptor_def {type_name, action_name, phase, seq}',
+    {
+      ...params,
+      action_name: entry.name,
+      phase: entry.interceptorPhase,
+      seq: entry.interceptorSeq,
+    }
+  );
+}
+
+async function _removeBehaviorBindings(runner, entry) {
+  const params = {
+    kind: entry.kind,
+    owner: entry.ownerType,
+    name: entry.name,
+  };
+  const interceptorFilter = entry.kind === 'interceptor'
+    ? ', phase = $phase, seq = $seq'
+    : '';
+  return runRows(
+    runner,
+    `?[behavior_kind, owner_type, behavior_name, callback_slot, phase, seq] := `
+      + '*om_behavior_binding{behavior_kind, owner_type, behavior_name, '
+      + 'callback_slot, phase, seq}, '
+      + 'behavior_kind = $kind, owner_type = $owner, behavior_name = $name'
+      + `${interceptorFilter}\n`
+      + ':rm om_behavior_binding {behavior_kind, owner_type, behavior_name, '
+      + 'callback_slot, phase, seq}',
+    {
+      ...params,
+      phase: entry.interceptorPhase,
+      seq: entry.interceptorSeq,
+    }
+  );
+}
+
+async function _putBehaviorBindingRow(runner, row) {
+  const [kind, owner, name, slot, phase, seq, bindingId] = row;
+  return runRows(
+    runner,
+    '?[behavior_kind, owner_type, behavior_name, callback_slot, phase, seq, binding_id] '
+      + '<- [[$kind, $owner, $name, $slot, $phase, $seq, $binding_id]]\n'
+      + ':put om_behavior_binding {behavior_kind, owner_type, behavior_name, '
+      + 'callback_slot, phase, seq => binding_id}',
+    { kind, owner, name, slot, phase, seq, binding_id: bindingId }
+  );
+}
+
+async function _applyImportedPersistentState(runner, entries) {
+  for (const entry of entries) {
+    await _putBehaviorMetadata(runner, entry);
+    await _removeBehaviorBindings(runner, entry);
+    for (const callback of entry.callbacks) {
+      if (callback.bindingId === null) continue;
+      await _putBehaviorBindingRow(runner, [
+        entry.kind,
+        entry.ownerType,
+        entry.name,
+        callback.slot,
+        entry.interceptorPhase || _NON_INTERCEPTOR_PHASE,
+        entry.interceptorSeq == null ? _NON_INTERCEPTOR_SEQ : entry.interceptorSeq,
+        callback.bindingId,
+      ]);
+    }
+  }
+}
+
+async function _restoreImportedPersistentState(
+  runner,
+  importedEntries,
+  previousEntries,
+  previousBindings
+) {
+  for (const entry of importedEntries) {
+    await _removeBehaviorMetadata(runner, entry);
+    await _removeBehaviorBindings(runner, entry);
+  }
+  await _applyImportedPersistentState(runner, previousEntries);
+  for (const row of previousBindings) {
+    await _putBehaviorBindingRow(runner, row);
+  }
+}
+
+async function _runBehaviorWriteTransaction(runtime, callback) {
+  const rawRunner = ensureRunner(runtime);
+  if (typeof rawRunner.multiTransact !== 'function') {
+    throw new Error('Behavior import requires a CozoDb instance with multiTransact(write)');
+  }
+  const tx = rawRunner.multiTransact(true);
+  const scope = _scopeWithRunner(_captureResolutionScope(runtime), tx);
+  try {
+    const result = await callback(scope);
+    tx.commit();
+    return result;
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch (_) {
+    }
+    throw error;
+  }
+}
+
+async function importBehaviorManifestJson(runtime, json, callbacks, options) {
+  if (!_isOmRuntime(runtime)) {
+    throw new TypeError(
+      'importBehaviorManifestJson expects an OM runtime created by createOmRuntime'
+    );
+  }
+  const decoded = decodeBehaviorManifestJson(json);
+  if (!decoded.success) {
+    return _freezeImportResult(false, decoded.diagnostics.map((diagnostic) =>
+      _importDiagnostic(
+        diagnostic.code,
+        null,
+        null,
+        null,
+        diagnostic.message,
+        diagnostic.path
+      )
+    ));
+  }
+
+  const callbackIndexes = _createBehaviorCallbackIndex(callbacks);
+  if (callbackIndexes.diagnostics.length) {
+    return _freezeImportResult(false, callbackIndexes.diagnostics);
+  }
+
+  return _withBehaviorGate(runtime, async () => {
+    const catalog = decoded.catalog;
+    const validationDiagnostics = await _validateImportCatalog(runtime, catalog);
+    if (validationDiagnostics.length) {
+      return _freezeImportResult(false, validationDiagnostics);
+    }
+
+    const owner = _registryOwnerOf(runtime);
+    const preRegistry = owner.snapshot;
+    const staged = _stageImportedRegistry(preRegistry, catalog, callbackIndexes);
+    if (options && options.requireReady
+        && (staged.unresolved.length || staged.diagnostics.length)) {
+      return _freezeImportResult(false, staged.diagnostics, staged.unresolved);
+    }
+
+    const currentCatalog = await _getBehaviorCatalogUnlocked(runtime, preRegistry);
+    const currentBindings = await _listBehaviorBindingRows(runtime);
+    const affectedEntries = currentCatalog.behaviors.filter((current) =>
+      catalog.behaviors.some((imported) => _sameBehaviorKey(current, imported))
+    );
+    const affectedBindings = currentBindings.filter((row) =>
+      catalog.behaviors.some((entry) => _bindingRowMatchesEntry(row, entry))
+    );
+
+    try {
+      await _runBehaviorWriteTransaction(
+        runtime,
+        (txRuntime) => _applyImportedPersistentState(txRuntime, catalog.behaviors)
+      );
+    } catch (failure) {
+      throw new BehaviorImportError(
+        'Behavior manifest persistence failed before registry publication.',
+        failure
+      );
+    }
+
+    try {
+      if (owner.snapshot !== preRegistry) {
+        throw new BehaviorRegistryPublicationConflictError();
+      }
+      owner.snapshot = staged.snapshot;
+      return _freezeImportResult(true, staged.diagnostics, staged.unresolved);
+    } catch (publishFailure) {
+      const compensationFailures = [];
+      try {
+        await _runBehaviorWriteTransaction(
+          runtime,
+          (txRuntime) => _restoreImportedPersistentState(
+            txRuntime,
+            catalog.behaviors,
+            affectedEntries,
+            affectedBindings
+          )
+        );
+      } catch (compensationFailure) {
+        compensationFailures.push(compensationFailure);
+      }
+      throw new BehaviorImportError(
+        compensationFailures.length
+          ? 'Behavior registry publication failed and persistent compensation was incomplete.'
+          : 'Behavior registry publication failed; persistent state was restored.',
+        publishFailure,
+        compensationFailures
+      );
+    }
+  });
 }
 
 function _isStoredRelationMissingError(e) {
@@ -162,13 +2155,6 @@ function _normalizeValidityInput(value) {
   return null;
 }
 
-function _getOrCreateTypeMap(registry, typeName) {
-  const key = String(typeName || '').trim();
-  if (!key) throw new Error('Type name is required');
-  if (!registry.has(key)) registry.set(key, new Map());
-  return registry.get(key);
-}
-
 async function _ensureBehaviorTypeExists(runner, typeName) {
   const name = String(typeName || '').trim();
   if (!name) throw new Error('Type name is required');
@@ -186,11 +2172,76 @@ async function _resolveByAncestors(runner, typeName, lookupFn) {
   return null;
 }
 
+async function _actionDefinitionExists(runner, ownerType, actionName) {
+  const rows = await runRows(
+    runner,
+    `
+?[present] :=
+  *om_action_def{type_name: $owner_type, action_name: $action_name, description: _description},
+  present = true
+:limit 1
+    `.trim(),
+    { owner_type: ownerType, action_name: actionName }
+  );
+  return rows.length > 0;
+}
+
+async function _mutationDefinitionExists(runner, ownerType, mutationName) {
+  const rows = await runRows(
+    runner,
+    `
+?[present] :=
+  *om_mutation_def{type_name: $owner_type, mutation_name: $mutation_name, description: _description},
+  present = true
+:limit 1
+    `.trim(),
+    { owner_type: ownerType, mutation_name: mutationName }
+  );
+  return rows.length > 0;
+}
+
+async function _listInterceptorSequences(runner, ownerType, actionName, phase) {
+  const rows = await runRows(
+    runner,
+    `
+?[seq] :=
+  *om_interceptor_def{
+    type_name: $owner_type,
+    action_name: $action_name,
+    phase: $phase,
+    seq,
+    description: _description
+  }
+:sort seq
+    `.trim(),
+    { owner_type: ownerType, action_name: actionName, phase }
+  );
+  return rows
+    .map(([seq]) => Number(seq))
+    .filter((seq) => Number.isInteger(seq) && seq >= 0);
+}
+
+async function _listComputedDefinitions(runner, ownerType) {
+  const rows = await runRows(
+    runner,
+    `
+?[attr_name] :=
+  *om_computed_def{type_name: $owner_type, attr_name, description: _description}
+:sort attr_name
+    `.trim(),
+    { owner_type: ownerType }
+  );
+  return rows
+    .map(([attrName]) => String(attrName || '').trim())
+    .filter(Boolean);
+}
+
 function _normalizeConstraintType(scope) {
   const s = String(scope || '').trim().toLowerCase();
   if (!s || s === 'conditional') return 'conditional';
   if (s === 'cross-entity' || s === 'cross_entity') return 'cross-entity';
   if (s === 'computed-dep' || s === 'computed_dep') return 'computed-dep';
+  if (s === 'custom') return 'custom';
   throw new Error(`Unsupported constraint scope '${scope}'`);
 }
 
@@ -207,12 +2258,25 @@ async function defineConstraint(runner, typeName, constraintName, def) {
   const message = def.message != null ? String(def.message) : '';
   const whenFn = def.when;
   const thenFn = def.then;
+  const validator = def.validator;
 
-  if (typeof whenFn !== 'function') {
-    throw new Error('Constraint definition must provide a when(ctx) function');
-  }
-  if (typeof thenFn !== 'function') {
-    throw new Error('Constraint definition must provide a then(ctx) function');
+  if (constraintType === 'custom') {
+    if (typeof validator !== 'function') {
+      throw new Error('Custom constraint definition must provide a validator(ctx) function');
+    }
+    if (whenFn !== undefined || thenFn !== undefined) {
+      throw new Error('Custom constraint definition cannot provide when(ctx) or then(ctx)');
+    }
+  } else {
+    if (validator !== undefined) {
+      throw new Error('Scoped constraint definition cannot provide validator(ctx)');
+    }
+    if (typeof whenFn !== 'function') {
+      throw new Error('Constraint definition must provide a when(ctx) function');
+    }
+    if (typeof thenFn !== 'function') {
+      throw new Error('Constraint definition must provide a then(ctx) function');
+    }
   }
 
   await _ensureBehaviorTypeExists(runner, tn);
@@ -229,14 +2293,26 @@ async function defineConstraint(runner, typeName, constraintName, def) {
       .put('om_constraint_def', ['type_name', 'constraint_name'], ['constraint_type', 'message'])
   );
 
-  const typeMap = _getOrCreateTypeMap(_constraintRegistry, tn);
-  typeMap.set(cn, {
-    constraintType,
-    message,
-    when: whenFn,
-    then: thenFn,
-    ownerType: tn,
-  });
+  const owner = _registryOwnerOf(runner);
+  if (constraintType === 'custom') {
+    _deleteTypeBehavior(owner, 'constraints', tn, cn);
+    _setTypeBehavior(owner, 'validators', tn, cn, {
+      validator,
+      bindingId: null,
+      ownerType: tn,
+    });
+  } else {
+    _deleteTypeBehavior(owner, 'validators', tn, cn);
+    _setTypeBehavior(owner, 'constraints', tn, cn, {
+      constraintType,
+      message,
+      when: whenFn,
+      then: thenFn,
+      whenBindingId: null,
+      thenBindingId: null,
+      ownerType: tn,
+    });
+  }
 }
 
 async function defineComputed(runner, typeName, attrName, computeFn, description = '') {
@@ -261,10 +2337,10 @@ async function defineComputed(runner, typeName, attrName, computeFn, description
       .put('om_computed_def', ['type_name', 'attr_name'], ['description'])
   );
 
-  const typeMap = _getOrCreateTypeMap(_computedRegistry, tn);
-  typeMap.set(an, {
+  _setTypeBehavior(_registryOwnerOf(runner), 'computed', tn, an, {
     computeFn,
     description: String(description || ''),
+    bindingId: null,
     ownerType: tn,
   });
 }
@@ -279,7 +2355,7 @@ async function _resolveComputedDef(runner, typeName, attrName) {
     runner,
     tn,
     (t) => {
-      const map = _computedRegistry.get(t);
+      const map = _registrySnapshotOf(runner).computed.get(t);
       return map && map.get(an);
     }
   );
@@ -290,16 +2366,17 @@ async function _getComputedMapForType(runner, typeName) {
   if (!tn) throw new Error('Type name is required');
   const ancestors = await _getAncestorList(runner, tn);
   const chain = [...ancestors].reverse();
+  const registry = _registrySnapshotOf(runner).computed;
 
   const merged = new Map();
   for (const t of chain) {
-    const map = _computedRegistry.get(t);
+    const map = registry.get(t);
     if (!map) continue;
     for (const [attrName, def] of map.entries()) {
       merged.set(attrName, def);
     }
   }
-  const self = _computedRegistry.get(tn);
+  const self = registry.get(tn);
   if (self) {
     for (const [attrName, def] of self.entries()) {
       merged.set(attrName, def);
@@ -308,51 +2385,171 @@ async function _getComputedMapForType(runner, typeName) {
   return merged;
 }
 
+async function _listEffectiveComputedDefinitions(runner, typeName) {
+  const scope = await _captureBehaviorResolutionScope(runner);
+  const tn = String(typeName || '').trim();
+  if (!tn) throw new Error('Type name is required');
+  const ancestors = await _getAncestorList(scope, tn);
+  const chain = [...ancestors].reverse();
+  const merged = new Map();
+  for (const ownerType of chain) {
+    for (const attrName of await _listComputedDefinitions(scope, ownerType)) {
+      merged.set(attrName, { ownerType, attrName });
+    }
+  }
+  for (const attrName of await _listComputedDefinitions(scope, tn)) {
+    merged.set(attrName, { ownerType: tn, attrName });
+  }
+  return [...merged.values()].sort(
+    (left, right) => _ordinalCompare(left.attrName, right.attrName)
+  );
+}
+
+async function _resolveComputedCallback(runner, typeName, attrName) {
+  const scope = await _captureBehaviorResolutionScope(runner);
+  const tn = String(typeName || '').trim();
+  const an = String(attrName || '').trim();
+  if (!tn) throw new Error('Type name is required');
+  if (!an) throw new Error('Attribute name is required');
+  const canonicalAttrName = await _resolveAttrForCanonicalType(scope, tn, an);
+  for (const definition of await _listEffectiveComputedDefinitions(scope, tn)) {
+    const definitionAttrName = await _resolveAttrForCanonicalType(
+      scope,
+      tn,
+      definition.attrName
+    );
+    if (definitionAttrName !== canonicalAttrName) continue;
+    _ensureReadyIfBound(
+      scope,
+      'computed',
+      definition.ownerType,
+      definition.attrName,
+      'compute'
+    );
+    const typeMap = scope.registrySnapshot.computed.get(definition.ownerType);
+    const registration = typeMap && typeMap.get(definition.attrName);
+    return registration && typeof registration.computeFn === 'function'
+      ? registration
+      : null;
+  }
+  return null;
+}
+
 async function validateConstraints(runner, entityId, options) {
+  const scope = await _captureBehaviorResolutionScope(runner);
   const id = String(entityId || '').trim();
   if (!id) throw new Error('entityId is required');
 
   const wantedTypes = options && Array.isArray(options.types) ? options.types : null;
   const wantedSet = wantedTypes ? new Set(wantedTypes.map((t) => String(t))) : null;
 
-  const typeName = await getEntityType(runner, id);
-  const ancestors = await _getAncestorList(runner, typeName);
+  const typeName = await getEntityType(scope, id);
+  const ancestors = await _getAncestorList(scope, typeName);
   const chain = [typeName, ...ancestors].reverse();
+  const constraintRegistry = scope.registrySnapshot.constraints;
+  const validatorRegistry = scope.registrySnapshot.validators;
+  const definitionRows = await runRows(
+    scope,
+    '?[owner, name, constraint_type, message] := *om_constraint_def{type_name: owner, constraint_name: name, constraint_type, message}'
+  );
+  const definitionsByOwner = new Map();
+  for (const [owner, name, constraintType, message] of definitionRows) {
+    if (!definitionsByOwner.has(owner)) definitionsByOwner.set(owner, []);
+    definitionsByOwner.get(owner).push({
+      name,
+      constraintType: String(constraintType),
+      message: message == null ? '' : String(message),
+    });
+  }
+  for (const definitions of definitionsByOwner.values()) {
+    definitions.sort((left, right) => _ordinalCompare(left.name, right.name));
+  }
 
   const ctx = {
-    runner,
+    runner: scope.runner,
+    runtime: _runtimeForScope(scope),
     entityId: id,
     typeName,
-    getProperty: async (attrName) => getProperty(runner, id, attrName),
-    getNeighbors: async (relName, direction) => getNeighbors(runner, id, relName, direction),
+    getProperty: async (attrName) => getProperty(scope, id, attrName),
+    getNeighbors: async (relName, direction) => getNeighbors(scope, id, relName, direction),
   };
 
   const errors = [];
+  const resolvedConstraints = [];
 
   for (const t of chain) {
-    const map = _constraintRegistry.get(t);
-    if (!map) continue;
-    for (const [name, def] of map.entries()) {
-      if (wantedSet && !wantedSet.has(def.constraintType)) continue;
-      let active = false;
-      try {
-        active = await def.when(ctx);
-      } catch (e) {
-        errors.push(`Constraint '${name}' evaluation failed (when): ${e.message || e}`);
+    const definitions = definitionsByOwner.get(t) || [];
+    for (const definition of definitions) {
+      if (wantedSet && !wantedSet.has(definition.constraintType)) continue;
+
+      if (definition.constraintType === 'custom') {
+        _ensureReadyIfBound(
+          scope,
+          'constraint',
+          t,
+          definition.name,
+          'validator'
+        );
+        _ensureReadyIfBound(scope, 'constraint', t, definition.name, 'when');
+        _ensureReadyIfBound(scope, 'constraint', t, definition.name, 'then');
+        const validator = validatorRegistry.get(t)
+          && validatorRegistry.get(t).get(definition.name);
+        resolvedConstraints.push({ definition, validator, constraint: null });
         continue;
       }
-      if (!active) continue;
-      let ok = false;
+
+      _ensureReadyIfBound(scope, 'constraint', t, definition.name, 'when');
+      _ensureReadyIfBound(scope, 'constraint', t, definition.name, 'then');
+      const def = constraintRegistry.get(t)
+        && constraintRegistry.get(t).get(definition.name);
+      resolvedConstraints.push({ definition, validator: null, constraint: def || null });
+    }
+  }
+
+  for (const resolved of resolvedConstraints) {
+    const { definition, validator, constraint } = resolved;
+    if (validator) {
       try {
-        ok = await def.then(ctx);
+        const message = await validator.validator(ctx);
+        if (message !== null) {
+          if (typeof message !== 'string') {
+            throw new TypeError('Custom validator must return string or null');
+          }
+          errors.push(message);
+        }
       } catch (e) {
-        errors.push(`Constraint '${name}' evaluation failed (then): ${e.message || e}`);
-        continue;
+        if (e instanceof BehaviorUnresolvedError) throw e;
+        errors.push(
+          `Constraint '${definition.name}' evaluation failed (validator): ${e.message || e}`
+        );
       }
-      if (!ok) {
-        const msg = def.message ? `: ${def.message}` : '';
-        errors.push(`Constraint '${name}' violated${msg}`);
-      }
+      continue;
+    }
+    if (!constraint) continue;
+    let active = false;
+    try {
+      active = await constraint.when(ctx);
+    } catch (e) {
+      if (e instanceof BehaviorUnresolvedError) throw e;
+      errors.push(
+        `Constraint '${definition.name}' evaluation failed (when): ${e.message || e}`
+      );
+      continue;
+    }
+    if (!active) continue;
+    let ok = false;
+    try {
+      ok = await constraint.then(ctx);
+    } catch (e) {
+      if (e instanceof BehaviorUnresolvedError) throw e;
+      errors.push(
+        `Constraint '${definition.name}' evaluation failed (then): ${e.message || e}`
+      );
+      continue;
+    }
+    if (!ok) {
+      const msg = definition.message ? `: ${definition.message}` : '';
+      errors.push(`Constraint '${definition.name}' violated${msg}`);
     }
   }
 
@@ -360,10 +2557,12 @@ async function validateConstraints(runner, entityId, options) {
 }
 
 async function _withWriteTxIfPossible(runner, fn) {
-  if (runner && typeof runner.multiTransact === 'function') {
-    const tx = runner.multiTransact(true);
+  const scope = _captureResolutionScope(runner);
+  const rawRunner = scope.runner;
+  if (typeof rawRunner.multiTransact === 'function') {
+    const tx = rawRunner.multiTransact(true);
     try {
-      const result = await fn(tx);
+      const result = await fn(_scopeWithRunner(scope, tx));
       tx.commit();
       return result;
     } catch (error) {
@@ -374,7 +2573,7 @@ async function _withWriteTxIfPossible(runner, fn) {
       throw error;
     }
   }
-  return fn(runner);
+  return fn(scope);
 }
 
 async function defineMutation(runner, typeName, mutationName, executor, description = '') {
@@ -399,8 +2598,18 @@ async function defineMutation(runner, typeName, mutationName, executor, descript
       .put('om_mutation_def', ['type_name', 'mutation_name'], ['description'])
   );
 
-  const typeMap = _getOrCreateTypeMap(_mutationRegistry, tn);
-  typeMap.set(mn, { executor, description: String(description || '') });
+  _setTypeBehavior(
+    _registryOwnerOf(runner),
+    'mutations',
+    tn,
+    mn,
+    {
+      executor,
+      description: String(description || ''),
+      bindingId: null,
+      ownerType: tn,
+    }
+  );
 }
 
 async function defineAction(runner, typeName, actionName, handler, description = '') {
@@ -425,31 +2634,45 @@ async function defineAction(runner, typeName, actionName, handler, description =
       .put('om_action_def', ['type_name', 'action_name'], ['description'])
   );
 
-  const typeMap = _getOrCreateTypeMap(_actionRegistry, tn);
-  typeMap.set(an, { handler, description: String(description || ''), ownerType: tn });
+  _setTypeBehavior(
+    _registryOwnerOf(runner),
+    'actions',
+    tn,
+    an,
+    {
+      handler,
+      description: String(description || ''),
+      bindingId: null,
+      ownerType: tn,
+    }
+  );
 }
 
 async function _resolveActionDef(runner, typeName, actionName) {
+  const scope = await _captureBehaviorResolutionScope(runner);
   const tn = String(typeName || '').trim();
   const an = String(actionName || '').trim();
   if (!tn) throw new Error('Type name is required');
   if (!an) throw new Error('Action name is required');
 
-  return _resolveByAncestors(
-    runner,
-    tn,
-    (t) => {
-      const map = _actionRegistry.get(t);
-      return map && map.get(an);
+  const chain = [tn, ...(await _getAncestorList(scope, tn))];
+  for (const ownerType of chain) {
+    if (await _actionDefinitionExists(scope, ownerType, an)) {
+      _ensureReadyIfBound(scope, 'action', ownerType, an, 'handler');
     }
-  );
+    const map = scope.registrySnapshot.actions.get(ownerType);
+    const hit = map && map.get(an);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 async function callParentAction(ctx, actionName, params) {
   if (!ctx || typeof ctx !== 'object') {
     throw new Error('Action context is required');
   }
-  const runner = ctx.runner;
+  const scope = ctx[_BEHAVIOR_SCOPE] || await _captureBehaviorResolutionScope(ctx.runner);
+  const runner = scope.runner;
   const entityId = String(ctx.entityId || '').trim();
   const entityTypeName = String(ctx.typeName || '').trim();
   const currentOwnerType = String(ctx.actionOwnerType || ctx.typeName || '').trim();
@@ -462,15 +2685,18 @@ async function callParentAction(ctx, actionName, params) {
   if (!currentOwnerType) throw new Error('Action context actionOwnerType is required');
   if (!an) throw new Error('Action name is required');
 
-  const parentType = await _getParentType(runner, currentOwnerType);
+  const parentType = await _getParentType(scope, currentOwnerType);
   if (!parentType) {
     throw new Error(`Action '${an}' has no parent action (type '${currentOwnerType}' has no parentType)`);
   }
 
-  const chain = [parentType, ...(await _getAncestorList(runner, parentType))];
+  const chain = [parentType, ...(await _getAncestorList(scope, parentType))];
   let parentDef = null;
   for (const t of chain) {
-    const map = _actionRegistry.get(t);
+    if (await _actionDefinitionExists(scope, t, an)) {
+      _ensureReadyIfBound(scope, 'action', t, an, 'handler');
+    }
+    const map = scope.registrySnapshot.actions.get(t);
     const hit = map && map.get(an);
     if (hit) {
       parentDef = hit;
@@ -483,6 +2709,7 @@ async function callParentAction(ctx, actionName, params) {
 
   const base = {
     runner,
+    runtime: ctx.runtime || _runtimeForScope(scope),
     entityId,
     typeName: entityTypeName,
     getProperty: ctx.getProperty,
@@ -496,6 +2723,7 @@ async function callParentAction(ctx, actionName, params) {
     params: params || {},
     actionOwnerType: parentDef.ownerType || parentType,
   };
+  Object.defineProperty(nextCtx, _BEHAVIOR_SCOPE, { value: scope });
   nextCtx.callParentAction = (name, p) => callParentAction(nextCtx, name, p);
 
   const mutations = await parentDef.handler(nextCtx, nextCtx.params);
@@ -504,18 +2732,6 @@ async function callParentAction(ctx, actionName, params) {
     throw new Error(`Action '${an}' must return an array of mutations`);
   }
   return list;
-}
-
-function _getOrCreateActionEntry(registry, typeName, actionName) {
-  const tn = String(typeName || '').trim();
-  const an = String(actionName || '').trim();
-  if (!tn) throw new Error('Type name is required');
-  if (!an) throw new Error('Action name is required');
-  const typeMap = _getOrCreateTypeMap(registry, tn);
-  if (!typeMap.has(an)) {
-    typeMap.set(an, { before: [], after: [] });
-  }
-  return typeMap.get(an);
 }
 
 function _normalizeInterceptorPhase(phase) {
@@ -538,8 +2754,33 @@ async function addInterceptor(runner, typeName, actionName, phase, handler, desc
 
   await _ensureBehaviorTypeExists(runner, tn);
 
-  const entry = _getOrCreateActionEntry(_interceptorRegistry, tn, an);
-  const seq = entry[ph].length;
+  const owner = _registryOwnerOf(runner);
+  const currentRegistry = owner.snapshot.interceptors;
+  const currentTypeMap = currentRegistry.get(tn);
+  const currentEntry = currentTypeMap && currentTypeMap.get(an);
+  const entry = currentEntry || { before: [], after: [] };
+  const persistedRows = await runRows(
+    runner,
+    `
+?[seq] :=
+  *om_interceptor_def{
+    type_name: $type_name,
+    action_name: $action_name,
+    phase: $phase,
+    seq
+  }
+    `.trim(),
+    { type_name: tn, action_name: an, phase: ph }
+  );
+  const persistedMax = persistedRows.reduce(
+    (max, [seq]) => Number.isInteger(seq) ? Math.max(max, seq) : max,
+    -1
+  );
+  const runtimeMax = entry[ph].reduce(
+    (max, candidate) => Math.max(max, candidate.seq),
+    -1
+  );
+  const seq = Math.max(persistedMax, runtimeMax) + 1;
 
   await runDslRows(
     runner,
@@ -554,35 +2795,69 @@ async function addInterceptor(runner, typeName, actionName, phase, handler, desc
       .put('om_interceptor_def', ['type_name', 'action_name', 'phase', 'seq'], ['description'])
   );
 
-  entry[ph].push({ handler, seq, description: String(description || ''), ownerType: tn });
+  const nextEntry = {
+    before: [...entry.before],
+    after: [...entry.after],
+  };
+  nextEntry[ph].push({
+    handler,
+    seq,
+    description: String(description || ''),
+    ownerType: tn,
+    bindingId: null,
+  });
+  _setTypeBehavior(owner, 'interceptors', tn, an, nextEntry);
 }
 
 async function _collectInterceptors(runner, entityTypeName, actionName) {
+  const scope = await _captureBehaviorResolutionScope(runner);
   const tn = String(entityTypeName || '').trim();
   const an = String(actionName || '').trim();
   if (!tn) throw new Error('Type name is required');
   if (!an) throw new Error('Action name is required');
 
   // Apply ancestor interceptors first.
-  const chain = [tn, ...(await _getAncestorList(runner, tn))].reverse();
+  const chain = [tn, ...(await _getAncestorList(scope, tn))].reverse();
+  const registry = scope.registrySnapshot.interceptors;
 
-  const before = [];
-  const after = [];
+  const collectPhase = async (phase) => {
+    const resolved = [];
+    for (const ownerType of chain) {
+      const typeMap = registry.get(ownerType);
+      const entry = typeMap && typeMap.get(an);
+      const registrations = entry ? [...(entry[phase] || [])].sort((left, right) => left.seq - right.seq) : [];
+      const metadataSequences = await _listInterceptorSequences(scope, ownerType, an, phase);
+      const metadataSet = new Set(metadataSequences);
+      for (const seq of metadataSequences) {
+        _ensureReadyIfBound(
+          scope,
+          'interceptor',
+          ownerType,
+          an,
+          'handler',
+          phase,
+          seq
+        );
+        const registration = registrations.find((candidate) => candidate.seq === seq);
+        if (registration) resolved.push(registration);
+      }
+      for (const registration of registrations) {
+        if (!metadataSet.has(registration.seq)) resolved.push(registration);
+      }
+    }
+    return resolved;
+  };
 
-  for (const t of chain) {
-    const typeMap = _interceptorRegistry.get(t);
-    if (!typeMap) continue;
-    const entry = typeMap.get(an);
-    if (!entry) continue;
-    for (const it of entry.before || []) before.push(it);
-    for (const it of entry.after || []) after.push(it);
-  }
-
-  return { before, after };
+  return {
+    before: await collectPhase('before'),
+    after: await collectPhase('after'),
+  };
 }
 
 async function executeAction(db, entityId, actionName, params) {
-  if (!db || typeof db.multiTransact !== 'function') {
+  const scope = await _captureBehaviorResolutionScope(db);
+  const rawDb = scope.runner;
+  if (typeof rawDb.multiTransact !== 'function') {
     throw new Error('executeAction requires a CozoDb instance with multiTransact(write)');
   }
 
@@ -591,17 +2866,19 @@ async function executeAction(db, entityId, actionName, params) {
   if (!id) throw new Error('entityId is required');
   if (!an) throw new Error('Action name is required');
 
-  const tx = db.multiTransact(true);
+  const tx = rawDb.multiTransact(true);
+  const txScope = _scopeWithRunner(scope, tx);
   try {
-    const typeName = await getEntityType(tx, id);
-    const interceptors = await _collectInterceptors(tx, typeName, an);
-    const def = await _resolveActionDef(tx, typeName, an);
+    const typeName = await getEntityType(txScope, id);
+    const def = await _resolveActionDef(txScope, typeName, an);
     if (!def) {
       throw new Error(`Action '${an}' not defined for type '${typeName}'`);
     }
+    const interceptors = await _collectInterceptors(txScope, typeName, an);
 
     const ctx = {
       runner: tx,
+      runtime: _runtimeForScope(txScope),
       entityId: id,
       typeName,
       actionOwnerType: def.ownerType || typeName,
@@ -611,15 +2888,17 @@ async function executeAction(db, entityId, actionName, params) {
         const opts = options && typeof options === 'object' ? options : {};
         const asOf = Object.prototype.hasOwnProperty.call(opts, 'asOf') ? String(opts.asOf || '').trim() : '';
         if (asOf) {
-          return getPropertyAsOf(tx, id, attrName, asOf);
+          return getPropertyAsOf(txScope, id, attrName, asOf);
         }
-        return getProperty(tx, id, attrName);
+        return getProperty(txScope, id, attrName);
       },
-      setProperty: async (attrName, value, options) => setProperty(tx, id, attrName, value, options),
-      linkEntities: async (relName, toId, props, options) => linkEntities(tx, id, relName, toId, props, options),
-      getNeighbors: async (relName, direction) => getNeighbors(tx, id, relName, direction),
+      setProperty: async (attrName, value, options) => setProperty(txScope, id, attrName, value, options),
+      linkEntities: async (relName, toId, props, options) =>
+        linkEntities(txScope, id, relName, toId, props, options),
+      getNeighbors: async (relName, direction) => getNeighbors(txScope, id, relName, direction),
     };
 
+    Object.defineProperty(ctx, _BEHAVIOR_SCOPE, { value: txScope });
     ctx.callParentAction = (name, p) => callParentAction(ctx, name, p);
 
     for (const it of interceptors.before) {
@@ -632,7 +2911,7 @@ async function executeAction(db, entityId, actionName, params) {
       throw new Error(`Action '${an}' must return an array of mutations`);
     }
 
-    await _executeMutationsInRunner(tx, id, list);
+    await _executeMutationsInRunner(txScope, id, list);
 
     for (const it of interceptors.after) {
       await it.handler(ctx);
@@ -648,56 +2927,72 @@ async function executeAction(db, entityId, actionName, params) {
 }
 
 async function _executeMutationsInRunner(runner, entityId, mutations) {
+  const scope = await _captureBehaviorResolutionScope(runner);
   const list = Array.isArray(mutations) ? mutations : [];
   const id = String(entityId || '').trim();
   if (!id) throw new Error('entityId is required');
 
-  const typeName = await getEntityType(runner, id);
+  const typeName = await getEntityType(scope, id);
 
   const ctx = {
-    runner,
+    runner: scope.runner,
+    runtime: _runtimeForScope(scope),
     entityId: id,
     typeName,
     getProperty: async (attrName, options) => {
       const opts = options && typeof options === 'object' ? options : {};
       const asOf = Object.prototype.hasOwnProperty.call(opts, 'asOf') ? String(opts.asOf || '').trim() : '';
       if (asOf) {
-        return getPropertyAsOf(runner, id, attrName, asOf);
+        return getPropertyAsOf(scope, id, attrName, asOf);
       }
-      return getProperty(runner, id, attrName);
+      return getProperty(scope, id, attrName);
     },
-    setProperty: async (attrName, value, options) => setProperty(runner, id, attrName, value, options),
-    linkEntities: async (relName, toId, props, options) => linkEntities(runner, id, relName, toId, props, options),
-    getNeighbors: async (relName, direction) => getNeighbors(runner, id, relName, direction),
+    setProperty: async (attrName, value, options) => setProperty(scope, id, attrName, value, options),
+    linkEntities: async (relName, toId, props, options) =>
+      linkEntities(scope, id, relName, toId, props, options),
+    getNeighbors: async (relName, direction) => getNeighbors(scope, id, relName, direction),
   };
+  Object.defineProperty(ctx, _BEHAVIOR_SCOPE, { value: scope });
 
+  const resolvedMutations = [];
   for (const item of list) {
     const mutation = item && typeof item === 'object' ? String(item.mutation || '').trim() : '';
     const paramsObj = item && typeof item === 'object' ? (item.params || {}) : {};
     if (!mutation) throw new Error('Mutation item missing mutation name');
 
-    const resolved = await _resolveByAncestors(
-      runner,
-      typeName,
-      (t) => {
-        const map = _mutationRegistry.get(t);
-        return map && map.get(mutation);
+    const chain = [typeName, ...(await _getAncestorList(scope, typeName))];
+    let resolved = null;
+    for (const ownerType of chain) {
+      if (await _mutationDefinitionExists(scope, ownerType, mutation)) {
+        _ensureReadyIfBound(scope, 'mutation', ownerType, mutation, 'executor');
       }
-    );
+      const map = scope.registrySnapshot.mutations.get(ownerType);
+      const hit = map && map.get(mutation);
+      if (hit) {
+        resolved = hit;
+        break;
+      }
+    }
     if (!resolved) {
       throw new Error(`Mutation '${mutation}' not defined for type '${typeName}'`);
     }
-    await resolved.executor(ctx, paramsObj);
+    resolvedMutations.push({ executor: resolved.executor, params: paramsObj });
+  }
+
+  for (const resolved of resolvedMutations) {
+    await resolved.executor(ctx, resolved.params);
   }
 }
 
 async function executeMutations(db, entityId, mutations) {
-  if (!db || typeof db.multiTransact !== 'function') {
+  const scope = await _captureBehaviorResolutionScope(db);
+  const rawDb = scope.runner;
+  if (typeof rawDb.multiTransact !== 'function') {
     throw new Error('executeMutations requires a CozoDb instance with multiTransact(write)');
   }
-  const tx = db.multiTransact(true);
+  const tx = rawDb.multiTransact(true);
   try {
-    await _executeMutationsInRunner(tx, entityId, mutations);
+    await _executeMutationsInRunner(_scopeWithRunner(scope, tx), entityId, mutations);
     tx.commit();
   } catch (error) {
     try {
@@ -733,6 +3028,14 @@ async function initSchema(runner) {
   await _runDslCreateIgnoreConflict(
     runner,
     query().create('om_computed_def', ['type_name', 'attr_name'], ['description'])
+  );
+  await _runDslCreateIgnoreConflict(
+    runner,
+    query().create(
+      'om_behavior_binding',
+      ['behavior_kind', 'owner_type', 'behavior_name', 'callback_slot', 'phase', 'seq'],
+      ['binding_id']
+    )
   );
 
   // P3/WAVE-P3-01 (T3.1.2): permission policy metadata.
@@ -1074,7 +3377,7 @@ function _evaluateAbacOp(op, leftValue, rightValue) {
 
 async function _getOutgoingNeighborsForPerm(runner, fromId, relName, asOf) {
   if (asOf) {
-    const n = await getNeighborsAsOf(runner, fromId, relName, asOf);
+    const n = await _getNeighborsAtNormalizedAsOf(runner, fromId, relName, asOf);
     return Array.isArray(n.outgoing) ? n.outgoing : [];
   }
   const n = await getNeighbors(runner, fromId, relName, 'outgoing');
@@ -1114,6 +3417,34 @@ async function _findWitnessForRelPath(runner, subjectId, resourceId, relPath, as
   }
 
   return frontier.has(resourceId) ? frontier.get(resourceId) : null;
+}
+
+function _isPermissionReference(ref, allowLiteral) {
+  const value = String(ref || '').trim();
+  if (!value) return false;
+  if (value === 'subject.type' || value === 'resource.type') return true;
+  if (value === 'subject.id' || value === 'action' || value === 'resource.id' || value === 'resource.field') return false;
+  if (value.startsWith('subject.')) return value.length > 'subject.'.length;
+  if (value.startsWith('resource.')) return value.length > 'resource.'.length;
+  if (value.startsWith('field.')) return value.length > 'field.'.length;
+  return allowLiteral;
+}
+
+function _describePermissionAbacShape(leftRef, op, rightRef) {
+  const normalizedOp = String(op || '').trim();
+  if (!['=', '==', '!=', '>', '>=', '<', '<=', 'hide'].includes(normalizedOp)) {
+    return { valid: false, error: `Unsupported ABAC op '${normalizedOp}'` };
+  }
+  if (!_isPermissionReference(leftRef, false)
+      || !_isPermissionReference(rightRef, true)
+      || String(rightRef || '').trim().startsWith('field.')) {
+    return { valid: false, error: 'malformed_reference' };
+  }
+  const isField = String(leftRef || '').trim().startsWith('field.');
+  if ((normalizedOp === 'hide') !== isField) {
+    return { valid: false, error: 'malformed_reference' };
+  }
+  return { valid: true, isHide: normalizedOp === 'hide' };
 }
 
 async function checkAccess(runner, input) {
@@ -1227,7 +3558,7 @@ async function checkAccess(runner, input) {
     if (propCache.has(key)) return propCache.get(key);
     const canonicalAttr = await resolveAttr(runner, entityTypeName, attrName);
     const value = asOf
-      ? await getPropertyAsOf(runner, entityId, canonicalAttr, asOf)
+      ? await _getPropertyAtNormalizedAsOf(runner, entityId, canonicalAttr, asOf)
       : await getProperty(runner, entityId, canonicalAttr);
     propCache.set(key, value);
     return value;
@@ -1302,7 +3633,8 @@ async function checkAccess(runner, input) {
     const parsedPaths = [];
     for (const rawPath of paths) {
       const rels = _parsePermPathRule(rawPath);
-      if (!rels.length) continue;
+      // `[]` is the one valid zero-hop path: it witnesses only subject == resource.
+      if (!rels.length && String(rawPath).trim() !== '[]') continue;
       parsedPaths.push({
         raw: rawPath,
         rels,
@@ -1330,12 +3662,20 @@ async function checkAccess(runner, input) {
 
     const abacRules = abacByPolicy.get(pol.policyId) || [];
     let abacOk = true;
+    const hiddenFields = [];
     for (const rule of abacRules) {
       const leftRef = rule.left_ref;
       const op = rule.op;
       const rightRef = rule.right_ref;
+      const shape = _describePermissionAbacShape(leftRef, op, rightRef);
 
-      if (String(leftRef).startsWith('field.') && String(op).trim() === 'hide') {
+      if (!shape.valid) {
+        abacOk = false;
+        evalEntry.abac.rules.push({ leftRef, op, rightRef, result: false, error: shape.error });
+        continue;
+      }
+
+      if (shape.isHide) {
         const field = String(leftRef).slice('field.'.length).trim();
         const value = await resolveRef(rightRef);
         const truthy = !!value;
@@ -1349,7 +3689,7 @@ async function checkAccess(runner, input) {
           result: truthy,
         });
         if (truthy && field) {
-          fieldVisibility[field] = 'hidden';
+          hiddenFields.push(field);
         }
         continue;
       }
@@ -1378,6 +3718,11 @@ async function checkAccess(runner, input) {
 
     evalEntry.matched = true;
     explanation.evaluatedPolicies.push(evalEntry);
+    if (pol.effect === 'allow') {
+      for (const field of hiddenFields) {
+        fieldVisibility[field] = 'hidden';
+      }
+    }
     matchedPolicies.push({
       policyId: pol.policyId,
       effect: pol.effect,
@@ -1525,6 +3870,123 @@ async function _preflightAttributeValueTypeChange(runner, canonicalTypeName, can
   }
 }
 
+function _compareBehaviorSnapshotRows(left, right, keyColumns, numericColumns = []) {
+  const numeric = new Set(numericColumns);
+  for (const column of keyColumns) {
+    const compared = numeric.has(column)
+      ? Number(left[column]) - Number(right[column])
+      : _ordinalCompare(left[column], right[column]);
+    if (compared) return compared;
+  }
+  return 0;
+}
+
+function _sortBehaviorSnapshotRows(rows, keyColumns, numericColumns) {
+  return [...rows].sort(
+    (left, right) => _compareBehaviorSnapshotRows(
+      left,
+      right,
+      keyColumns,
+      numericColumns
+    )
+  );
+}
+
+async function _readBehaviorSnapshotParts(runner) {
+  const readOptional = async (builder) => runDslRows(runner, builder).catch((e) => {
+    if (_isStoredRelationMissingError(e)) return [];
+    throw e;
+  });
+
+  const constraints = await readOptional(
+    query()
+      .select(['type_name', 'constraint_name', 'constraint_type', 'message'])
+      .fromStored('om_constraint_def', {
+        type_name: dsl.var('type_name'),
+        constraint_name: dsl.var('constraint_name'),
+        constraint_type: dsl.var('constraint_type'),
+        message: dsl.var('message'),
+      })
+  );
+  const computed = await readOptional(
+    query()
+      .select(['type_name', 'attr_name', 'description'])
+      .fromStored('om_computed_def', {
+        type_name: dsl.var('type_name'),
+        attr_name: dsl.var('attr_name'),
+        description: dsl.var('description'),
+      })
+  );
+  const actions = await readOptional(
+    query()
+      .select(['type_name', 'action_name', 'description'])
+      .fromStored('om_action_def', {
+        type_name: dsl.var('type_name'),
+        action_name: dsl.var('action_name'),
+        description: dsl.var('description'),
+      })
+  );
+  const mutations = await readOptional(
+    query()
+      .select(['type_name', 'mutation_name', 'description'])
+      .fromStored('om_mutation_def', {
+        type_name: dsl.var('type_name'),
+        mutation_name: dsl.var('mutation_name'),
+        description: dsl.var('description'),
+      })
+  );
+  const interceptors = await readOptional(
+    query()
+      .select(['type_name', 'action_name', 'phase', 'seq', 'description'])
+      .fromStored('om_interceptor_def', {
+        type_name: dsl.var('type_name'),
+        action_name: dsl.var('action_name'),
+        phase: dsl.var('phase'),
+        seq: dsl.var('seq'),
+        description: dsl.var('description'),
+      })
+  );
+  const bindings = await readOptional(
+    query()
+      .select([
+        'behavior_kind',
+        'owner_type',
+        'behavior_name',
+        'callback_slot',
+        'phase',
+        'seq',
+        'binding_id',
+      ])
+      .fromStored('om_behavior_binding', {
+        behavior_kind: dsl.var('behavior_kind'),
+        owner_type: dsl.var('owner_type'),
+        behavior_name: dsl.var('behavior_name'),
+        callback_slot: dsl.var('callback_slot'),
+        phase: dsl.var('phase'),
+        seq: dsl.var('seq'),
+        binding_id: dsl.var('binding_id'),
+      })
+  );
+
+  return {
+    formatVersion: 1,
+    om_constraint_def: _sortBehaviorSnapshotRows(constraints, [0, 1]),
+    om_computed_def: _sortBehaviorSnapshotRows(computed, [0, 1]),
+    om_action_def: _sortBehaviorSnapshotRows(actions, [0, 1]),
+    om_mutation_def: _sortBehaviorSnapshotRows(mutations, [0, 1]),
+    om_interceptor_def: _sortBehaviorSnapshotRows(
+      interceptors,
+      [0, 1, 2, 3],
+      [3]
+    ),
+    om_behavior_binding: _sortBehaviorSnapshotRows(
+      bindings,
+      [0, 1, 2, 3, 4, 5],
+      [5]
+    ),
+  };
+}
+
 async function _readSchemaSnapshotParts(runner) {
   const types = await runDslRows(
     runner,
@@ -1646,6 +4108,8 @@ async function _readSchemaSnapshotParts(runner) {
     throw e;
   });
 
+  const behavior = await _readBehaviorSnapshotParts(runner);
+
   return {
     types,
     mixins,
@@ -1656,6 +4120,7 @@ async function _readSchemaSnapshotParts(runner) {
     aliasRels,
     aliasAttrs,
     existentialRules,
+    behavior,
   };
 }
 
@@ -1825,6 +4290,7 @@ function _composeSchemaSnapshot(version, createdAt, label, description, parts, p
     version,
     createdAt,
     schema,
+    behavior: parts.behavior,
 
     // Convenience sections expected by existing tests.
     types: parts.types,
@@ -1921,6 +4387,357 @@ function _rowsToObjects(rows, cols) {
     });
 }
 
+const _BEHAVIOR_DIFF_RELATIONS = Object.freeze([
+  Object.freeze({
+    name: 'om_constraint_def',
+    columns: Object.freeze(['type_name', 'constraint_name', 'constraint_type', 'message']),
+    keyColumns: Object.freeze(['type_name', 'constraint_name']),
+    numericKeyColumns: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: 'om_computed_def',
+    columns: Object.freeze(['type_name', 'attr_name', 'description']),
+    keyColumns: Object.freeze(['type_name', 'attr_name']),
+    numericKeyColumns: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: 'om_action_def',
+    columns: Object.freeze(['type_name', 'action_name', 'description']),
+    keyColumns: Object.freeze(['type_name', 'action_name']),
+    numericKeyColumns: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: 'om_mutation_def',
+    columns: Object.freeze(['type_name', 'mutation_name', 'description']),
+    keyColumns: Object.freeze(['type_name', 'mutation_name']),
+    numericKeyColumns: Object.freeze([]),
+  }),
+  Object.freeze({
+    name: 'om_interceptor_def',
+    columns: Object.freeze(['type_name', 'action_name', 'phase', 'seq', 'description']),
+    keyColumns: Object.freeze(['type_name', 'action_name', 'phase', 'seq']),
+    numericKeyColumns: Object.freeze(['seq']),
+  }),
+  Object.freeze({
+    name: 'om_behavior_binding',
+    columns: Object.freeze([
+      'behavior_kind',
+      'owner_type',
+      'behavior_name',
+      'callback_slot',
+      'phase',
+      'seq',
+      'binding_id',
+    ]),
+    keyColumns: Object.freeze([
+      'behavior_kind',
+      'owner_type',
+      'behavior_name',
+      'callback_slot',
+      'phase',
+      'seq',
+    ]),
+    numericKeyColumns: Object.freeze(['seq']),
+  }),
+]);
+
+const _BEHAVIOR_STORED_RELATION_SCHEMAS = Object.freeze({
+  om_constraint_def: Object.freeze({
+    schemaText: 'type_name, constraint_name => constraint_type, message',
+  }),
+  om_computed_def: Object.freeze({
+    schemaText: 'type_name, attr_name => description',
+  }),
+  om_action_def: Object.freeze({
+    schemaText: 'type_name, action_name => description',
+  }),
+  om_mutation_def: Object.freeze({
+    schemaText: 'type_name, mutation_name => description',
+  }),
+  om_interceptor_def: Object.freeze({
+    schemaText: 'type_name, action_name, phase, seq => description',
+  }),
+  om_behavior_binding: Object.freeze({
+    schemaText:
+      'behavior_kind, owner_type, behavior_name, callback_slot, phase, seq => binding_id',
+  }),
+});
+
+function _behaviorDiffRowObject(row, columns) {
+  const value = {};
+  for (let i = 0; i < columns.length; i++) value[columns[i]] = row[i];
+  return value;
+}
+
+function _behaviorDiffKeyObject(row, relation) {
+  const key = {};
+  for (const column of relation.keyColumns) {
+    key[column] = row[relation.columns.indexOf(column)];
+  }
+  return key;
+}
+
+function _behaviorDiffKeyIdentity(row, relation) {
+  return JSON.stringify(
+    relation.keyColumns.map((column) => row[relation.columns.indexOf(column)])
+  );
+}
+
+function _compareBehaviorDiffRows(left, right, relation) {
+  const numericColumns = new Set(relation.numericKeyColumns);
+  for (const column of relation.keyColumns) {
+    const index = relation.columns.indexOf(column);
+    const compared = numericColumns.has(column)
+      ? Number(left[index]) - Number(right[index])
+      : _ordinalCompare(left[index], right[index]);
+    if (compared) return compared;
+  }
+  return 0;
+}
+
+function _validateBehaviorDiffSide(section, side) {
+  const diagnostics = [];
+  const rowsByRelation = new Map();
+
+  if (!section || typeof section !== 'object' || Array.isArray(section)) {
+    diagnostics.push({
+      code: 'OMSV1004',
+      path: '$.behavior',
+      message: `Invalid ${side} behavior snapshot section: expected an object.`,
+      side,
+      expectedFormatVersion: 1,
+      actualFormatVersion: null,
+    });
+    return { diagnostics, rowsByRelation };
+  }
+
+  if (section.formatVersion !== 1) {
+    diagnostics.push({
+      code: 'OMSV1004',
+      path: '$.behavior.formatVersion',
+      message:
+        `Unsupported formatVersion in ${side} behavior snapshot: `
+        + `expected 1, received ${String(section.formatVersion)}.`,
+      side,
+      expectedFormatVersion: 1,
+      actualFormatVersion: section.formatVersion,
+    });
+  }
+
+  for (const relation of _BEHAVIOR_DIFF_RELATIONS) {
+    const relationRows = section[relation.name];
+    if (!Array.isArray(relationRows)) {
+      diagnostics.push({
+        code: 'OMSV1003',
+        path: `$.behavior.${relation.name}`,
+        message:
+          `Invalid relation shape in ${side} behavior snapshot relation ${relation.name}: `
+          + 'expected an array.',
+        side,
+        relation: relation.name,
+        expectedColumns: relation.columns.length,
+        actualColumns: null,
+      });
+      continue;
+    }
+
+    const validRows = [];
+    const seenKeys = new Set();
+    for (let index = 0; index < relationRows.length; index++) {
+      const row = relationRows[index];
+      if (!Array.isArray(row) || row.length !== relation.columns.length) {
+        const actualColumns = Array.isArray(row) ? row.length : null;
+        diagnostics.push({
+          code: 'OMSV1003',
+          path: `$.behavior.${relation.name}[${index}]`,
+          message:
+            `Invalid row shape in ${side} behavior snapshot relation ${relation.name}: `
+            + `expected ${relation.columns.length} columns, received `
+            + `${actualColumns == null ? 'a non-array value' : actualColumns}.`,
+          side,
+          relation: relation.name,
+          expectedColumns: relation.columns.length,
+          actualColumns,
+        });
+        continue;
+      }
+
+      const identity = _behaviorDiffKeyIdentity(row, relation);
+      if (seenKeys.has(identity)) {
+        diagnostics.push({
+          code: 'OMSV1002',
+          path: `$.behavior.${relation.name}[${index}]`,
+          message:
+            `Duplicate key in ${side} behavior snapshot relation ${relation.name}.`,
+          side,
+          relation: relation.name,
+          key: _behaviorDiffKeyObject(row, relation),
+        });
+        continue;
+      }
+
+      seenKeys.add(identity);
+      validRows.push(row);
+    }
+    rowsByRelation.set(relation.name, validRows);
+  }
+
+  return { diagnostics, rowsByRelation };
+}
+
+function _diffBehaviorRelation(fromRows, toRows, relation) {
+  const fromByKey = new Map(
+    fromRows.map((row) => [_behaviorDiffKeyIdentity(row, relation), row])
+  );
+  const toByKey = new Map(
+    toRows.map((row) => [_behaviorDiffKeyIdentity(row, relation), row])
+  );
+  const allRowsByKey = new Map([...fromByKey, ...toByKey]);
+  const sortedKeys = [...allRowsByKey.entries()]
+    .sort((left, right) => _compareBehaviorDiffRows(left[1], right[1], relation))
+    .map(([key]) => key);
+
+  const added = [];
+  const removed = [];
+  const updated = [];
+
+  for (const keyIdentity of sortedKeys) {
+    const fromRow = fromByKey.get(keyIdentity);
+    const toRow = toByKey.get(keyIdentity);
+    if (!fromRow && toRow) {
+      added.push(_behaviorDiffRowObject(toRow, relation.columns));
+      continue;
+    }
+    if (fromRow && !toRow) {
+      removed.push(_behaviorDiffRowObject(fromRow, relation.columns));
+      continue;
+    }
+    if (!fromRow || !toRow) continue;
+
+    if (JSON.stringify(fromRow) !== JSON.stringify(toRow)) {
+      updated.push({
+        key: _behaviorDiffKeyObject(toRow, relation),
+        from: _behaviorDiffRowObject(fromRow, relation.columns),
+        to: _behaviorDiffRowObject(toRow, relation.columns),
+      });
+    }
+  }
+
+  return { added, removed, updated };
+}
+
+function _diffBehaviorSnapshots(fromSnapshot, toSnapshot) {
+  const fromPresent = Object.prototype.hasOwnProperty.call(fromSnapshot, 'behavior');
+  const toPresent = Object.prototype.hasOwnProperty.call(toSnapshot, 'behavior');
+  const result = {
+    fromPresence: fromPresent ? 'present' : 'missing',
+    toPresence: toPresent ? 'present' : 'missing',
+    comparable: false,
+    diagnostics: [],
+    relations: {},
+  };
+
+  if (!fromPresent || !toPresent) {
+    if (!fromPresent) {
+      result.diagnostics.push({
+        code: 'OMSV1001',
+        path: '$.behavior',
+        message: 'Cannot compare behavior schema: from snapshot is missing the behavior section.',
+      });
+    }
+    if (!toPresent) {
+      result.diagnostics.push({
+        code: 'OMSV1001',
+        path: '$.behavior',
+        message: 'Cannot compare behavior schema: to snapshot is missing the behavior section.',
+      });
+    }
+    return result;
+  }
+
+  const from = _validateBehaviorDiffSide(fromSnapshot.behavior, 'from');
+  const to = _validateBehaviorDiffSide(toSnapshot.behavior, 'to');
+  result.diagnostics.push(...from.diagnostics, ...to.diagnostics);
+  if (result.diagnostics.length) return result;
+
+  result.comparable = true;
+  for (const relation of _BEHAVIOR_DIFF_RELATIONS) {
+    result.relations[relation.name] = _diffBehaviorRelation(
+      from.rowsByRelation.get(relation.name),
+      to.rowsByRelation.get(relation.name),
+      relation
+    );
+  }
+  return result;
+}
+
+function _emptyBehaviorSnapshotSection() {
+  const behavior = { formatVersion: 1 };
+  for (const relation of _BEHAVIOR_DIFF_RELATIONS) {
+    behavior[relation.name] = [];
+  }
+  return behavior;
+}
+
+function _legacyBehaviorMissingDiagnostic() {
+  return {
+    code: 'OMSV1001',
+    path: '$.behavior',
+    message:
+      'Target schema snapshot is missing the behavior section; historical behavior facts are unknown.',
+    allowedPolicies: ['preserve', 'clear'],
+  };
+}
+
+function _normalizeLegacyBehaviorPolicy(options) {
+  if (!options || !Object.prototype.hasOwnProperty.call(options, 'legacyBehaviorPolicy')) {
+    return null;
+  }
+  const policy = options.legacyBehaviorPolicy;
+  if (policy == null || policy === '') return null;
+  if (policy === 'preserve' || policy === 'clear') return policy;
+  throw new Error("legacyBehaviorPolicy must be either 'preserve' or 'clear'");
+}
+
+function _behaviorSnapshotSectionRows(section, side = 'target') {
+  const validation = _validateBehaviorDiffSide(section, side);
+  if (validation.diagnostics.length) {
+    const first = validation.diagnostics[0];
+    throw new Error(first.message || 'Invalid behavior snapshot section');
+  }
+
+  const behavior = { formatVersion: 1 };
+  for (const relation of _BEHAVIOR_DIFF_RELATIONS) {
+    behavior[relation.name] = _sortBehaviorSnapshotRows(
+      validation.rowsByRelation.get(relation.name) || [],
+      relation.keyColumns.map((column) => relation.columns.indexOf(column)),
+      relation.numericKeyColumns.map((column) => relation.columns.indexOf(column))
+    );
+  }
+  return behavior;
+}
+
+function _snapshotWithEffectiveBehavior(snapshot, behavior) {
+  const effective = JSON.parse(JSON.stringify(snapshot));
+  effective.behavior = behavior;
+  return effective;
+}
+
+async function _replaceBehaviorSnapshotRows(runner, behavior) {
+  const section = _behaviorSnapshotSectionRows(behavior, 'target');
+  for (const relation of _BEHAVIOR_DIFF_RELATIONS) {
+    const schema = _BEHAVIOR_STORED_RELATION_SCHEMAS[relation.name];
+    await _replaceStoredRelation(
+      runner,
+      relation.name,
+      relation.columns,
+      schema.schemaText,
+      section[relation.name]
+    );
+  }
+  return section;
+}
+
 async function readSchemaSnapshot(runner, version) {
   const v = Number(version);
   if (!Number.isFinite(v) || v <= 0) throw new Error('version must be a positive number');
@@ -1978,13 +4795,14 @@ async function writeSchemaSnapshot(runner, version, options) {
   const parts = await _readSchemaSnapshotParts(runner);
   const perm = await _readPermSnapshotParts(runner);
   const snapshot = _composeSchemaSnapshot(v, now, label, description, parts, perm);
+  const snapshotJson = JSON.stringify(snapshot);
 
   await runDslRows(
     runner,
     query()
       .input({
         version: param('version', v),
-        snapshot_json: param('snapshot_json', snapshot),
+        snapshot_json: param('snapshot_json', snapshotJson),
       })
       .put('om_schema_snapshot', ['version'], ['snapshot_json'])
   ).catch((e) => {
@@ -2067,6 +4885,7 @@ function _diffSchemaSnapshots(fromSnapshot, toSnapshot) {
         ['type_name', 'alias_attr']
       ),
     },
+    behavior: _diffBehaviorSnapshots(fromSnapshot, toSnapshot),
   };
 
   if (fromPerm || toPerm) {
@@ -2204,12 +5023,13 @@ async function applySchemaMigration(runner, spec) {
         fromParts,
         fromPerm
       );
+      const fromSnapshotJsonText = JSON.stringify(fromSnapshotJson);
       await runDslRows(
         txRunner,
         query()
           .input({
             version: param('version', fromVersion),
-            snapshot_json: param('snapshot_json', fromSnapshotJson),
+            snapshot_json: param('snapshot_json', fromSnapshotJsonText),
           })
           .put('om_schema_snapshot', ['version'], ['snapshot_json'])
       );
@@ -2363,7 +5183,8 @@ async function applySchemaMigration(runner, spec) {
       parts,
       perm
     );
-    const checksum = _computeSchemaChecksum(snapshotJson);
+    const snapshotJsonText = JSON.stringify(snapshotJson);
+    const checksum = _computeSchemaChecksum(snapshotJsonText);
 
     // Ensure schema version row exists for toVersion.
     const existingRows = await runDslRows(
@@ -2401,7 +5222,7 @@ async function applySchemaMigration(runner, spec) {
       query()
         .input({
           version: param('version', toVersion),
-          snapshot_json: param('snapshot_json', snapshotJson),
+          snapshot_json: param('snapshot_json', snapshotJsonText),
         })
         .put('om_schema_snapshot', ['version'], ['snapshot_json'])
     );
@@ -2496,12 +5317,13 @@ function _formatRollbackDiagnosticsSummary(diagnostics) {
   return parts.join(' | ') + suffix;
 }
 
-async function rollbackSchema(runner, targetVersion, options) {
+async function _rollbackSchemaInsideBehaviorGate(runner, targetVersion, options, cacheRunner) {
   const tv = Number(targetVersion);
   if (!Number.isFinite(tv) || tv <= 0) throw new Error('targetVersion must be a positive number');
 
   const opts = options && typeof options === 'object' ? options : {};
   const strict = opts.strict !== false;
+  const legacyBehaviorPolicy = _normalizeLegacyBehaviorPolicy(opts);
 
   // Read current state outside the transaction for stable return fields.
   const state0 = await getSchemaState(runner);
@@ -2510,16 +5332,50 @@ async function rollbackSchema(runner, targetVersion, options) {
   if (fromVersion === tv) {
     // Still invalidate alias caches so callers see any out-of-band alias changes.
     try {
-      _aliasCacheByRunner.delete(runner);
+      _aliasCacheByRunner.delete(cacheRunner || runner);
     } catch (_) {
     }
-    return { ok: true, strict, targetVersion: tv, fromVersion, diagnostics: [] };
+    return {
+      ok: true,
+      strict,
+      targetVersion: tv,
+      fromVersion,
+      diagnostics: [],
+      compatibilityDiagnostics: [],
+      behaviorPolicyApplied: null,
+    };
+  }
+
+  const snapshot = await readSchemaSnapshot(runner, tv);
+  if (!snapshot) {
+    throw new Error(`Missing schema snapshot for version=${tv}; cannot rollback`);
+  }
+
+  const behaviorPresent = Object.prototype.hasOwnProperty.call(snapshot, 'behavior');
+  const compatibilityDiagnostics = behaviorPresent ? [] : [_legacyBehaviorMissingDiagnostic()];
+  if (!behaviorPresent && !legacyBehaviorPolicy) {
+    return {
+      ok: false,
+      strict,
+      targetVersion: tv,
+      fromVersion,
+      diagnostics: [],
+      compatibilityDiagnostics,
+      behaviorPolicyApplied: null,
+    };
   }
 
   const result = await _withWriteTxIfPossible(runner, async (txRunner) => {
-    const snapshot = await readSchemaSnapshot(txRunner, tv);
-    if (!snapshot) {
-      throw new Error(`Missing schema snapshot for version=${tv}; cannot rollback`);
+    let behaviorPolicyApplied = 'snapshot';
+    let effectiveBehavior = null;
+    if (behaviorPresent) {
+      effectiveBehavior = _behaviorSnapshotSectionRows(snapshot.behavior, 'target');
+    } else if (legacyBehaviorPolicy === 'preserve') {
+      behaviorPolicyApplied = 'preserve';
+      effectiveBehavior = await _readBehaviorSnapshotParts(txRunner);
+    } else if (legacyBehaviorPolicy === 'clear') {
+      behaviorPolicyApplied = 'clear';
+      effectiveBehavior = _emptyBehaviorSnapshotSection();
     }
 
     // Restore schema definitions from snapshot.
@@ -2609,12 +5465,17 @@ async function rollbackSchema(runner, targetVersion, options) {
       await tryReplacePerm('om_perm_path_rule', ['policy_id', 'path'], 'policy_id, path', pathRules);
     }
 
+    if (behaviorPresent) {
+      effectiveBehavior = await _replaceBehaviorSnapshotRows(txRunner, snapshot.behavior);
+    } else if (legacyBehaviorPolicy === 'clear') {
+      effectiveBehavior = await _replaceBehaviorSnapshotRows(txRunner, effectiveBehavior);
+    }
+
     // Invalidate alias caches in the transaction runner before validating.
     try {
       _aliasCacheByRunner.delete(txRunner);
     } catch (_) {
     }
-
     // Validate entities against the restored schema.
     const diagnostics = [];
     const entityRows = await runDslRows(
@@ -2634,12 +5495,7 @@ async function rollbackSchema(runner, targetVersion, options) {
       if (!id) continue;
       const errors = [];
       const canonicalTypeName = await resolveType(txRunner, storedTypeName);
-      const typeExists = await _typeExists(txRunner, canonicalTypeName);
-      if (!typeExists) {
-        errors.push(`Unknown type '${canonicalTypeName}'`);
-      }
-
-      const v = await validateEntity(txRunner, id);
+      const v = await _validateEntityShapeOnly(txRunner, id);
       if (v && Array.isArray(v.errors)) {
         for (const msg of v.errors) errors.push(String(msg));
       }
@@ -2658,7 +5514,11 @@ async function rollbackSchema(runner, targetVersion, options) {
     }
 
     // Update schema state to target version + checksum.
-    const checksum = _computeSchemaChecksum(snapshot);
+    const checksum = _computeSchemaChecksum(
+      behaviorPresent
+        ? snapshot
+        : _snapshotWithEffectiveBehavior(snapshot, effectiveBehavior)
+    );
     await runDslRows(
       txRunner,
       query()
@@ -2670,16 +5530,31 @@ async function rollbackSchema(runner, targetVersion, options) {
         .put('om_schema_state', ['id'], ['current_version', 'current_checksum'])
     );
 
-    return { ok: true, strict, targetVersion: tv, fromVersion, diagnostics };
+    return {
+      ok: true,
+      strict,
+      targetVersion: tv,
+      fromVersion,
+      diagnostics,
+      compatibilityDiagnostics,
+      behaviorPolicyApplied,
+    };
   });
 
   // Invalidate alias caches for the original runner so subsequent reads resolve fresh.
   try {
-    _aliasCacheByRunner.delete(runner);
+    _aliasCacheByRunner.delete(cacheRunner || runner);
   } catch (_) {
   }
 
   return result;
+}
+
+async function rollbackSchema(runner, targetVersion, options) {
+  return _withBehaviorGate(runner, async () => {
+    const scope = _captureResolutionScope(runner);
+    return _rollbackSchemaInsideBehaviorGate(scope, targetVersion, options, runner);
+  });
 }
 
 // P1/WAVE-P1-02: Alias resolution helpers (stored relations: om_alias_type/rel/attr)
@@ -3851,6 +6726,7 @@ async function setProperty(runner, entityId, attrName, value, options) {
 }
 
 async function getProperty(runner, entityId, attrName) {
+  runner = await _captureBehaviorResolutionScope(runner);
   const id = String(entityId || '').trim();
   const anRaw = String(attrName || '').trim();
   if (!id || !anRaw) return undefined;
@@ -3869,39 +6745,36 @@ async function getProperty(runner, entityId, attrName) {
     { entity_id: id, attr_name: canonicalAttrName }
   );
 
-  if (primaryRows.length) {
-    return primaryRows[0][0];
-  }
+  let storedValue = primaryRows.length ? primaryRows[0][0] : undefined;
 
-  const aliases = await _listAttrAliasesForCanonical(runner, typeName, canonicalAttrName);
-  for (const aliasName of aliases) {
-    const rows = await runRows(
-      runner,
-      `
+  if (storedValue === undefined) {
+    const aliases = await _listAttrAliasesForCanonical(runner, typeName, canonicalAttrName);
+    for (const aliasName of aliases) {
+      const rows = await runRows(
+        runner,
+        `
 ?[value] :=
   *om_property{ entity_id: $entity_id, attr_name: $attr_name, value @ "NOW" }
 :limit 1
       `.trim(),
-      { entity_id: id, attr_name: aliasName }
-    );
-    if (rows.length) {
-      return rows[0][0];
+        { entity_id: id, attr_name: aliasName }
+      );
+      if (rows.length) {
+        storedValue = rows[0][0];
+        break;
+      }
     }
   }
 
-  // Fallback: computed properties are resolved lazily and are not stored.
-  // If there is a computed definition for this type (or ancestors), invoke it.
-  const def = await _resolveComputedDef(runner, typeName, canonicalAttrName).catch(() => null);
-  const defRaw = !def && anRaw && anRaw !== canonicalAttrName
-    ? await _resolveComputedDef(runner, typeName, anRaw).catch(() => null)
-    : null;
-  const chosen = def || defRaw;
-  if (!chosen || typeof chosen.computeFn !== 'function') {
+  const chosen = await _resolveComputedCallback(runner, typeName, canonicalAttrName);
+  if (storedValue !== undefined) return storedValue;
+  if (!chosen) {
     return undefined;
   }
 
   const ctx = {
-    runner,
+    runner: runner.runner,
+    runtime: _runtimeForScope(runner),
     entityId: id,
     typeName,
     getProperty: async (name) => getProperty(runner, id, name),
@@ -3995,12 +6868,18 @@ function _normalizeAsOfTimestamp(value, fieldName) {
 }
 
 async function getPropertyAsOf(runner, entityId, attrName, timestamp) {
+  runner = await _captureBehaviorResolutionScope(runner);
   const id = String(entityId || '').trim();
   const an = String(attrName || '').trim();
   if (!id) throw new Error('entityId is required');
   if (!an) throw new Error('attrName is required');
   const asOf = _normalizeAsOfTimestamp(timestamp, 'timestamp');
 
+  return _getPropertyAtNormalizedAsOf(runner, id, an, asOf);
+}
+
+async function _getPropertyAtNormalizedAsOf(runner, id, an, asOf) {
+  runner = await _captureBehaviorResolutionScope(runner);
   const typeName = await getEntityType(runner, id);
   await _preloadAttrAliasesForType(runner, typeName);
   const canonicalAttrName = await _resolveAttrForCanonicalType(runner, typeName, an);
@@ -4014,42 +6893,40 @@ async function getPropertyAsOf(runner, entityId, attrName, timestamp) {
     `.trim(),
     { entity_id: id, attr_name: canonicalAttrName, as_of: asOf }
   );
-  if (rows.length) {
-    return rows[0][0];
-  }
+  let storedValue = rows.length ? rows[0][0] : undefined;
 
-  const aliases = await _listAttrAliasesForCanonical(runner, typeName, canonicalAttrName);
-  for (const aliasName of aliases) {
-    const hit = await runRows(
-      runner,
-      `
+  if (storedValue === undefined) {
+    const aliases = await _listAttrAliasesForCanonical(runner, typeName, canonicalAttrName);
+    for (const aliasName of aliases) {
+      const hit = await runRows(
+        runner,
+        `
 ?[value] :=
   *om_property{ entity_id: $entity_id, attr_name: $attr_name, value @ $as_of }
 :limit 1
       `.trim(),
-      { entity_id: id, attr_name: aliasName, as_of: asOf }
-    );
-    if (hit.length) {
-      return hit[0][0];
+        { entity_id: id, attr_name: aliasName, as_of: asOf }
+      );
+      if (hit.length) {
+        storedValue = hit[0][0];
+        break;
+      }
     }
   }
 
-  // Fallback: computed properties are resolved lazily and are not stored.
-  const def = await _resolveComputedDef(runner, typeName, canonicalAttrName).catch(() => null);
-  const defRaw = !def && an && an !== canonicalAttrName
-    ? await _resolveComputedDef(runner, typeName, an).catch(() => null)
-    : null;
-  const chosen = def || defRaw;
-  if (!chosen || typeof chosen.computeFn !== 'function') {
+  const chosen = await _resolveComputedCallback(runner, typeName, canonicalAttrName);
+  if (storedValue !== undefined) return storedValue;
+  if (!chosen) {
     return undefined;
   }
 
   const ctx = {
-    runner,
+    runner: runner.runner,
+    runtime: _runtimeForScope(runner),
     entityId: id,
     typeName,
     asOf,
-    getProperty: async (name) => getPropertyAsOf(runner, id, name, asOf),
+    getProperty: async (name) => _getPropertyAtNormalizedAsOf(runner, id, name, asOf),
     // NOTE: edges are not yet as-of aware until getNeighborsAsOf lands (T2.4).
     getNeighbors: async (relName, direction) => getNeighbors(runner, id, relName, direction),
   };
@@ -4238,9 +7115,13 @@ async function validateRequiredProperties(runner, entityId) {
   return missing;
 }
 
-async function validateEntity(runner, entityId) {
+async function _validateEntityShapeOnly(runner, entityId) {
   const errors = [];
   const typeName = await getEntityType(runner, entityId);
+  const exists = await _typeExists(runner, typeName);
+  if (!exists) {
+    errors.push(`Unknown type '${typeName}'`);
+  }
   const definitions = await getAttributeDefinitions(runner, typeName);
   const rawProperties = await getAllProperties(runner, entityId);
   const properties = await _canonicalizeStoredPropertiesForType(runner, typeName, rawProperties);
@@ -4268,6 +7149,16 @@ async function validateEntity(runner, entityId) {
   return { valid: errors.length === 0, errors };
 }
 
+async function validateEntity(runner, entityId) {
+  const shapeResult = await _validateEntityShapeOnly(runner, entityId);
+  const errors = [...shapeResult.errors];
+
+  const constraintResult = await validateConstraints(runner, entityId);
+  errors.push(...constraintResult.errors);
+
+  return { valid: errors.length === 0, errors };
+}
+
 async function finalizeEntity(runner, entityId) {
   const result = await validateEntity(runner, entityId);
   if (!result.valid) {
@@ -4276,6 +7167,7 @@ async function finalizeEntity(runner, entityId) {
 }
 
 async function getEntityView(runner, entityId) {
+  runner = await _captureBehaviorResolutionScope(runner);
   const entityRows = await runDslRows(
     runner,
     query()
@@ -4297,17 +7189,18 @@ async function getEntityView(runner, entityId) {
   const rawProperties = await getAllProperties(runner, entityId);
   const properties = await _canonicalizeStoredPropertiesForType(runner, typeName, rawProperties);
 
-  // Append computed properties (lazy, not stored)
-  const computed = await _getComputedMapForType(runner, typeName);
-  for (const [attrName] of computed.entries()) {
+  const computed = await _listEffectiveComputedDefinitions(runner, typeName);
+  for (const { attrName } of computed) {
     const canonicalAttrName = await _resolveAttrForCanonicalType(runner, typeName, attrName);
-    if (canonicalAttrName in properties) continue;
     try {
+      await _resolveComputedCallback(runner, typeName, canonicalAttrName);
+      if (canonicalAttrName in properties) continue;
       const v = await getProperty(runner, entityId, canonicalAttrName);
       if (v !== undefined) {
         properties[canonicalAttrName] = v;
       }
-    } catch (_) {
+    } catch (error) {
+      if (error instanceof BehaviorUnresolvedError) throw error;
       // Ignore computation failures in view assembly (caller can request explicit evaluation later)
     }
   }
@@ -4323,6 +7216,7 @@ async function getEntityView(runner, entityId) {
 }
 
 async function getEntityViewAsOf(runner, entityId, timestamp) {
+  runner = await _captureBehaviorResolutionScope(runner);
   const id = String(entityId || '').trim();
   if (!id) throw new Error('entityId is required');
   const asOf = _normalizeAsOfTimestamp(timestamp, 'timestamp');
@@ -4357,17 +7251,18 @@ async function getEntityViewAsOf(runner, entityId, timestamp) {
   const rawProperties = Object.fromEntries(propRows.map(([name, value]) => [name, value]));
   const properties = await _canonicalizeStoredPropertiesForType(runner, typeName, rawProperties);
 
-  // Append computed properties (lazy, not stored) evaluated against asOf context.
-  const computed = await _getComputedMapForType(runner, typeName);
-  for (const [attrName] of computed.entries()) {
+  const computed = await _listEffectiveComputedDefinitions(runner, typeName);
+  for (const { attrName } of computed) {
     const canonicalAttrName = await _resolveAttrForCanonicalType(runner, typeName, attrName);
-    if (canonicalAttrName in properties) continue;
     try {
+      await _resolveComputedCallback(runner, typeName, canonicalAttrName);
+      if (canonicalAttrName in properties) continue;
       const v = await getPropertyAsOf(runner, id, canonicalAttrName, asOf);
       if (v !== undefined) {
         properties[canonicalAttrName] = v;
       }
-    } catch (_) {
+    } catch (error) {
+      if (error instanceof BehaviorUnresolvedError) throw error;
     }
   }
 
@@ -4515,6 +7410,11 @@ async function getNeighborsAsOf(runner, entityId, relName, timestamp) {
   const id = String(entityId || '').trim();
   if (!id) throw new Error('entityId is required');
   const asOf = _normalizeAsOfTimestamp(timestamp, 'timestamp');
+
+  return _getNeighborsAtNormalizedAsOf(runner, id, relName, asOf);
+}
+
+async function _getNeighborsAtNormalizedAsOf(runner, id, relName, asOf) {
 
   const rnInput = relName != null ? String(relName).trim() : '';
   const hasRelName = !!rnInput;
@@ -5179,7 +8079,9 @@ async function riskHotspot(runner, input = {}) {
 }
 
 async function ingestBatch(db, batch, options = {}) {
-  if (!db || typeof db.multiTransact !== 'function') {
+  const scope = _captureResolutionScope(db);
+  const rawDb = scope.runner;
+  if (typeof rawDb.multiTransact !== 'function') {
     throw new Error('ingestBatch requires a CozoDb instance with multiTransact(write)');
   }
 
@@ -5187,26 +8089,27 @@ async function ingestBatch(db, batch, options = {}) {
   const properties = Array.isArray(batch && batch.properties) ? batch.properties : [];
   const edges = Array.isArray(batch && batch.edges) ? batch.edges : [];
   const touchedEntityIds = new Set();
-  const tx = db.multiTransact(true);
+  const tx = rawDb.multiTransact(true);
+  const txScope = _scopeWithRunner(scope, tx);
 
   try {
     for (const entity of entities) {
-      await createEntity(tx, entity.id, entity.typeName, entity.label);
+      await createEntity(txScope, entity.id, entity.typeName, entity.label);
       touchedEntityIds.add(entity.id);
     }
 
     for (const property of properties) {
-      await setProperty(tx, property.entityId, property.attrName, property.value);
+      await setProperty(txScope, property.entityId, property.attrName, property.value);
       touchedEntityIds.add(property.entityId);
     }
 
     for (const edge of edges) {
-      await linkEntities(tx, edge.fromId, edge.relName, edge.toId, edge.props || {});
+      await linkEntities(txScope, edge.fromId, edge.relName, edge.toId, edge.props || {});
     }
 
     if (options.validateRequired !== false) {
       for (const entityId of touchedEntityIds) {
-        await finalizeEntity(tx, entityId);
+        await finalizeEntity(txScope, entityId);
       }
     }
 
@@ -5642,8 +8545,22 @@ async function listExistentialRules(runner) {
 }
 
 module.exports = {
+  createOmRuntime,
+  BehaviorUnresolvedError,
+  BehaviorImportError,
+  registerConstraint,
+  registerValidator,
+  registerComputed,
+  registerAction,
+  registerMutation,
+  registerInterceptor,
   initSchema,
   createSchema,
+  getBehaviorCatalog,
+  encodeBehaviorManifestJson,
+  decodeBehaviorManifestJson,
+  exportBehaviorManifestJson,
+  importBehaviorManifestJson,
   seedPermissionMetadata,
   checkAccess,
   getSchemaState,

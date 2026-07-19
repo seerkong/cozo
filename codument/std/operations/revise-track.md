@@ -72,7 +72,7 @@
 - `behavior_deltas/**/*.xml`
 - `track.xml`
 - `analysis/**`（findings / knowledge）
-- `decisions.md`（与 `decisions/`）
+- `decisions.xnl`（与 legacy `decisions/`；旧 track 兼容 `decisions.md`）
 
 **据 intent 更新最小必要文件**——保 id 稳定，尽量增量编辑（加 / 删一个 `Task`/`TaskGroup`、调一条 `<After>`、改一个 `<Hook>`），不做全局重排：
 
@@ -93,7 +93,7 @@
 更新 analysis/findings.md 或 analysis/knowledge.md（外部记忆）
 ---- /?context
 ---- #case ?decision when="待确认决策"
-追加到 decisions.md（不新建分散决策记录；durable 决策同时落 decisions/<slug>.md）
+追加到 decisions.xnl（不新建分散过程决策记录；durable 决策标 `durable_candidate = true`，旧 track 可兼容 legacy decisions/<slug>.md）
 ---- /?decision
 ---- #default ?multi
 以上多类同时变化时，逐一应用最小编辑

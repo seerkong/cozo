@@ -9,13 +9,13 @@ test('initSchema creates om_type with parent_type column (and stores parentType)
   try {
     await om.initSchema(db);
 
-    await om.defineType(db, 'Asset', 'Asset');
-    await om.defineType(db, 'ITAsset', 'IT Asset', { parentType: 'Asset' });
+    await om.defineType(db, 'Resource', 'Resource');
+    await om.defineType(db, 'ExecutableResource', 'Executable Resource', { parentType: 'Resource' });
 
     const built = dsl.query()
         .select(['parent_type'])
         .fromStored('om_type', {
-          name: dsl.param('name', 'ITAsset'),
+          name: dsl.param('name', 'ExecutableResource'),
           description: dsl.var('_desc'),
           parent_type: dsl.var('parent_type'),
         })
@@ -24,7 +24,7 @@ test('initSchema creates om_type with parent_type column (and stores parentType)
     const result = await db.run(built.script, built.params);
     expect(Array.isArray(result.rows)).toBe(true);
     expect(result.rows.length).toBe(1);
-    expect(result.rows[0][0]).toBe('Asset');
+    expect(result.rows[0][0]).toBe('Resource');
   } finally {
     db.close();
   }

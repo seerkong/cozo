@@ -43,7 +43,9 @@ internal static class OmConvert
 
     internal static OmValueType InferValueType(object? value)
     {
-        if (value is null) return OmValueType.Json;
+        // Match Bun's public inference contract: JavaScript null is unknown,
+        // while object-shaped values are Json.
+        if (value is null) return OmValueType.Unknown;
         if (value is string) return OmValueType.String;
         if (value is bool) return OmValueType.Bool;
         if (value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal) return OmValueType.Number;
@@ -54,6 +56,7 @@ internal static class OmConvert
                 JsonValueKind.String => OmValueType.String,
                 JsonValueKind.Number => OmValueType.Number,
                 JsonValueKind.True or JsonValueKind.False => OmValueType.Bool,
+                JsonValueKind.Null or JsonValueKind.Undefined => OmValueType.Unknown,
                 _ => OmValueType.Json,
             };
         }

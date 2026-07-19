@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<EvidenceModule id="ExampleCatalog.Evidence.Backend">
+  <EvidenceItems>
+    <Evidence id="backend:record-type" repository="backend" revision="fixture-revision" path="src/Record.java" symbol="example.Record" startLine="1" endLine="8" grade="contractual" resolver="fixture" confidence="1">
+      <Summary>Record repository mapping.</Summary>
+    </Evidence>
+    <Evidence id="backend:record-name-rule" repository="backend" revision="fixture-revision" path="src/RecordService.java" symbol="example.RecordService#create" startLine="4" endLine="7" grade="enforced" resolver="fixture" confidence="1" />
+    <Evidence id="backend:record-state-write" repository="backend" revision="fixture-revision" path="src/RecordService.java" symbol="example.RecordService#create" startLine="8" endLine="8" grade="enforced" resolver="fixture" confidence="1" />
+  </EvidenceItems>
+</EvidenceModule>

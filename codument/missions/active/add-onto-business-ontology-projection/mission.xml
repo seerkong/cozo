@@ -1,0 +1,106 @@
+<Mission id="add-onto-business-ontology-projection" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>将已索引的代码事实投影并持久化为独立的 onto_* 业务本体，再导出可审计的标准 XML；在后续阶段以源码语义、候选审核和受控提升补齐关系、规则与生命周期。</Goal>
+    <Description>业务本体与 DEPA 架构判断独立生成；首版只使用可复核的代码/源码 evidence，不实现 onto 与 depa 的互相标注。G6 引入语义候选和人工审核提升，不把代码结构或 LLM 输出直接当作业务真相。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>light</QuestionSeverity>
+    <Revision>18</Revision>
+    <CreatedAt>2026-07-17T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-18T18:20:00Z</UpdatedAt>
+  </Metadata>
+
+  <Ports scope="mission">
+    <MaterialBundle role="input" name="indexed-code-facts" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/" />
+    <MaterialBundle role="input" name="indexed-frontend-facts" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/" />
+    <MaterialBundle role="input" name="ontology-xml-dsl" domain="skill" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/skills/ontology-xml-dsl/" />
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/" />
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/" />
+    <MaterialBundle role="output" name="llm-wiki-implementation" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
+    <MaterialBundle role="output" name="business-ontology-export" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v0/ontology/" />
+    <MaterialBundle role="output" name="business-ontology-v1-export" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v1/ontology/" />
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/" />
+  </Ports>
+
+  <TaskSpace id="space_add-onto-business-ontology-projection" name="add-onto-business-ontology-projection" version="1" cdt:child-mode="dag">
+    <Description>建立独立业务本体投影、导出与真实项目验证的 mission DAG。</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="证据与合同收敛" status="DONE" order="0">
+        <Description>确认已有代码事实、XML DSL、当前 DEPA exporter 的边界，并形成下属 track 的可执行合同。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="盘点两个已索引数据库、源码证据能力与当前 exporter 的事实边界" status="DONE" order="0" />
+          <Task id="G1-T2" name="冻结 onto 元模型、候选/确认状态、evidence 纪律与 XML 兼容决策" status="DONE" order="1" />
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G2" name="业务本体存储" status="DONE" order="1">
+        <Description>新增由 LlmWiki 层拥有的 onto 持久化元模型及其可测试读写合同。</Description>
+        <SubNodes>
+          <Task id="G2-T1" name="创建并执行 onto 业务本体存储 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-onto-business-ontology-storage" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G3" name="业务语义投影" status="DONE" order="2">
+        <Description>从独立的代码事实与源码 evidence 形成候选和确认的业务本体，不依赖 depa 架构判断。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 onto 业务语义投影 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-onto-business-ontology-derivation" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G4" name="标准 XML 导出" status="DONE" order="3">
+        <Description>从 onto 事实导出中文业务本体 XML，并受控处理现有 DEPA-only export 的兼容问题。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 onto 业务本体 XML 导出 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-onto-business-ontology-xml-export" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G5" name="真实项目验证与交付" status="DONE" order="4">
+        <Description>使用两个既有索引数据库验证存储、投影与导出，并将业务本体制品生成到约定目录。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 onto 业务本体端到端验证 track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-onto-business-ontology-projection" />
+          </Task>
+          <Task id="G5-T2" name="审查导出抽样、记录语义边界和未来互相标注移交项" status="DONE" order="1" />
+        </SubNodes>
+      </TaskGroup>
+
+      <TaskGroup id="G6" name="业务语义理解与审核提升" status="ACTIVE" order="5">
+        <Description>从源码语义事实提出关系、规则与生命周期候选；经受控 LLM 辅助和显式 review 后才提升为可导出的业务本体。</Description>
+        <SubNodes>
+          <Task id="G6-T1" name="创建并执行业务语义理解与审核提升 track" status="ACTIVE" order="0">
+            <cdt:TrackLink state="bound" id="add-onto-semantic-business-understanding" />
+          </Task>
+          <Task id="G6-T2" name="创建并执行 Codex CLI 受控语义辅助 track" status="ACTIVE" order="1">
+            <cdt:TrackLink state="bound" id="add-codex-cli-ontology-semantic-assist" />
+          </Task>
+          <Task id="G6-T3" name="验证 v1 真实项目候选与人工审核提升门禁" status="NOT_STARTED" order="2" />
+          <Task id="G6-T4" name="执行 v2/v3 受控 Codex 语义实验并比较结果" status="ACTIVE" order="3">
+            <cdt:TrackLink state="bound" id="add-ontology-semantic-experiments-v2-v3" />
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+
+  <Schedule>
+    <Dag for="space_add-onto-business-ontology-projection">
+      <Node id="G2"><After ref="G1" /></Node>
+      <Node id="G3"><After ref="G2" /></Node>
+      <Node id="G4"><After ref="G3" /></Node>
+      <Node id="G5"><After ref="G4" /></Node>
+      <Node id="G6"><After ref="G5" /></Node>
+    </Dag>
+  </Schedule>
+
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block" />
+    </Hook>
+  </Hooks>
+</Mission>

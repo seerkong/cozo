@@ -1,16 +1,17 @@
 # codex-cli 双模式 eval 管线（cozo-wiki baseline vs native）
 
 harness 位置：/tmp/codex-eval/{run.py,score.py}
-任务集/模板（仓内只读）：/Users/kongweixian/infra-dev/cozodb/cozo/cozo-lib-dotnet-llm-wiki/eval/
+任务集/模板（仓内只读）：`cozo-lib-dotnet-llm-wiki/eval/`
 
 ## 前置：预索引（一次性，已完成 2026-07-06）
 
 用 Release apphost（免 dotnet run 编译开销）：
 
 ```bash
-BIN=/Users/kongweixian/infra-dev/cozodb/cozo/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/bin/Release/net10.0/cozo-wiki
-"$BIN" index --repo /Users/kongweixian/infra-dev/cozodb/cozo/cozo-lib-dotnet-llm-wiki
-"$BIN" index --repo /Users/kongweixian/infra-dev/cozodb/cozo/cozo-lib-dotnet/src
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+BIN="$REPO_ROOT/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/bin/Release/net10.0/cozo-wiki"
+"$BIN" index --repo "$REPO_ROOT/cozo-lib-dotnet-llm-wiki"
+"$BIN" index --repo "$REPO_ROOT/cozo-lib-dotnet/src"
 ```
 
 索引落各 workRoot 下 .cozo-wiki/cozo-wiki.db（已 gitignore）。若仓库源码有更新，重跑上面两条再跑 eval。

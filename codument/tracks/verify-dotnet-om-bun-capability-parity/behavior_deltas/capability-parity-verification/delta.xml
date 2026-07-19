@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="capability-parity-verification" version="1">
+  <upsert selector="behavior://capability-parity-verification/requirements/final-cross-runtime-audit">
+    <requirement id="final-cross-runtime-audit">
+      <statement>The project SHALL independently verify every G01-G14 capability against executable Bun and .NET evidence, preserving only explicit user-approved language and architecture differences.</statement>
+      <suite id="evidence-matrix" name="G01-G14 evidence matrix">
+        <case id="all-items-closed">
+          <given>the mission implementation tracks and frozen decisions D0-D5, D3a, and D3b</given>
+          <when>the final parity audit runs both runtimes and resolves every G01-G14 item</when>
+          <then>each item SHALL map to passing tests and implementation evidence or an explicit approved intentional difference</then>
+        </case>
+      </suite>
+      <suite id="runtime-gates" name="Runtime completion gates">
+        <case id="both-suites-pass">
+          <given>the final shared working-tree state</given>
+          <when>Bun and .NET OM verification commands execute</when>
+          <then>both full suites, focused parity fixtures, build, XML, and strict Codument validation SHALL pass</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

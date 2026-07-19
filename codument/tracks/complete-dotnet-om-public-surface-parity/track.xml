@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="complete-dotnet-om-public-surface-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>Close G13/G14 public OM API and registration guardrail parity.</Goal>
+    <Description>D0=A, D5=C typed facades and fail-before-effect validation.</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-17T16:50:00Z</CreatedAt>
+    <UpdatedAt>2026-07-17T17:00:07Z</UpdatedAt>
+    <GapRound>2</GapRound>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="bun-reference" domain="source" path="vfs://@/cozo-lib-bun/cozo-om.js"/>
+    <MaterialBundle role="output" name="om-core" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+  </Ports>
+  <TaskSpace id="space_complete-dotnet-om-public-surface-parity" name="complete-dotnet-om-public-surface-parity" version="1">
+    <Description>Implement public OM parity.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Characterize and contract" status="DONE" order="0">
+        <Description>Lock public API and registration effects.</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Add paired public-surface characterization" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>Characterize parent clear, facades and ghost-registration failures.</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">Tests expose current missing or unsafe public behavior.</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="Define typed public contracts" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>Define patches and typed options/results.</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.2-AC1" checked="true">Compatibility boundaries are explicit.</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Implement and verify" status="DONE" order="1">
+        <Description>Implement facades and guardrails, then verify both runtimes.</Description>
+        <SubNodes>
+          <Task id="T2.1" name="Implement core public facades and guardrails" ownerAccount="agent:impl" status="DONE" order="0" priority="P0">
+            <Description>Apply patches, facade APIs and atomic registration ordering.</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">Public APIs are discoverable and invalid registrations leave no effects.</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="Verify public surface parity" ownerAccount="agent:impl" status="DONE" order="1" priority="P0">
+            <Description>Run full and focused suites.</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.2-AC1" checked="true">Bun and C# observable cases pass.</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks/>
+</Track>

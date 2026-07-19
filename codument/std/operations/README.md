@@ -21,7 +21,7 @@
 | codument-impl-mission | `impl-mission.md` | 按 mission.xml DAG 执行 mission，支持控制论 actor loop 与受控重规划 |
 | codument-archive-mission | `archive-mission.md` | 归档 mission 到 `missions/archived/YYYY-MM-DD-<mission-id>/` |
 | codument-artifact-sync | `artifact-sync.md` | 按 output MaterialBundle 同步制品到目标 |
-| codument-docs-bootstrap | `docs-bootstrap.md` | 把现存项目总结进 docs/modeling 与 docs/impl |
+| codument-docs-bootstrap | `docs-bootstrap.md` | 把现存项目总结进 codument/modeling 与 codument/engineering |
 | codument-migrate | `migrate.md` | 迁移旧 plan.xml→track.xml、md specs→xml、旧 archive 布局 |
 
 CLI 辅助命令（非 skill body）：`codument init` 初始化工作区；`codument status` 显示项目状态；`codument modeling validate|lint` 管理 `codument/modeling/`；`codument engineering validate|lint` 管理 `codument/engineering/`。

@@ -1,0 +1,181 @@
+<Track id="extend-bun-om-behavior-schema-versioning" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>让 Bun OM 的五类 behavior definition 与 binding identity 完整参与 schema snapshot、diff、migration 和 atomic rollback。</Goal>
+    <Description>以串行 TDD 扩展 behavior-aware snapshot、deterministic keyed diff、migration snapshot、D8 legacy policy、runtime gate 与 readiness 重算。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <GapRound>2</GapRound>
+    <CreatedAt>2026-07-18T11:14:36Z</CreatedAt>
+    <UpdatedAt>2026-07-18T14:09:41Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="output" name="bun-om" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="behaviors" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_extend-bun-om-behavior-schema-versioning" name="extend-bun-om-behavior-schema-versioning" version="1" cdt:child-mode="sequential">
+    <Description>依次冻结 snapshot contract、keyed diff、migration snapshot、atomic rollback、runtime observation，并完成独立纠偏验证。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Behavior Snapshot Contract" status="DONE" order="0">
+        <Description>用测试冻结显式 V1 behavior section、六张关系、稳定顺序和 source/readiness 排除边界。</Description>
+        <cdt:Gate>
+          <cdt:Criterion>G12 behavior portability APIs 与现有 schema snapshot tests 可运行</cdt:Criterion>
+        </cdt:Gate>
+        <SubNodes>
+          <Task id="T1.1" name="RED：新增 behavior snapshot contract tests" status="DONE" order="0" priority="P0">
+            <Description>新增 focused fixtures，覆盖五类 definition、六种 slot、显式空 section、ordinal key order、Unicode 和不可执行字段缺席。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">测试在现有实现上因 behavior section 缺失而稳定失败</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="GREEN/REFACTOR：实现 snapshot reader、composer 与 public types" status="DONE" order="1" priority="P0">
+            <Description>读取六张持久关系，生成唯一 root behavior V1 section，并扩展 SchemaSnapshot TypeScript shape。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.2-AC1" checked="true">新 snapshot 总是显式包含 formatVersion=1 和六张关系</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC2" checked="true">所有 rows 按 relation key 稳定排序</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC3" checked="true">snapshot 不含 function、script source、runtime registration 或 readiness</cdt:Criterion>
+              <cdt:Criterion id="T1.2-AC4" checked="true">既有 snapshot tests 保持通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Deterministic Behavior Diff" status="DONE" order="1">
+        <Description>为六张关系增加 keyed diff，并诚实表达 legacy section 的不可比较状态。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="RED：新增 behavior diff matrix" status="DONE" order="0" priority="P0">
+            <Description>覆盖每张关系的 add/remove/update、binding identity update、乱序输入、重复 key 和 legacy/new 混合 diff。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">测试在现有实现上因 SchemaDiff.behavior 缺失而失败</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="GREEN/REFACTOR：实现 ordinal keyed diff" status="DONE" order="1" priority="P0">
+            <Description>按固定 relation/key schema 输出稳定 diff；legacy missing 返回 OMSV1001 而不是合成 empty。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.2-AC1" checked="true">两侧 present 时六张 relation 都有稳定 added/removed/updated</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC2" checked="true">metadata 与 binding_id 更新保留完整 key/from/to</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC3" checked="true">任一侧 missing 时 comparable=false 且无伪造 row diff</cdt:Criterion>
+              <cdt:Criterion id="T2.2-AC4" checked="true">不改变既有非 behavior diff section 的兼容排序</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="Migration Snapshot Coverage" status="DONE" order="2">
+        <Description>characterize 单一 composer 已传递接入的 migration snapshot，并补强事务时点、checksum 与失败原子性。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="CHARACTERIZE：新增 migration behavior snapshot tests" status="DONE" order="0" priority="P0">
+            <Description>覆盖来源 snapshot 缺失、目标 snapshot、空/非空 behavior、checksum 和 step failure；允许单一 composer 接入后的基线直接通过。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">测试证明 migration 来源与目标 snapshot 捕获各自事务时点的 behavior section</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="补强 migration checksum 与失败原子性" status="DONE" order="1" priority="P0">
+            <Description>在 characterization 暴露缺口时最小修复；否则确认 migration transaction 已复用 behavior-aware composer 且不回填 legacy snapshot。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.2-AC1" checked="true">新生成的来源与目标 snapshot 均显式记录各自 behavior Data</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC2" checked="true">target checksum 和 schema state 覆盖 behavior section</cdt:Criterion>
+              <cdt:Criterion id="T3.2-AC3" checked="true">migration 任一步失败时 snapshot、state、log 与 behavior facts均保持前态</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="Atomic Rollback 与 D8 Policy" status="DONE" order="3">
+        <Description>恢复显式 behavior section，并实现 legacy 默认拒绝、preserve/clear 和有效 checksum。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="RED：新增 rollback restore 与 legacy policy tests" status="DONE" order="0" priority="P0">
+            <Description>覆盖非空/显式空 restore、默认 OMSV1001 零副作用、preserve、clear 和 public result shape。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">现有 rollback 因不恢复 behavior 且不执行 D8 policy 而失败</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="GREEN/REFACTOR：实现 policy preflight 与事务恢复" status="DONE" order="1" priority="P0">
+            <Description>在一个 transaction 内恢复或策略化处理六张关系，扩展 options/result types，并更新 effective checksum。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">section-present 精确恢复 definition 与 binding；显式空精确清空</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">legacy omitted 返回 ok=false、OMSV1001 且无 write/cache/runtime effect</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC3" checked="true">preserve/clear 结果显式报告 policy，checksum 表示实际有效状态</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC4" checked="true">runtime registry 在所有 rollback policy 下均不被修改</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.3" name="RED：注入 relation、state 与 commit failure" status="DONE" order="2" priority="P0">
+            <Description>使用 wrapping transaction runner 在关键写入与 commit 点失败，冻结跨表零部分效果。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.3-AC1" checked="true">至少覆盖 behavior replace 中途失败、state write 失败和 commit 失败</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.4" name="GREEN/REFACTOR：收紧 rollback failure atomicity" status="DONE" order="3" priority="P0">
+            <Description>修复故障测试发现的事务、cache 或结果边界问题，不增加 runtime compensation。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.4-AC1" checked="true">所有故障路径保持 schema、behavior、state、cache observation 与 registry 前态</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P5" name="Runtime Gate 与 Readiness Reprojection" status="DONE" order="4">
+        <Description>把 rollback 纳入同一 runtime gate，验证 pre/post observation、in-flight scope 和多 runtime readiness。</Description>
+        <SubNodes>
+          <Task id="T5.1" name="RED：新增 rollback concurrency pair tests" status="DONE" order="0" priority="P0">
+            <Description>阻塞 rollback transaction，配对 catalog、execution scope、contended clear、import 和共享 DB 的第二 runtime。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T5.1-AC1" checked="true">现有 rollback 因绕过 behavior gate 而暴露并发 gap</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T5.2" name="GREEN/REFACTOR：串行化 rollback observation" status="DONE" order="1" priority="P0">
+            <Description>持有 runtime owner gate直至 transaction commit，释放后用现有 catalog processor 重算 readiness。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T5.2-AC1" checked="true">rollback 期间新 catalog/execution/clear/import 不观察 torn state</cdt:Criterion>
+              <cdt:Criterion id="T5.2-AC2" checked="true">in-flight immutable scope 按既有语义完成且无 callback deadlock</cdt:Criterion>
+              <cdt:Criterion id="T5.2-AC3" checked="true">rollback 不恢复 callback；readiness 按当前 runtime 分别重算</cdt:Criterion>
+              <cdt:Criterion id="T5.2-AC4" checked="true">legacy adapter 和显式 runtime 继续使用各自 owner gate</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+        </Hooks>
+      </TaskGroup>
+      <TaskGroup id="P6" name="回归验证与收口" status="DONE" order="5">
+        <Description>独立复跑 focused/schema/OM/full tests，审计持久边界、.NET scope 和 Codument 目标一致性。</Description>
+        <SubNodes>
+          <Task id="T6.1" name="运行 focused 与 Bun regression suites" status="DONE" order="0" priority="P0">
+            <Description>运行 behavior versioning focused tests、既有 snapshot/diff/migration/rollback/portability tests、OM tests和 Bun full suite。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T6.1-AC1" checked="true">focused behavior schema versioning tests 全部通过</cdt:Criterion>
+              <cdt:Criterion id="T6.1-AC2" checked="true">bun test __tests__/om-*.test.js 全部通过</cdt:Criterion>
+              <cdt:Criterion id="T6.1-AC3" checked="true">bun test 全部通过</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T6.2" name="执行静态与范围审计" status="DONE" order="1" priority="P0">
+            <Description>运行 node syntax check、targeted git diff check、strict validate，并确认无 callback/source/readiness persistence 与无 .NET 修改。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T6.2-AC1" checked="true">node -c cozo-om.js 与 targeted git diff --check 通过</cdt:Criterion>
+              <cdt:Criterion id="T6.2-AC2" checked="true">codument validate extend-bun-om-behavior-schema-versioning --strict 通过</cdt:Criterion>
+              <cdt:Criterion id="T6.2-AC3" checked="true">diff 只包含 Bun implementation/tests 与本 track，不包含 .NET 变更</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Parallel max-concurrent="1" spot-check="true"/>
+  </Schedule>
+  <Hooks/>
+</Track>

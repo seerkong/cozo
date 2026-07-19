@@ -7,7 +7,7 @@ namespace Cozo.DotNet.LlmWiki.SemanticParsing;
 /// </summary>
 public sealed class TreeSitterCliBackend : ISemanticParserBackend
 {
-    private static readonly string[] SupportedLanguages = ["csharp", "typescript", "javascript"];
+    private static readonly string[] SupportedLanguages = ["csharp", "typescript", "javascript", "java"];
 
     private readonly TreeSitterCliParser _parser;
 
@@ -71,6 +71,7 @@ public sealed class TreeSitterCliBackend : ISemanticParserBackend
             "csharp" => ".cs",
             "typescript" => ".ts",
             "javascript" => ".js",
+            "java" => ".java",
             _ => ".txt",
         };
     }

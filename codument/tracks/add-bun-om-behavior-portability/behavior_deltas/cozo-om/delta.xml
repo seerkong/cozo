@@ -1,0 +1,60 @@
+<behavior-patch capability="cozo-om" version="1">
+  <upsert selector="behavior://cozo-om/requirements/om-behavior-portability-v1">
+    <requirement id="om-behavior-portability-v1">
+      <statement>Bun OM SHALL implement the .NET V1 behavior catalog, canonical JSON manifest, callback binding identity and derived readiness contract without persisting executable callback source.</statement>
+      <suite id="wire-contract" name="Canonical V1 wire contract">
+        <case id="canonical-json">
+          <given>An equivalent behavior catalog in Bun and .NET</given>
+          <when>Each implementation encodes the V1 manifest</when>
+          <then>The UTF-8 bytes SHALL be identical, deterministic and free of executable source</then>
+        </case>
+        <case id="decode-diagnostics">
+          <given>A malformed or semantically invalid V1 manifest</given>
+          <when>Bun decodes it</when>
+          <then>Bun SHALL return the matching OMM diagnostic codes, paths and stable order</then>
+        </case>
+      </suite>
+      <suite id="readiness" name="Binding and readiness">
+        <case id="derived-readiness">
+          <given>A persisted callback binding identity and a runtime registry</given>
+          <when>The catalog is projected</when>
+          <then>Readiness SHALL be unbound, unresolved or ready solely from the persisted identity and exact runtime registration</then>
+        </case>
+        <case id="runtime-isolation">
+          <given>Two runtimes share one database and therefore the same binding facts</given>
+          <when>Only one runtime registers the exact callback</when>
+          <then>Only that runtime SHALL be ready and executable</then>
+        </case>
+      </suite>
+      <suite id="execution" name="Fail-closed execution">
+        <case id="all-callback-slots">
+          <given>A bound callback is absent or has a mismatched identity</given>
+          <when>Constraint, validator, computed, action, parent action, mutation or interceptor resolution reaches it</when>
+          <then>Execution SHALL fail with OMR1001 before any earlier pipeline callback or partial effect runs</then>
+        </case>
+        <case id="legacy-unbound">
+          <given>A native callback was defined without a binding identity</given>
+          <when>It is executed through an existing Bun API</when>
+          <then>It SHALL remain unbound and executable for compatibility</then>
+        </case>
+      </suite>
+      <suite id="import" name="Atomic import">
+        <case id="permissive-import">
+          <given>Valid metadata contains callbacks unavailable in the runtime</given>
+          <when>Imported without requireReady</when>
+          <then>Metadata and bindings SHALL commit, unresolved callbacks SHALL remain inactive, and execution SHALL fail closed</then>
+        </case>
+        <case id="strict-import">
+          <given>Any required callback is unavailable or incompatible</given>
+          <when>Imported with requireReady</when>
+          <then>The import SHALL be rejected without metadata, binding or registry effects</then>
+        </case>
+        <case id="publication-failure">
+          <given>Persistence commits but runtime registry publication fails</given>
+          <when>Import compensates</when>
+          <then>The previous persistent state SHALL be restored or an explicit incomplete-compensation error SHALL be returned</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

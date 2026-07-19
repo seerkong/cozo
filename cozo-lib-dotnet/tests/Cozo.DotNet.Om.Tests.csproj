@@ -9,5 +9,7 @@
     <ProjectReference Include="../Cozo.DotNet.csproj" />
     <ProjectReference Include="../packages/Datalog.Core/Cozo.DotNet.Datalog.Core.csproj" />
     <ProjectReference Include="../packages/Datalog.Cozo/Cozo.DotNet.Datalog.Cozo.csproj" />
+    <ProjectReference Include="../packages/Om.Portability.Yaml/Cozo.DotNet.Om.Portability.Yaml.csproj" />
+    <ProjectReference Include="../packages/Om.Scripting.Jint/Cozo.DotNet.Om.Scripting.Jint.csproj" />
   </ItemGroup>
 </Project>

@@ -124,6 +124,7 @@ describe('OM-026: chase loop — fixpoint, idempotency, cap (T3.2)', () => {
 
   test('check and apply on a db without initSchema are safe no-ops', async () => {
     const db = new CozoDb('mem', '', {});
+    expect(await om.listExistentialRules(db)).toEqual([]);
     expect(await om.checkExistentialRules(db)).toEqual([]);
     const result = await om.applyExistentialRules(db);
     expect(result.created).toEqual([]);

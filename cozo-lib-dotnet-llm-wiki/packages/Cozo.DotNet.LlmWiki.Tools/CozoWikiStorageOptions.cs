@@ -6,7 +6,10 @@ public sealed record CozoWikiStorageOptions(
     string GlobalDataDirectory,
     string WorkDataDirectory)
 {
-    public static CozoWikiStorageOptions From(IReadOnlyDictionary<string, string> options, string defaultWorkDirectory)
+    public static CozoWikiStorageOptions From(
+        IReadOnlyDictionary<string, string> options,
+        string defaultWorkDirectory,
+        bool createDirectories = true)
     {
         var engine = options.GetValueOrDefault("--engine", "sqlite");
         var dataFolderName = options.GetValueOrDefault("--data-folder-name", ".depa-wiki");
@@ -19,14 +22,17 @@ public sealed record CozoWikiStorageOptions(
         var workDir = FullPath(options.GetValueOrDefault("--work-dir", defaultWorkDirectory));
         var globalDataDir = Path.Combine(globalDir, dataFolderName);
         var workDataDir = Path.Combine(workDir, dataFolderName);
-        Directory.CreateDirectory(globalDataDir);
-        Directory.CreateDirectory(workDataDir);
+        if (createDirectories)
+        {
+            Directory.CreateDirectory(globalDataDir);
+            Directory.CreateDirectory(workDataDir);
+        }
 
         var dbPath = string.Equals(engine, "mem", StringComparison.Ordinal)
             ? ""
             : FullPath(options.GetValueOrDefault("--db", Path.Combine(workDataDir, "depa-wiki.db")));
 
-        if (!string.Equals(engine, "mem", StringComparison.Ordinal))
+        if (createDirectories && !string.Equals(engine, "mem", StringComparison.Ordinal))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(dbPath) ?? workDataDir);
         }

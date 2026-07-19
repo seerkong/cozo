@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/optional-script-runtime">
+    <requirement id="optional-script-runtime">
+      <statement>C# OM SHALL optionally resolve canonical behavior binding ids to bounded Jint callbacks outside Om.Core while preserving typed runtime, readiness and transaction semantics.</statement>
+      <suite id="binding" name="Manifest Binding">
+        <case id="all-callback-shapes"><given>A canonical catalog references scripts for every BehaviorCatalogCallbackSlot</given><when>The Jint provider builds callback bindings and RequireReady import runs</when><then>Every exact binding id SHALL map by ordinal equality to the slot's required BehaviorCallbackBindingSet delegate type and become ready</then></case>
+        <case id="missing-script"><given>A catalog binding id has no script definition</given><when>The provider builds bindings</when><then>The slot SHALL remain absent with a structured diagnostic and existing unresolved or RequireReady behavior SHALL apply</then></case>
+        <case id="incompatible-reuse"><given>One binding id is reused by incompatible callback shapes such as action handler and interceptor handler</given><when>The provider validates the catalog</when><then>It SHALL reject the conflict deterministically before import effects</then></case>
+        <case id="native-coexistence"><given>Native typed and script-generated callbacks are supplied together</given><when>The manifest is imported</when><then>Both SHALL retain exact binding identity without changing native callback semantics, and same-id merge conflicts SHALL be diagnostics before effects</then></case>
+      </suite>
+      <suite id="execution" name="Typed Script Execution">
+        <case id="context-capabilities"><given>A script uses an allowed property, neighbor, write, link or parent-action capability for its callback kind</given><when>The generated typed delegate executes</when><then>The call SHALL use the existing OM context and preserve cancellation and action transaction scope</then></case>
+        <case id="result-conversion"><given>A constraint, validator, computed or action script returns a value</given><when>The adapter converts it</when><then>Only the documented JSON-shaped typed result SHALL be accepted and raw CLR objects SHALL be rejected</then></case>
+        <case id="parent-action-composition"><given>An action script calls the allowlisted parent-action host method</given><when>The parent returns mutation specs</when><then>The host SHALL return those specs to the child script without auto-applying them, so only the child's returned mutation list is applied by the existing action pipeline</then></case>
+        <case id="transaction-rollback"><given>A script or async host call fails after earlier action/interceptor/mutation effects</given><when>The action aborts or cancellation fires</when><then>Existing C# transactional rollback semantics SHALL restore entity and relation state and no late host continuation SHALL publish effects</then></case>
+        <case id="fresh-engine"><given>Scripts mutate global JavaScript state or run concurrently</given><when>Separate callbacks execute</when><then>No mutable engine/global state SHALL leak between invocations</then></case>
+      </suite>
+      <suite id="sandbox" name="Isolation And Failure Mapping">
+        <case id="ambient-denial"><given>A script attempts CLR, filesystem, network, module-loader or unlisted host access</given><when>It executes</when><then>The capability SHALL be absent or denied without exposing raw runtime objects</then></case>
+        <case id="bounded-execution"><given>A script loops, recurses, allocates excessively or exceeds its statement budget</given><when>A configured limit is reached or unsupported by the pinned Jint version</when><then>Execution SHALL stop with a stable binding-aware limit diagnostic, or unsupported memory-limit configuration SHALL fail before execution</then></case>
+        <case id="cancellation"><given>The caller cancels before or during script or async host execution</given><when>The cancellation token fires</when><then>The callback SHALL terminate as cancellation and SHALL not publish later effects</then></case>
+        <case id="error-mapping"><given>Compilation, execution, host invocation or result conversion fails</given><when>The adapter reports the error</when><then>The stable code, binding id, slot and phase SHALL be present while full source and secrets remain absent</then></case>
+        <case id="package-isolation"><given>The optional package is referenced</given><when>Dependencies are inspected</when><then>Jint SHALL be pinned only in the adapter and Om.Core SHALL remain engine-free with no script serialization schema</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

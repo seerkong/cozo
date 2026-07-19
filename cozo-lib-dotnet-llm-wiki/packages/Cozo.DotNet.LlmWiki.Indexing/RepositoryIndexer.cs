@@ -72,7 +72,7 @@ public sealed class RepositoryIndexer
         RegexOptions.Compiled);
 
     private static readonly Regex ImportLine = new(
-        @"^\s*(?:using\s+([A-Za-z0-9_\.]+)\s*;|import\s+.*?from\s+['""]([^'""]+)['""]|import\s+['""]([^'""]+)['""])",
+        @"^\s*(?:using\s+([A-Za-z0-9_\.]+)\s*;|import\s+.*?from\s+['""]([^'""]+)['""]|import\s+['""]([^'""]+)['""]|import\s+(?:static\s+)?([A-Za-z0-9_\.\*]+)\s*;)",
         RegexOptions.Compiled);
 
     private static readonly Regex IdentifierToken = new(@"[A-Za-z_][A-Za-z0-9_]*", RegexOptions.Compiled);
@@ -84,7 +84,7 @@ public sealed class RepositoryIndexer
 
     private static readonly HashSet<string> DefaultExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".cs", ".fs", ".vb", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".md", ".mdx", ".json", ".xml", ".csproj", ".sln", ".slnx"
+        ".cs", ".fs", ".vb", ".java", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".md", ".mdx", ".json", ".xml", ".csproj", ".sln", ".slnx"
     };
 
     private static readonly HashSet<string> DefaultExcludeDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -101,7 +101,7 @@ public sealed class RepositoryIndexer
         ArgumentNullException.ThrowIfNull(request);
 
         var batch = await BuildBatchAsync(request, cancellationToken);
-        await om.InitCodeKnowledgeAsync(cancellationToken);
+        await om.InitCodeKnowledgeAsync(reindex: request.Reindex, cancellationToken);
 
         // add-llm-wiki-incremental-indexing track (design.md §1/§2/§4): auto mode goes
         // incremental when a ck_file hash baseline exists for this repository; otherwise (or on
@@ -278,11 +278,13 @@ public sealed class RepositoryIndexer
                 .Where(edge => writeSet.Contains(edge.FileId) || writeSet.Contains(edge.FromId) || writeSymbolIds.Contains(edge.FromId))
                 .ToArray(),
             DocBlocks: (batch.DocBlocks ?? []).Where(doc => writeSet.Contains(doc.FileId)).ToArray(),
+            Concepts: batch.Concepts,
             Diagnostics: (batch.Diagnostics ?? [])
                 .Where(diagnostic => writeSet.Contains(diagnostic.TargetId) || writeSymbolIds.Contains(diagnostic.TargetId))
                 .ToArray(),
             EntryPoints: (batch.EntryPoints ?? []).Where(entry => writeSymbolIds.Contains(entry.SymbolId)).ToArray(),
-            ExternalCalls: (batch.ExternalCalls ?? []).Where(call => writeSymbolIds.Contains(call.CallerId)).ToArray());
+            ExternalCalls: (batch.ExternalCalls ?? []).Where(call => writeSymbolIds.Contains(call.CallerId)).ToArray(),
+            SemanticClaims: (batch.SemanticClaims ?? []).Where(claim => writeSet.Contains(claim.FileId)).ToArray());
         await om.IndexCodeKnowledgeAsync(filtered, cancellationToken);
     }
 
@@ -521,12 +523,20 @@ public sealed class RepositoryIndexer
             ? RoslynMergeStep.Enhance(csharpSources, csharpFileIdByPath, symbols, edges, diagnostics, repoId, externalCalls: externalCallFacts)
             : RoslynMergeStep.RoslynMergeStats.Empty;
 
+        // spring-semantic-derivation track: role/transaction facts are framework semantics over
+        // Java syntax facts and source text. Entry point candidates remain gated by
+        // ExtractProcesses below; concepts/edges/diagnostics are graph facts and do not depend on
+        // the process extraction switch.
+        var springFacts = SpringSemanticDeriver.Derive(parsedFiles, symbols);
+        edges.AddRange(springFacts.Edges);
+        diagnostics.AddRange(springFacts.Diagnostics);
+
         // process-extraction track (design.md §1/§3): syntax-level entry-point candidates
         // (http_route / mcp_tool) are detectable only here, where the parsed call sites still
         // exist. Gated on the same switch as the extraction so ExtractProcesses=false leaves
         // ck_entry_point completely empty (behavior delta: pipeline-switch).
         IReadOnlyList<CodeEntryPointFact> entryPoints = request.ExtractProcesses
-            ? EntryPointCandidates.Detect(parsedFiles, symbols)
+            ? EntryPointCandidates.Detect(parsedFiles, symbols).Concat(springFacts.EntryPoints).ToArray()
             : [];
 
         LinkDocsToSymbols(symbols, docs, files, request, edges);
@@ -536,9 +546,11 @@ public sealed class RepositoryIndexer
             Symbols: symbols,
             Edges: edges,
             DocBlocks: docs,
+            Concepts: springFacts.Concepts,
             Diagnostics: diagnostics,
             EntryPoints: entryPoints,
-            ExternalCalls: externalCallFacts);
+            ExternalCalls: externalCallFacts,
+            SemanticClaims: springFacts.Claims);
         return new RepositoryBatchResult(repoId, commit, batch, skipped)
         {
             CallSites = callStats.CallSites,
@@ -622,6 +634,12 @@ public sealed class RepositoryIndexer
         // fully-broken parse: fall back to regex so behavior matches the pre-tree-sitter path.
         if (!parsed.Success || (parsed.Symbols.Count == 0 && parsed.Edges.Count == 0))
         {
+            if (language == "java" && parsed.Success && !parsed.HasErrors && backend.Name == "native")
+            {
+                parsedFiles.Add(new CallResolver.FileInput(fileId, relativePath, language, text, parsed));
+                return true;
+            }
+
             if (!parsed.Success || parsed.HasErrors)
             {
                 diagnostics.Add(FallbackDiagnostic(
@@ -1060,6 +1078,7 @@ public sealed class RepositoryIndexer
             ".cs" => "csharp",
             ".fs" => "fsharp",
             ".vb" => "vb",
+            ".java" => "java",
             ".ts" or ".tsx" => "typescript",
             ".js" or ".jsx" or ".mjs" or ".cjs" => "javascript",
             ".md" or ".mdx" => "markdown",

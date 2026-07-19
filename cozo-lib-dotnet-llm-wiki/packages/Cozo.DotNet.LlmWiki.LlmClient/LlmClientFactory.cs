@@ -2,7 +2,7 @@ namespace Cozo.DotNet.LlmWiki.LlmClient;
 
 /// <summary>
 /// Builds <see cref="ILlmClient"/> instances from configuration. Never throws (design §1.5):
-/// missing key/model or an unknown provider yields an unavailable client with a reason,
+/// missing provider prerequisites or an unknown provider yields an unavailable client with a reason,
 /// because degradation to the pure structure layer is the pipeline's normal path.
 /// </summary>
 public static class LlmClientFactory
@@ -18,10 +18,17 @@ public static class LlmClientFactory
     /// <summary>Builds a client from explicit configuration (CLI/tool parameters override env).</summary>
     public static ILlmClient Create(LlmClientConfig config, HttpMessageHandler? httpMessageHandler = null)
     {
+        if (LlmClientConfig.IsCodexCli(config.Provider))
+        {
+            return CodexCliLlmClient.TryCreate(config, out var client, out var unavailableReason)
+                ? client
+                : new NullLlmClient(unavailableReason);
+        }
+
         if (!LlmClientConfig.IsOpenAiCompatible(config.Provider) && !LlmClientConfig.IsAnthropic(config.Provider))
         {
             return new NullLlmClient(
-                $"unknown DEPA_WIKI_LLM_PROVIDER '{config.Provider}' (expected openai | anthropic)");
+                $"unknown DEPA_WIKI_LLM_PROVIDER '{config.Provider}' (expected openai | anthropic | codex-cli)");
         }
 
         if (string.IsNullOrWhiteSpace(config.ApiKey))

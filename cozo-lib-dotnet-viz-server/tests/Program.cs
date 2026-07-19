@@ -17,7 +17,7 @@ Assert(health?.RootElement.GetProperty("status").GetString() == "ok", "health sh
 
 using var demos = await http.GetFromJsonAsync<JsonDocument>("/api/demos");
 Assert(demos?.RootElement.GetProperty("demos").GetArrayLength() > 0, "demos should not be empty");
-var expectedDemoIds = new[] { "procurement", "hr", "crm", "it-asset", "approval-flow", "org-timeline" };
+var expectedDemoIds = new[] { "procurement", "hr", "crm", "resource-graph", "approval-flow", "org-timeline" };
 var demoElements = demos!.RootElement.GetProperty("demos").EnumerateArray().ToArray();
 var actualDemoIds = demoElements.Select(d => d.GetProperty("id").GetString()).Where(id => id is not null).ToHashSet(StringComparer.Ordinal);
 foreach (var demoId in expectedDemoIds)

@@ -1,0 +1,12 @@
+<behavior-patch capability="dotnet-llm-wiki" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki/requirements/business-ontology-xml-export">
+    <requirement id="business-ontology-xml-export">
+      <statement>系统 SHALL 将 `onto_*` 的 accepted/hypothesis 业务本体导出为符合 ontology-xml-dsl 的中文模块化 XML，并 SHALL 以显式 `business-ontology-xml` format 与原 DEPA `ontology-xml` 合同隔离。</statement>
+      <suite id="export-contract" name="导出合同">
+        <case id="generated-dsl"><given>有 evidence-gated 的 onto generation</given><when>导出 business-ontology-xml</when><then>产物 SHALL 通过 generated XML validator，且所有 hypothesis 直接引用 inferred evidence</then></case>
+        <case id="candidate-audit"><given>有 pending/rejected candidate</given><when>导出业务本体</when><then>candidate SHALL 进入审计副产物，且不得成为 XML Type、Relation、Rule 或 Lifecycle</then></case>
+        <case id="depa-compatibility"><given>原有 DEPA export format</given><when>新增业务本体 exporter</when><then>runtime-snapshot、ontology-xml 和 wiki SHALL 保持已有格式和语义</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

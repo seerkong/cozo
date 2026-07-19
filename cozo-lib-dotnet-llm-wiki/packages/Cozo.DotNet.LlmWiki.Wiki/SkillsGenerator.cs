@@ -53,13 +53,16 @@ internal sealed class SkillsGenerator
     /// <summary>Slugs of the generic workflow skills — reserved so a same-named context cannot collide.</summary>
     private static readonly string[] WorkflowSlugs = ["exploring", "impact", "depa"];
 
-    /// <summary>The shared 18-tool matrix as exposed by LlmWikiToolRunner (listed statically: the Wiki package must not depend on Tools).</summary>
+    /// <summary>The shared 26-tool matrix as exposed by LlmWikiToolRunner (listed statically: the Wiki package must not depend on Tools).</summary>
     private static readonly string[] ToolMatrix =
     [
         "index_repo", "build_wiki", "symbol_context", "impact_of_change", "docs_for_code",
         "explain_relation", "parser_status", "parse_file", "index_embeddings", "semantic_search",
         "overview_graph", "query_named", "trace", "check", "detect_changes",
         "depa_conformance", "fact_grade_map", "health_score",
+        "ontology_investigation_overview", "find_business_terms", "list_use_case_slices",
+        "get_use_case_slice", "find_semantic_patterns", "get_semantic_evidence", "inspect_ontology_subject",
+        "run_business_ontology_agent",
     ];
 
     /// <summary>Runs context discovery and writes the skill set into the target directory (sync semantics).</summary>
@@ -425,7 +428,7 @@ internal sealed class SkillsGenerator
 
     private static void AppendToolMatrix(StringBuilder builder)
     {
-        Line(builder, "## Tool matrix (18 tools)");
+        Line(builder, "## Tool matrix (26 tools)");
         Line(builder);
         Line(builder, string.Join(", ", ToolMatrix.Select(tool => $"`{tool}`")));
     }

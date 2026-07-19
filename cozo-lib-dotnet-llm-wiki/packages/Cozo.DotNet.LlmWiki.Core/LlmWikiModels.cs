@@ -57,7 +57,9 @@ public sealed record RepositoryIndexRequest(
     // the file-level incremental path when a prior index of the same repository exists (ck_file
     // hash baseline); "full" forces the legacy full rewrite. With no baseline auto falls back to
     // full — behavior identical to the pre-incremental indexer.
-    string IncrementalMode = "auto");
+    string IncrementalMode = "auto",
+    // CodeKnowledge schema data is recomputable. Explicit reindex permits its rebuild-style migration.
+    bool Reindex = false);
 
 public sealed record RepositoryIndexSummary(
     string RepositoryId,

@@ -1,3 +1,8 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
 namespace Cozo.DotNet.Om.CodeKnowledge;
 
 public sealed record CodeKnowledgeBatch(
@@ -19,7 +24,10 @@ public sealed record CodeKnowledgeBatch(
     // summaries written to ck_external_call. Facts with an empty Category are pre-classified
     // at write time against the built-in effect whitelist (fast path); depa_scan re-matches
     // with the merged built-in + user whitelist without touching these rows.
-    IReadOnlyList<CodeExternalCallFact>? ExternalCalls = null);
+    IReadOnlyList<CodeExternalCallFact>? ExternalCalls = null,
+    // add-onto-semantic-business-understanding T1.1: reproducible source observations.
+    // These rows are not business assertions and are file-scope-cleaned with other ck_* facts.
+    IReadOnlyList<CodeSemanticClaimFact>? SemanticClaims = null);
 
 public sealed record CodeRepositoryFact(string RepoId, string RootPath, string? Name = null, string? Commit = null);
 
@@ -75,6 +83,152 @@ public sealed record CodeExternalCallFact(
     string FirstFileId = "",
     int FirstLine = 0,
     string Resolver = "");
+
+/// <summary>
+/// A directly anchored source observation stored in ck_semantic_claim. PayloadJson is
+/// canonicalized by the write path; Kind is restricted to <see cref="CodeSemanticClaimKinds"/>.
+/// </summary>
+public sealed record CodeSemanticClaimFact(
+    string ClaimId,
+    string SubjectId,
+    string Kind,
+    string PayloadJson,
+    string FileId,
+    int StartLine,
+    int EndLine,
+    double Confidence,
+    string Resolver,
+    string Evidence);
+
+/// <summary>Closed initial vocabulary for ck_semantic_claim.kind.</summary>
+public static class CodeSemanticClaimKinds
+{
+    public const string TypedReference = "typed_reference";
+    public const string ValidationConstraint = "validation_constraint";
+    public const string PersistenceConstraint = "persistence_constraint";
+    public const string StateField = "state_field";
+    public const string StateValue = "state_value";
+    public const string StateAssignment = "state_assignment";
+    public const string TransactionScope = "transaction_scope";
+    public const string RouteBinding = "route_binding";
+    public const string BusinessGuard = "business_guard";
+
+    public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        TypedReference,
+        ValidationConstraint,
+        PersistenceConstraint,
+        StateField,
+        StateValue,
+        StateAssignment,
+        TransactionScope,
+        RouteBinding,
+        BusinessGuard,
+    };
+
+    public static bool IsSupported(string kind) => All.Contains(kind);
+}
+
+/// <summary>Canonical JSON and deterministic identity contract shared by claim producers.</summary>
+public static class CodeSemanticClaimIdentity
+{
+    public static string Create(
+        string sourceIdentity,
+        string kind,
+        string payloadJson,
+        int startLine,
+        int endLine)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceIdentity);
+        if (!CodeSemanticClaimKinds.IsSupported(kind))
+        {
+            throw new ArgumentException($"Unsupported semantic claim kind '{kind}'.", nameof(kind));
+        }
+
+        if (startLine < 1 || endLine < startLine)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(startLine),
+                "Semantic claim identity requires a one-based non-empty source line range.");
+        }
+
+        var canonicalPayload = CanonicalizePayload(payloadJson);
+        var material = string.Join(
+            '\u001f',
+            CodeKnowledgeSchema.SchemaVersion.ToString(CultureInfo.InvariantCulture),
+            sourceIdentity,
+            kind,
+            canonicalPayload,
+            startLine.ToString(CultureInfo.InvariantCulture),
+            endLine.ToString(CultureInfo.InvariantCulture));
+        return "semantic:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material))).ToLowerInvariant();
+    }
+
+    public static string CanonicalizePayload(string payloadJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(payloadJson);
+        using var document = JsonDocument.Parse(payloadJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException("Semantic claim payload must be a JSON object.", nameof(payloadJson));
+        }
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteCanonicalJson(writer, document.RootElement);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteCanonicalJson(Utf8JsonWriter writer, JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                var properties = element.EnumerateObject().ToArray();
+                var duplicate = properties
+                    .GroupBy(property => property.Name, StringComparer.Ordinal)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (duplicate is not null)
+                {
+                    throw new ArgumentException(
+                        $"Semantic claim payload contains duplicate property '{duplicate.Key}'.",
+                        "payloadJson");
+                }
+
+                foreach (var property in properties.OrderBy(item => item.Name, StringComparer.Ordinal))
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteCanonicalJson(writer, property.Value);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                {
+                    WriteCanonicalJson(writer, item);
+                }
+                writer.WriteEndArray();
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
+        }
+    }
+}
+
+/// <summary>
+/// Read-only semantic-claim schema preflight. A false result requires explicit repository
+/// reindexing; running this check never creates, removes, or migrates a relation.
+/// </summary>
+public sealed record CodeSemanticClaimPreflight(
+    bool Ready,
+    int? SchemaVersion,
+    string Diagnostic);
 
 /// <summary>Edge kind constants for ck_edge (design.md §4 of track redesign-codeknowledge-schema-v2).</summary>
 public static class CodeEdgeKinds
@@ -133,7 +287,8 @@ public sealed record CodeKnowledgeIndexResult(
     int Diagnostics,
     int Owners,
     int EntryPoints = 0,
-    int ExternalCalls = 0);
+    int ExternalCalls = 0,
+    int SemanticClaims = 0);
 
 public sealed record SymbolContextResult(
     CodeSymbolSummary? Symbol,

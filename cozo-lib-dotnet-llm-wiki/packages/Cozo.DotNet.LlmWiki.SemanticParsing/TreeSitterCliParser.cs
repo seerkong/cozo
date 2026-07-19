@@ -132,6 +132,7 @@ public sealed class TreeSitterCliParser
             : Path.GetExtension(path).ToLowerInvariant() switch
             {
                 ".cs" => "csharp",
+                ".java" => "java",
                 ".ts" or ".tsx" => "typescript",
                 ".js" or ".jsx" or ".mjs" or ".cjs" => "javascript",
                 ".json" => "json",

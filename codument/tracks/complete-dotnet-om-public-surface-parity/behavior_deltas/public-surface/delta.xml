@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="public-surface" version="1">
+  <upsert selector="behavior://public-surface/requirements/core-om-facades">
+    <requirement id="core-om-facades"><statement>.NET OM SHALL expose idiomatic typed public facades for explicit parent Keep/Set/Clear updates, constraint validation, traversal, and value-type inference while retaining compatibility wrappers for ambiguous legacy calls.</statement><suite id="facades" name="Core facades"><case id="observable-parity"><given>callers use the public C# facade</given><when>they clear a parent, validate, traverse, or infer a value type</when><then>the observable outcome SHALL match the Bun capability under D0=A.</then></case></suite></requirement>
+  </upsert>
+  <upsert selector="behavior://public-surface/requirements/behavior-guardrails">
+    <requirement id="behavior-guardrails"><statement>.NET OM SHALL validate behavior owners, scopes and interceptor phases before persistent metadata or callback registry effects, leaving no ghost registration on rejection.</statement><suite id="registration" name="Behavior guardrails"><case id="reject-before-effect"><given>invalid owner scope or phase input</given><when>a behavior is registered</when><then>it SHALL be rejected without metadata or callback side effects.</then></case></suite></requirement>
+  </upsert>
+</behavior-patch>

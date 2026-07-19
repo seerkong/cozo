@@ -55,6 +55,13 @@ internal static class CallResolver
         @"\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Z][A-Za-z0-9_]*)",
         RegexOptions.Compiled);
 
+    // Java declared-type bindings: fields, parameters and locals. Conservative by design:
+    // the type's final segment must be uppercase-initial, with package qualifiers, simple
+    // generics and array/varargs suffixes stripped before lookup.
+    private static readonly Regex JavaTypedBindingPattern = new(
+        @"(?<![\w$])(?<type>(?:[a-z_][A-Za-z0-9_$]*\.)*[A-Z][A-Za-z0-9_$]*(?:\.[A-Z][A-Za-z0-9_$]*)*(?:\s*<[^;=\r\n(){}]*>)?(?:\s*(?:\[\]|\.\.\.))*)\s+(?<name>[_a-z][A-Za-z0-9_$]*)\s*(?=[,;)=]|=)",
+        RegexOptions.Compiled);
+
     private static readonly Regex IdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
 
     /// <summary>Registry entry: one tree-sitter symbol fact, sym_key split into qualified name + arity.</summary>
@@ -206,6 +213,13 @@ internal static class CallResolver
             return null;
         }
 
+        Entry? FindInheritedMember(Entry type, string name, int arity)
+        {
+            return baseTypeOf.GetValueOrDefault(type.Id) is { } baseType
+                ? FindMember(baseType, name, arity)
+                : null;
+        }
+
         Entry? ContainerType(Entry? caller)
         {
             var guard = 0;
@@ -231,6 +245,49 @@ internal static class CallResolver
 
             var local = types.Where(t => t.FileId == fileId).ToList();
             return local.Count == 1 ? local[0] : null;
+        }
+
+        Entry? PickTypeForFile(FileInput file, string typeName, Lazy<HashSet<string>>? importScope = null)
+        {
+            if (typeName.Length == 0)
+            {
+                return null;
+            }
+
+            if (file.Language == "java" && typeName.Contains('.'))
+            {
+                var qualifiedTypes = byQualified.TryGetValue(typeName, out var qualifiedHits)
+                    ? qualifiedHits.Where(e => TypeKinds.Contains(e.Kind)).ToList()
+                    : [];
+                if (qualifiedTypes.Count == 1)
+                {
+                    return qualifiedTypes[0];
+                }
+            }
+
+            var simple = SimpleTypeName(typeName);
+            var types = TypesByName(simple);
+            if (file.Language != "java")
+            {
+                return PickType(types, file.FileId);
+            }
+
+            var local = types.Where(t => t.FileId == file.FileId).ToList();
+            if (local.Count == 1)
+            {
+                return local[0];
+            }
+
+            if (importScope is not null)
+            {
+                var scoped = types.Where(t => importScope.Value.Contains(t.Id)).ToList();
+                if (scoped.Count == 1)
+                {
+                    return scoped[0];
+                }
+            }
+
+            return types.Count == 1 ? types[0] : null;
         }
 
         Entry ConstructorOrType(Entry type, int arity)
@@ -290,9 +347,59 @@ internal static class CallResolver
                         }
                     }
                 }
+                else if (file.Language == "java")
+                {
+                    AddJavaImportScope(edge.ToName, scope);
+                }
+            }
+
+            if (file.Language == "java")
+            {
+                AddJavaPackageScope(file.FileId, scope);
             }
 
             return scope;
+        }
+
+        void AddJavaImportScope(string target, HashSet<string> scope)
+        {
+            if (target.EndsWith(".*", StringComparison.Ordinal))
+            {
+                var prefix = target[..^2] + ".";
+                foreach (var entry in entries)
+                {
+                    if (entry.Qualified.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        scope.Add(entry.Id);
+                    }
+                }
+
+                return;
+            }
+
+            foreach (var entry in byQualified.GetValueOrDefault(target) ?? [])
+            {
+                scope.Add(entry.Id);
+                foreach (var child in childrenByParent.GetValueOrDefault(entry.Id) ?? [])
+                {
+                    scope.Add(child.Id);
+                }
+            }
+        }
+
+        void AddJavaPackageScope(string fileId, HashSet<string> scope)
+        {
+            foreach (var package in entries.Where(e => e.FileId == fileId && e.Kind == "package"))
+            {
+                var prefix = package.Qualified + ".";
+                foreach (var entry in entries)
+                {
+                    if (entry.Qualified.StartsWith(prefix, StringComparison.Ordinal))
+                    {
+                        scope.Add(entry.Id);
+                    }
+                }
+            }
         }
 
         // ---- resolution pipeline (design.md §3, tier order is the spec) -----------------------
@@ -340,19 +447,26 @@ internal static class CallResolver
                     return new Resolution(member, 0.9, "member");
                 }
             }
+            else if (file.Language == "java" && receiver == "super")
+            {
+                if (ContainerType(caller) is { } container && FindInheritedMember(container, site.TargetName, site.Arity) is { } inherited)
+                {
+                    return new Resolution(inherited, 0.9, "member");
+                }
+            }
             else if (IdentifierPattern.IsMatch(receiver))
             {
                 // receiver bound locally (`var x = new T()` / declared field type) → T's members (0.9 unique).
                 if (bindings.TryGetValue(receiver, out var boundType)
-                    && PickType(TypesByName(boundType), file.FileId) is { } bound
+                    && PickTypeForFile(file, boundType, importScope) is { } bound
                     && FindMember(bound, site.TargetName, site.Arity) is { } boundMember)
                 {
                     return new Resolution(boundMember, boundMember.Arity == site.Arity ? 0.9 : 0.7, $"binding:{boundType}");
                 }
 
                 // receiver is a repo-unique type name (static call) → its members (0.9 exact / 0.7 name-only).
-                var receiverTypes = TypesByName(receiver);
-                if (receiverTypes.Count == 1 && FindMember(receiverTypes[0], site.TargetName, site.Arity) is { } staticMember)
+                if (PickTypeForFile(file, receiver, file.Language == "java" ? importScope : null) is { } receiverType
+                    && FindMember(receiverType, site.TargetName, site.Arity) is { } staticMember)
                 {
                     return new Resolution(staticMember, staticMember.Arity == site.Arity ? 0.9 : 0.7, "static-type");
                 }
@@ -400,17 +514,22 @@ internal static class CallResolver
             {
                 type = ContainerType(caller);
             }
+            else if (file.Language == "java" && receiver == "super")
+            {
+                type = ContainerType(caller) is { } container
+                    ? baseTypeOf.GetValueOrDefault(container.Id)
+                    : null;
+            }
             else if (IdentifierPattern.IsMatch(receiver))
             {
                 if (bindings.TryGetValue(receiver, out var boundType))
                 {
-                    type = PickType(TypesByName(boundType), file.FileId);
+                    type = PickTypeForFile(file, boundType);
                 }
 
                 if (type is null)
                 {
-                    var receiverTypes = TypesByName(receiver);
-                    type = receiverTypes.Count == 1 ? receiverTypes[0] : null;
+                    type = PickTypeForFile(file, receiver);
                 }
             }
 
@@ -628,7 +747,17 @@ internal static class CallResolver
         foreach (Match match in NewBindingPattern.Matches(file.SourceText))
         {
             var type = match.Groups[2].Value;
-            bindings[match.Groups[1].Value] = type[(type.LastIndexOf('.') + 1)..];
+            bindings[match.Groups[1].Value] = SimpleTypeName(type);
+        }
+
+        if (file.Language == "java")
+        {
+            foreach (Match match in JavaTypedBindingPattern.Matches(file.SourceText))
+            {
+                bindings.TryAdd(match.Groups["name"].Value, SimpleTypeName(match.Groups["type"].Value));
+            }
+
+            return bindings;
         }
 
         var typedPattern = file.Language == "csharp" ? CsTypedBindingPattern : TsTypedBindingPattern;
@@ -641,6 +770,22 @@ internal static class CallResolver
         }
 
         return bindings;
+    }
+
+    private static string SimpleTypeName(string typeName)
+    {
+        var normalized = typeName.Trim();
+        var generic = normalized.IndexOf('<');
+        if (generic >= 0)
+        {
+            normalized = normalized[..generic];
+        }
+
+        normalized = normalized.Replace("[]", "", StringComparison.Ordinal)
+            .Replace("...", "", StringComparison.Ordinal)
+            .Trim();
+        var dot = normalized.LastIndexOf('.');
+        return dot >= 0 ? normalized[(dot + 1)..] : normalized;
     }
 
     private static void Append<TKey>(Dictionary<TKey, List<Entry>> map, TKey key, Entry entry)

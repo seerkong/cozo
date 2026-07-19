@@ -1,0 +1,14 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/java-spring-dogfood">
+    <requirement id="java-spring-dogfood">
+      <statement>Release 版 depa-wiki SHALL 能在真实多模块 Java/Spring 仓库上完成索引，并通过图查询把 Java 结构、调用、Spring role/route/transaction/listener/mapper 事实定位回源码；既有语言和 OM 测试 SHALL 不回归。</statement>
+      <suite id="real-repository" name="真实仓库验证">
+        <case id="index-completes"><given>is-asset-new 与独立 SQLite 数据库</given><when>Release depa-wiki 索引</when><then>SHALL 成功返回非零 Java symbols/edges/entry points/processes 摘要</then></case>
+        <case id="parser-status-native-parity"><given>索引可加载 bundled native Java grammar 且外部 tree-sitter CLI 不可用</given><when>调用 parser_status</when><then>SHALL 与 ParserBackendSelector 一致地报告 nativeAvailable=true 并包含 Java ABI</then></case>
+        <case id="spring-samples"><given>已知 Controller/Transactional/Kafka/MyBatis/MapStruct 文件</given><when>查询持久化图</when><then>SHALL 找到带 source/line/evidence/resolver/confidence 的正确派生事实且无关键假阳性</then></case>
+        <case id="mapper-wildcard-import"><given>@Mapper 通过单一已知 MyBatis 或 MapStruct wildcard namespace 导入</given><when>派生 mapper role</when><then>SHALL 正确消歧；MapStruct 不产生 repository，双已知 wildcard 仍保持 ambiguous</then></case>
+        <case id="graph-tools"><given>真实索引已完成</given><when>调用 overview/symbol_context/trace 或等价查询</when><then>SHALL 返回有界、非空、可定位的图结果</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

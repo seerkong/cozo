@@ -1,0 +1,18 @@
+mission_decisions {
+  decision id="D1" status="accepted" source="user" date="2026-07-19" {
+    choice "Create a separate mission for agentic business ontology reconstruction."
+    rationale "The capability exceeds the existing fact-to-onto projection and bounded single-completion experiment."
+  }
+  decision id="D2" status="accepted" source="user" date="2026-07-19" {
+    choice "Reuse ontology-xml-dsl as the candidate ontology representation."
+    rationale "The new capability must produce human- and AI-readable standardized XML rather than an opaque model-only format."
+  }
+  decision id="D3" status="accepted" source="architecture" date="2026-07-19" {
+    choice "Treat AI output as pending analysis/candidates, never as accepted onto_* facts."
+    rationale "Indexed code facts can be incomplete or misleading; AI conclusions require local validation and explicit review/promotion."
+  }
+  decision id="D4" status="accepted" source="architecture" date="2026-07-19" {
+    choice "Provide bounded domain query tools instead of arbitrary SQL or repository access."
+    rationale "The model needs active exploration while preserving provenance, token control and source/credential boundaries."
+  }
+}

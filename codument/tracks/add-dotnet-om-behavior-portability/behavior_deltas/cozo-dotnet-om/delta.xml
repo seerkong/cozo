@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="cozo-dotnet-om" version="1">
+  <upsert selector="behavior://cozo-dotnet-om/requirements/behavior-portability">
+    <requirement id="behavior-portability">
+      <statement>C# OM SHALL export and import versioned behavior definitions while explicitly representing callback readiness and failing closed for unresolved behavior.</statement>
+      <suite id="canonical-manifest" name="Canonical Behavior Manifest">
+        <case id="deterministic-json"><given>The same behavior catalog is exported repeatedly</given><when>Canonical JSON is produced</when><then>The version, normalized keys, entry order, and bytes SHALL be stable</then></case>
+        <case id="round-trip"><given>A catalog contains every supported behavior kind</given><when>It is exported and imported</when><then>All metadata, keys, binding identifiers, and readiness facts SHALL be semantically preserved</then></case>
+        <case id="yaml-equivalence"><given>JSON and YAML documents describe the same catalog</given><when>They are decoded and imported</when><then>They SHALL produce identical catalog values, diagnostics, and effects</then></case>
+        <case id="unsupported-version"><given>A manifest declares an unsupported version or behavior kind</given><when>It is decoded</when><then>Import SHALL fail with structured diagnostics before state changes</then></case>
+        <case id="conflicting-keys"><given>A manifest contains duplicate or conflicting behavior keys</given><when>It is validated</when><then>The conflict SHALL be reported deterministically and no state SHALL change</then></case>
+        <case id="restart-projection"><given>Behavior metadata and callback binding identities were persisted before process restart</given><when>The same database is opened with an empty executable registry</when><then>Export SHALL preserve binding identities and SHALL project every callback slot as unresolved until rebound</then></case>
+        <case id="schema-compatibility"><given>An existing OM database predates the behavior binding relation</given><when>Additive schema initialization or snapshot restore runs</when><then>The binding relation SHALL be initialized without changing existing behavior definitions and SHALL participate in later snapshots</then></case>
+      </suite>
+      <suite id="readiness-import" name="Readiness And Import Atomicity">
+        <case id="unresolved-default-import"><given>A valid manifest references callback bindings that are absent</given><when>It is imported in default mode</when><then>Metadata SHALL import as inactive/unresolved and diagnostics SHALL identify each missing binding</then></case>
+        <case id="unresolved-execution"><given>An imported behavior is unresolved</given><when>Execution or evaluation is requested</when><then>The runtime SHALL fail closed with owner, behavior key, and binding identifier</then></case>
+        <case id="binding-becomes-ready"><given>An unresolved behavior receives a compatible typed callback binding</given><when>The binding is registered</when><then>Readiness SHALL atomically become ready and execution SHALL use the typed registry</then></case>
+        <case id="require-ready-atomic"><given>At least one required callback binding is missing or incompatible</given><when>The manifest is imported with requireReady enabled</when><then>The whole import SHALL fail and metadata, registry, and readiness state SHALL remain unchanged</then></case>
+        <case id="apply-failure-rollback"><given>Preflight succeeds but persistent or registry apply fails</given><when>The batch aborts</when><then>All prior metadata, callback registrations, and readiness facts SHALL be restored</then></case>
+        <case id="constraint-readiness"><given>An imported constraint has an unresolved when, then, or validator binding</given><when>Constraint evaluation is requested</when><then>Evaluation SHALL fail closed and identify the exact callback slot and binding id</then></case>
+        <case id="computed-readiness"><given>An imported computed property has an unresolved compute binding</given><when>It is read directly, through an entity view, or as of a historical time</when><then>Every read path SHALL fail closed with the same binding diagnostic instead of omitting or falling back</then></case>
+        <case id="action-readiness"><given>An imported action or an ancestor action selected by parent dispatch is unresolved</given><when>The action or CallParentAction path resolves it</when><then>Dispatch SHALL fail closed before mutations and identify the selected owner and binding id</then></case>
+        <case id="mutation-readiness"><given>An imported nearest mutation definition is unresolved</given><when>An action executes its mutation list</when><then>Mutation resolution SHALL fail closed before invoking any missing executor</then></case>
+        <case id="interceptor-readiness"><given>Persisted before or after interceptor definitions contain an unresolved exact owner/action/phase/seq binding</given><when>Interceptors are collected</when><then>Execution SHALL fail closed rather than skip the interceptor, preserving the exact keyed diagnostic</then></case>
+        <case id="atomic-concurrent-observation"><given>An import is paused between persistent staging and registry publication</given><when>A concurrent behavior resolution attempts to observe readiness</when><then>It SHALL observe the complete pre-import or post-import state and never a split state</then></case>
+        <case id="publish-compensation-failure"><given>Registry publication fails after persistence and persistent compensation also fails</given><when>The import aborts</when><then>The error SHALL preserve the original publication failure and all compensation failures without claiming atomic restoration</then></case>
+        <case id="sparse-interceptor-sequence"><given>Imported interceptor keys have sparse or conflicting local sequences</given><when>They are staged, published, exported, and extended</when><then>Exact keys SHALL be preserved, conflicts SHALL fail preflight, and new local sequence SHALL use max plus one</then></case>
+        <case id="yaml-safety"><given>A YAML manifest exceeds configured limits or uses multiple documents, custom tags, merge keys, or unsafe aliases</given><when>The YAML adapter parses it</when><then>It SHALL fail before canonical catalog effects and Om.Core SHALL remain free of a YAML dependency</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

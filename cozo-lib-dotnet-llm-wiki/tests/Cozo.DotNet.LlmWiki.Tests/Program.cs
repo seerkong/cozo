@@ -12,6 +12,18 @@ using Cozo.DotNet.Om;
 using Cozo.DotNet.Om.CodeKnowledge;
 using Cozo.DotNet.Om.Depa;
 
+const string DepaWikiCliChildEnvironment = "DEPA_WIKI_TEST_CLI_CHILD";
+
+// Process-safety circuit breaker (2026-07-19): this test executable used to be selected as
+// the host for depa-wiki.dll. That re-entered this entire top-level test program recursively.
+// A test subprocess bearing this marker must fail closed rather than start another test suite.
+if (Environment.GetEnvironmentVariable(DepaWikiCliChildEnvironment) == "1")
+{
+    Console.Error.WriteLine("The test executable cannot host depa-wiki CLI subprocesses.");
+    Environment.ExitCode = 70;
+    return;
+}
+
 static void Assert(bool condition, string message)
 {
     if (!condition)
@@ -28,12 +40,232 @@ static bool HasEdge(IReadOnlyList<ParsedEdge> edges, string from, string to, str
         && (confidence is null || Math.Abs(edge.Confidence - confidence.Value) < 1e-9)
         && (evidence is null || edge.Evidence == evidence));
 
+static async Task<(int ExitCode, string Stdout, string Stderr)> RunDepaWikiCliAsync(params string[] args)
+{
+    var cliAssembly = Path.Combine(AppContext.BaseDirectory, "depa-wiki.dll");
+    if (!File.Exists(cliAssembly))
+    {
+        throw new FileNotFoundException("The depa-wiki CLI assembly was not copied to the test output.", cliAssembly);
+    }
+
+    // Do not use Environment.ProcessPath here: it is the test apphost, not dotnet. Starting
+    // that host with depa-wiki.dll as an argument recursively runs this test program.
+    var info = new System.Diagnostics.ProcessStartInfo(ResolveDotnetHost())
+    {
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+    };
+    info.ArgumentList.Add(cliAssembly);
+    foreach (var arg in args)
+    {
+        info.ArgumentList.Add(arg);
+    }
+
+    foreach (var key in new[]
+             {
+                 "DEPA_WIKI_LLM_PROVIDER",
+                 "DEPA_WIKI_LLM_BASE_URL",
+                 "DEPA_WIKI_LLM_API_KEY",
+                 "DEPA_WIKI_LLM_MODEL",
+                 "DEPA_WIKI_LLM_TIMEOUT_SECONDS",
+                 "DEPA_WIKI_CODEX_CLI_PATH",
+                 "DEPA_WIKI_CODEX_CLI_MODEL_PROVIDER",
+                 "DEPA_WIKI_CODEX_CLI_BASE_URL",
+                 "DEPA_WIKI_CODEX_CLI_WIRE_API",
+                 "OPENAI_API_KEY",
+                 "ANTHROPIC_API_KEY",
+             })
+    {
+        info.Environment.Remove(key);
+    }
+    info.Environment[DepaWikiCliChildEnvironment] = "1";
+
+    using var process = System.Diagnostics.Process.Start(info) ?? throw new InvalidOperationException("Failed to start depa-wiki CLI.");
+    var stdoutTask = process.StandardOutput.ReadToEndAsync();
+    var stderrTask = process.StandardError.ReadToEndAsync();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    try
+    {
+        await process.WaitForExitAsync(timeout.Token);
+    }
+    catch (OperationCanceledException) when (!process.HasExited)
+    {
+        // A bounded CLI test must never strand a process tree when a command hangs.
+        process.Kill(entireProcessTree: true);
+        await process.WaitForExitAsync();
+        await Task.WhenAll(stdoutTask, stderrTask);
+        throw new TimeoutException("depa-wiki CLI test exceeded the 30-second process budget.");
+    }
+
+    var stdout = await stdoutTask;
+    var stderr = await stderrTask;
+    return (process.ExitCode, stdout, stderr);
+}
+
+static string ResolveDotnetHost()
+{
+    var hostPath = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
+    if (!string.IsNullOrWhiteSpace(hostPath) && File.Exists(hostPath)) return hostPath;
+
+    var dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+    var rootHost = string.IsNullOrWhiteSpace(dotnetRoot) ? null : Path.Combine(dotnetRoot, "dotnet");
+    return rootHost is not null && File.Exists(rootHost) ? rootHost : "dotnet";
+}
+
 // Oracle-only fast path (add-llm-wiki-eval-baseline track T2.1): the documented reproduction
 // command for the eval oracle gate — EVAL_ORACLE_ONLY=1 dotnet run — skips the rest of the suite.
 if (Environment.GetEnvironmentVariable("EVAL_ORACLE_ONLY") == "1")
 {
     await Cozo.DotNet.LlmWiki.Tests.EvalOracleGateTests.RunAsync((condition, message) => Assert(condition, message));
     Console.WriteLine("Eval oracle gate passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("SEMANTIC_CLAIM_CONTRACT_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.CodeSemanticClaimContractTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Semantic claim contract tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("JAVA_SOURCE_SEMANTIC_CLAIMS_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.JavaSourceSemanticClaimTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Java source semantic claim tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_SEMANTIC_CANDIDATE_CONTRACT_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.OntologySemanticCandidateContractTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Ontology semantic candidate contract tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_SEMANTIC_PROJECTOR_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticProjectorTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology semantic projector tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_SEMANTIC_ASSISTED_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.OntologySemanticAssistedProposalTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Ontology semantic assisted proposal tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_REVIEW_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyReviewServiceTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology review service tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_MATERIALIZATION_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyMaterializationServiceTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology materialization service tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_XML_EXPORT_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyXmlExporterTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology XML exporter tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_QUALITY_REPORT_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyQualityReportBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology quality report tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_SEMANTIC_CLI_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticCliTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology semantic CLI tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_USE_CASE_SLICE_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessUseCaseSliceBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business use-case slice builder tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_CANDIDATE_DERIVER_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateDeriverTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology candidate deriver tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_INVESTIGATION_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyInvestigationServiceTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology investigation service tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_ANALYSIS_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAnalysisStoreTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology analysis store tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_CANDIDATE_DIAGNOSIS_ONLY") == "1")
+{
+    Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateDiagnosisContractTests.Run((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology candidate diagnosis contract tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_CANDIDATE_BUNDLE_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateBundleBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology candidate bundle builder tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_CANDIDATE_ARTIFACTS_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateBundleBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology candidate diagnosis artifact tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("ONTO_CANDIDATE_EXPORT_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateBundleBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology candidate shared export operation tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_AGENT_ACTION_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentActionContractTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology agent action contract tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_AGENT_BUDGET_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentBudgetTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology agent budget tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_AGENT_CONTROLLER_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgenticReconstructionServiceTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology agentic reconstruction controller tests passed.");
     return;
 }
 
@@ -52,19 +284,88 @@ try
     Assert(semanticSearchSchema.ContainsKey("mode") && semanticSearchSchema.ContainsKey("rrfK"),
         "semantic_search schema should expose add-only mode and rrfK parameters");
     Assert(toolNames.Contains("overview_graph"), "shared tool metadata should include overview_graph");
-    // T2.1 (depa-conformance track): the shared tool matrix is exactly these 18 tools
-    // (15 pre-existing + depa_conformance / fact_grade_map / health_score).
+    // The shared tool matrix contains the legacy 18 tools plus seven fixed, read-only business
+    // ontology investigation operations. It deliberately does not expose arbitrary Datalog.
     string[] expectedToolMatrix =
     [
         "index_repo", "build_wiki", "symbol_context", "impact_of_change", "docs_for_code",
         "explain_relation", "parser_status", "parse_file", "index_embeddings", "semantic_search",
         "overview_graph", "query_named", "trace", "check", "detect_changes",
-        "depa_conformance", "fact_grade_map", "health_score"
+        "depa_conformance", "fact_grade_map", "health_score",
+        "ontology_investigation_overview", "find_business_terms", "list_use_case_slices",
+        "get_use_case_slice", "find_semantic_patterns", "get_semantic_evidence", "inspect_ontology_subject",
+        "run_business_ontology_agent"
     ];
-    Assert(toolNames.Length == 18 && expectedToolMatrix.All(toolNames.Contains),
-        "shared tool metadata should expose exactly the 18-tool matrix including the three DEPA tools (got: "
+    Assert(toolNames.Length == 26 && expectedToolMatrix.All(toolNames.Contains),
+        "shared tool metadata should expose exactly the 26-tool matrix including the agentic run operation (got: "
         + string.Join(", ", toolNames) + ")");
+    string[] expectedAgentRunProperties =
+    [
+        "ontologyId", "generationId", "workItem", "maxTurns", "maxQueries", "maxRows",
+        "maxSourceBytes", "maxInputTokens", "maxOutputTokens", "maxWallClockSeconds"
+    ];
+    string[] rejectedAgentRunProperties =
+    [
+        "prompt", "sql", "path", "repoPath", "provider", "apiKey", "providerSecret", "parametersJson"
+    ];
+    var agentRunTool = LlmWikiToolRunner.ToolsJson()
+        .First(tool => tool?["name"]?.GetValue<string>() == "run_business_ontology_agent")!;
+    var agentRunSchema = agentRunTool["inputSchema"]!["properties"]!.AsObject();
+    var agentRunRequired = agentRunTool["inputSchema"]!["required"]!.AsArray()
+        .Select(item => item!.GetValue<string>())
+        .Order(StringComparer.Ordinal)
+        .ToArray();
+    Assert(agentRunSchema.Count == expectedAgentRunProperties.Length
+            && expectedAgentRunProperties.All(agentRunSchema.ContainsKey)
+            && agentRunRequired.SequenceEqual(new[] { "generationId", "ontologyId", "workItem" }.Order(StringComparer.Ordinal)),
+        "run_business_ontology_agent schema should expose exactly identity/work item plus smaller budget caps");
+    Assert(rejectedAgentRunProperties.All(key => !agentRunSchema.ContainsKey(key)),
+        "run_business_ontology_agent schema must not expose raw prompt, SQL, path, provider, secret, or arbitrary parametersJson inputs");
+    var mcpAgentRunSchema = LlmWikiToolRunner.ToolsJson()
+        .First(tool => tool?["name"]?.GetValue<string>() == "run_business_ontology_agent")!["inputSchema"]!["properties"]!.AsObject();
+    Assert(mcpAgentRunSchema.Count == expectedAgentRunProperties.Length
+            && expectedAgentRunProperties.All(mcpAgentRunSchema.ContainsKey),
+        "MCP tools/list uses the same frozen run_business_ontology_agent schema as the shared runner metadata");
     Assert(LlmWikiCliOptions.KebabOptionToCamelName("--repo-path") == "repoPath", "CLI option conversion should preserve kebab-case to camelCase binding");
+    var skillCliArgs = LlmWikiCliOptions.ToolArguments(LlmWikiCliOptions.Parse(
+    [
+        "--args",
+        """{"ontologyId":"SampleDomain.Ontology","generationId":"fixture-1","workItem":"bounded work","maxTurns":"2"}"""
+    ]));
+    Assert(skillCliArgs.ContainsKey("ontologyId")
+            && skillCliArgs.ContainsKey("generationId")
+            && skillCliArgs.ContainsKey("workItem")
+            && skillCliArgs.ContainsKey("maxTurns")
+            && !skillCliArgs.ContainsKey("args"),
+        "CLI call should accept the external skill's --args alias as JSON arguments, not leak it as an unsafe tool parameter");
+    var unsafeCli = await RunDepaWikiCliAsync(
+        "call",
+        "run_business_ontology_agent",
+        "--engine",
+        "mem",
+        "--args",
+        """{"ontologyId":"SampleDomain.Ontology","generationId":"fixture-1","workItem":"bounded work","sql":"select * from onto_concept"}""");
+    Assert(unsafeCli.ExitCode == 2
+            && unsafeCli.Stdout.Length == 0
+            && unsafeCli.Stderr.Contains("Rejected arguments: sql", StringComparison.Ordinal)
+            && !unsafeCli.Stderr.Contains("Unhandled exception", StringComparison.Ordinal)
+            && !unsafeCli.Stderr.Contains(" at ", StringComparison.Ordinal)
+            && !unsafeCli.Stderr.Contains(Directory.GetCurrentDirectory(), StringComparison.Ordinal),
+        "CLI call should reject unsafe agent arguments with a bounded error, not an unhandled stack trace");
+    var malformedCli = await RunDepaWikiCliAsync(
+        "call",
+        "run_business_ontology_agent",
+        "--engine",
+        "mem",
+        "--args",
+        """{"ontologyId":""");
+    Assert(malformedCli.ExitCode == 2
+            && malformedCli.Stdout.Length == 0
+            && malformedCli.Stderr.Contains("error", StringComparison.Ordinal)
+            && !malformedCli.Stderr.Contains("Unhandled exception", StringComparison.Ordinal)
+            && !malformedCli.Stderr.Contains(" at ", StringComparison.Ordinal)
+            && !malformedCli.Stderr.Contains(Directory.GetCurrentDirectory(), StringComparison.Ordinal),
+        "CLI call should reject malformed --args JSON with a bounded error, not an unhandled stack trace");
 
     await using (var webApp = LlmWikiWebServer.BuildApp(new LlmWikiServerOptions(
         new CozoWikiStorageOptions("mem", "", root, root),
@@ -86,6 +387,51 @@ try
             "a non-git work dir without an index should yield null indexedCommit/headCommit/stale (got: " + statusJson + ")");
         var toolsJson = await client.GetStringAsync("/api/tools");
         Assert(toolsJson.Contains("semantic_search", StringComparison.Ordinal), "server tools endpoint should expose shared tool metadata");
+        var httpTools = JsonNode.Parse(toolsJson)!["tools"]!.AsArray();
+        var httpAgentRunSchema = httpTools
+            .First(tool => tool?["name"]?.GetValue<string>() == "run_business_ontology_agent")!["inputSchema"]!["properties"]!.AsObject();
+        Assert(httpAgentRunSchema.Count == expectedAgentRunProperties.Length
+                && expectedAgentRunProperties.All(httpAgentRunSchema.ContainsKey)
+                && rejectedAgentRunProperties.All(key => !httpAgentRunSchema.ContainsKey(key)),
+            "HTTP /api/tools should expose the same frozen agent operation schema without unsafe inputs");
+        using (new LlmEnvironmentOverride())
+        {
+            using var httpAgentResp = await client.PostAsync("/api/tools/call", new StringContent(new JsonObject
+            {
+                ["name"] = "run_business_ontology_agent",
+                ["arguments"] = new JsonObject
+                {
+                    ["ontologyId"] = "SampleDomain.Ontology",
+                    ["generationId"] = "fixture-1",
+                    ["workItem"] = "Reconstruct the submit record lifecycle from indexed evidence.",
+                    ["maxTurns"] = "2",
+                    ["maxQueries"] = "1",
+                }
+            }.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+            Assert(httpAgentResp.IsSuccessStatusCode, "HTTP /api/tools/call should dispatch the fixed agent operation through the shared runner");
+            var httpAgentText = await httpAgentResp.Content.ReadAsStringAsync();
+            var httpAgentJson = JsonNode.Parse(httpAgentText)!.AsObject();
+            Assert(httpAgentJson["schemaVersion"]!.GetValue<string>() == "business-ontology-agent-run-summary-v1"
+                    && httpAgentJson["status"]!.GetValue<string>() == "blocked"
+                    && httpAgentJson["diagnostics"]!["providerUnavailableReason"] is not null
+                    && !httpAgentText.Contains("sourceExcerpt", StringComparison.OrdinalIgnoreCase)
+                    && !httpAgentText.Contains("if (record.state", StringComparison.OrdinalIgnoreCase),
+                "HTTP /api/tools/call should return a structured unavailable-provider summary without raw source/model output");
+        }
+        using var httpUnsafeAgentResp = await client.PostAsync("/api/tools/call", new StringContent(new JsonObject
+        {
+            ["name"] = "run_business_ontology_agent",
+            ["arguments"] = new JsonObject
+            {
+                ["ontologyId"] = "SampleDomain.Ontology",
+                ["generationId"] = "fixture-1",
+                ["workItem"] = "bounded work",
+                ["sql"] = "select * from onto_concept",
+            }
+        }.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        Assert(!httpUnsafeAgentResp.IsSuccessStatusCode
+                && (await httpUnsafeAgentResp.Content.ReadAsStringAsync()).Contains("Rejected arguments: sql", StringComparison.Ordinal),
+            "HTTP /api/tools/call should reject unsafe agent arguments before provider/controller dispatch");
         using var semanticResp = await client.PostAsync("/api/search/semantic", new StringContent("{\"query\":\"SampleService\",\"limit\":\"1\"}", System.Text.Encoding.UTF8, "application/json"));
         Assert(semanticResp.IsSuccessStatusCode, "server semantic search endpoint should return success status");
         // T2.1 (hybrid-search track): the request body forwards mode/rrfK add-only params;
@@ -277,6 +623,98 @@ try
     Assert(degradedIndexSymbols.Count > 0 && degradedIndexSymbols.All(s => s.Resolver == "regex"),
         "without native grammars the indexer should fall back to resolver=regex and still succeed");
 
+    // T1.1.1: Java grammar/routing contract for add-dotnet-llm-wiki-java-treesitter-baseline.
+    // Delta cases: requirements/java-baseline/routing {java-default-extension, java-native-grammar, java-fallback}.
+    var javaRouteRoot = Path.Combine(root, "java-route");
+    Directory.CreateDirectory(Path.Combine(javaRouteRoot, "src"));
+    await File.WriteAllTextAsync(Path.Combine(javaRouteRoot, "src", "App.java"), """
+    package demo;
+
+    public class App {
+        public String run(String name) {
+            return name.trim();
+        }
+    }
+    """);
+    var javaDefaultBatch = await new RepositoryIndexer().BuildBatchAsync(new RepositoryIndexRequest(
+        javaRouteRoot,
+        RepositoryId: "repo:java-default",
+        RepositoryName: "java-default",
+        UseGitIgnore: false));
+    var javaDefaultFile = (javaDefaultBatch.Batch.Files ?? []).SingleOrDefault(file => file.Path == "src/App.java");
+    Assert(javaDefaultFile is not null && javaDefaultFile.Language == "java",
+        "default RepositoryIndexer routing should include .java files and mark language=java");
+
+    var javaLibraryField = typeof(TreeSitterNative).GetField(
+        "JavaLibrary",
+        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    var javaLibraryName = javaLibraryField?.GetRawConstantValue() as string;
+    Assert(javaLibraryName == "tree-sitter-java",
+        "TreeSitterNative should declare the pinned Java grammar library as tree-sitter-java");
+    Assert(TreeSitterNative.GetPlatformLibraryFileName(javaLibraryName ?? "tree-sitter-java").Contains("tree-sitter-java", StringComparison.Ordinal),
+        "platform native library naming should preserve the Java grammar library name");
+    Assert(typeof(TreeSitterNative).GetMethod(
+            "tree_sitter_java",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static) is not null,
+        "TreeSitterNative should expose the tree_sitter_java grammar entry point for ABI validation");
+    Assert(TreeSitterNativeBackend.ValidateAbiVersion("java", TreeSitterNative.MinCompatibleLanguageAbi) is null
+        && TreeSitterNativeBackend.ValidateAbiVersion("java", TreeSitterNative.MaxSupportedLanguageAbi) is null,
+        "Java grammar ABI validation should use the shared tree-sitter runtime ABI gate");
+
+    var fakeTreeSitter = Path.Combine(root, OperatingSystem.IsWindows() ? "tree-sitter-fake.cmd" : "tree-sitter-fake");
+    if (OperatingSystem.IsWindows())
+    {
+        await File.WriteAllTextAsync(fakeTreeSitter, """
+        @echo off
+        if "%1"=="--version" (
+          echo tree-sitter 0.24.3
+          exit /b 0
+        )
+        echo no java grammar installed 1>&2
+        exit /b 1
+        """);
+    }
+    else
+    {
+        await File.WriteAllTextAsync(fakeTreeSitter, """
+        #!/usr/bin/env bash
+        if [[ "$1" == "--version" ]]; then
+          echo "tree-sitter 0.24.3"
+          exit 0
+        fi
+        echo "no java grammar installed" >&2
+        exit 1
+        """);
+        File.SetUnixFileMode(
+            fakeTreeSitter,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    var javaCliSelector = ParserBackendSelector.CreateDefault(
+        nativeProbeDirectories: ["/nonexistent-treesitter-native-libs"],
+        cliParser: new TreeSitterCliParser(fakeTreeSitter));
+    Assert(javaCliSelector.CliAvailable, "test fixture should make the tree-sitter CLI tier available");
+    var javaCliBackend = javaCliSelector.SelectFor("java");
+    Assert(javaCliBackend is not null && javaCliBackend.Name == "cli",
+        "when native Java grammar is unavailable and tree-sitter CLI is available, selector should route java to the CLI backend");
+    var javaCliParse = javaCliBackend!.Parse("App.java", "public class App {}", "java");
+    Assert(!javaCliParse.Success && javaCliParse.LanguageId == "java" && javaCliParse.Diagnostics.Any(d => d.Code == "TSCLI002"),
+        "Java CLI parse failures should preserve language=java and return structured diagnostics for fallback routing");
+
+    var javaFallbackBatch = await new RepositoryIndexer(javaCliSelector).BuildBatchAsync(new RepositoryIndexRequest(
+        javaRouteRoot,
+        RepositoryId: "repo:java-fallback",
+        RepositoryName: "java-fallback",
+        UseGitIgnore: false));
+    Assert((javaFallbackBatch.Batch.Files ?? []).Any(file => file.Path == "src/App.java" && file.Language == "java"),
+        "Java CLI/fallback routing should keep the .java file in the batch even when parsing degrades");
+    Assert((javaFallbackBatch.Batch.Diagnostics ?? []).Any(d => d.Kind == "parser_fallback" && d.TargetId.EndsWith("src/App.java", StringComparison.Ordinal)),
+        "Java CLI parse failure should emit a parser_fallback diagnostic instead of failing the whole index");
+
+    await Cozo.DotNet.LlmWiki.Tests.JavaRepositoryIndexerBatchTests.RunAsync(root, Assert);
+    await Cozo.DotNet.LlmWiki.Tests.JavaCallResolutionTests.RunAsync(root, Assert);
+    await Cozo.DotNet.LlmWiki.Tests.SpringSemanticDerivationTests.RunAsync(root, Assert);
+
     if (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64)
     {
         // native-preferred: C# and TS files produce resolver=treesitter facts with tree-shaped ParentId.
@@ -404,6 +842,63 @@ try
     Assert(runnerIndex.Symbols >= 2, "runner index_repo should index symbols on v2 schema");
     var runnerWiki = (WikiBuildResult)await runner.CallAsync("build_wiki", new JsonObject());
     Assert(runnerWiki.Pages.Count > 0, "runner build_wiki should build pages on v2 schema");
+    JsonObject agentUnavailableJson;
+    using (new LlmEnvironmentOverride())
+    {
+        agentUnavailableJson = System.Text.Json.JsonSerializer.SerializeToNode(await runner.CallAsync("run_business_ontology_agent", new JsonObject
+        {
+            ["ontologyId"] = "SampleDomain.Ontology",
+            ["generationId"] = "fixture-1",
+            ["workItem"] = "Reconstruct the submit record lifecycle from indexed evidence.",
+            ["maxTurns"] = "2",
+            ["maxQueries"] = "1",
+        }), LlmWikiJson.Options)!.AsObject();
+    }
+    Assert(agentUnavailableJson["schemaVersion"]!.GetValue<string>() == "business-ontology-agent-run-summary-v1"
+            && agentUnavailableJson["operation"]!.GetValue<string>() == "run_business_ontology_agent"
+            && agentUnavailableJson["status"]!.GetValue<string>() == "blocked"
+            && agentUnavailableJson["diagnostics"]!["providerUnavailableReason"] is not null
+            && agentUnavailableJson.ToJsonString(LlmWikiJson.Options) is var agentUnavailableText
+            && !agentUnavailableText.Contains("sourceExcerpt", StringComparison.OrdinalIgnoreCase)
+            && !agentUnavailableText.Contains("if (record.state", StringComparison.OrdinalIgnoreCase),
+        "run_business_ontology_agent should handle unavailable providers with a structured summary and no raw source/model output");
+    foreach (var unsafeArgument in rejectedAgentRunProperties)
+    {
+        var rejectedUnsafeAgentArgs = false;
+        try
+        {
+            await runner.CallAsync("run_business_ontology_agent", new JsonObject
+            {
+                ["ontologyId"] = "SampleDomain.Ontology",
+                ["generationId"] = "fixture-1",
+                ["workItem"] = "bounded work",
+                [unsafeArgument] = unsafeArgument == "parametersJson" ? "{}" : "unsafe",
+            });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("Rejected arguments", StringComparison.Ordinal)
+                                           && ex.Message.Contains(unsafeArgument, StringComparison.Ordinal))
+        {
+            rejectedUnsafeAgentArgs = true;
+        }
+        Assert(rejectedUnsafeAgentArgs,
+            $"run_business_ontology_agent should reject unsafe '{unsafeArgument}' before provider/controller dispatch");
+    }
+    var rejectedLargerBudget = false;
+    try
+    {
+        await runner.CallAsync("run_business_ontology_agent", new JsonObject
+        {
+            ["ontologyId"] = "SampleDomain.Ontology",
+            ["generationId"] = "fixture-1",
+            ["workItem"] = "bounded work",
+            ["maxTurns"] = "13",
+        });
+    }
+    catch (ArgumentException ex) when (ex.Message.Contains("default cap", StringComparison.Ordinal))
+    {
+        rejectedLargerBudget = true;
+    }
+    Assert(rejectedLargerBudget, "run_business_ontology_agent should accept only smaller-or-equal budget caps");
 
     // T2.2 (llm-pipeline track): build_wiki add-only params — the legacy default above stays a
     // WikiBuildResult untouched; pipeline=fractal routes to FractalWikiPipeline with page-level
@@ -469,8 +964,28 @@ try
         "build_wiki schema should name codument-fractal as the canonical pipeline");
     Assert(!pipelineDescription.Replace("codument-fractal", "", StringComparison.Ordinal).Contains("fractal", StringComparison.Ordinal),
         "build_wiki schema should not advertise the bare fractal alias");
+    // T1.1.2 (verify Java/Spring indexing track): the public tool must report the same
+    // effective native/CLI backend state used by repository indexing.
+    var expectedParserStatus = ParserBackendSelector.CreateDefault().DescribeStatus();
     var runnerParserStatus = (ParserStatus)await runner.CallAsync("parser_status", new JsonObject());
     Assert(runnerParserStatus.Parser == "tree-sitter", "runner parser_status should report tree-sitter");
+    Assert(runnerParserStatus.Available == expectedParserStatus.Available,
+        "runner parser_status Available should match the default backend selector");
+    Assert(runnerParserStatus.NativeAvailable == expectedParserStatus.NativeAvailable,
+        "runner parser_status NativeAvailable should match the default backend selector");
+    Assert(runnerParserStatus.NativeDetail == expectedParserStatus.NativeDetail,
+        "runner parser_status NativeDetail should match the default backend selector");
+    Assert(runnerParserStatus.Version == expectedParserStatus.Version,
+        "runner parser_status Version should match the default backend selector");
+    if (OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64)
+    {
+        Assert(expectedParserStatus.NativeAvailable,
+            "the default backend selector should load bundled native grammars on macOS arm64");
+        Assert(runnerParserStatus.NativeAvailable,
+            "runner parser_status should report bundled native grammars on macOS arm64");
+        Assert(runnerParserStatus.NativeDetail.Contains("java abi=", StringComparison.OrdinalIgnoreCase),
+            "runner parser_status should include the bundled Java grammar ABI on macOS arm64");
+    }
     var runnerParse = (SemanticParseResult)await runner.CallAsync("parse_file", new JsonObject { ["filePath"] = Path.Combine(root, "Sample.cs"), ["maxNodes"] = "8" });
     Assert(runnerParse.Success || runnerParse.Diagnostics.Count > 0, "runner parse_file should succeed or report diagnostics");
     var runnerEmbed = (VectorIndexResult)await runner.CallAsync("index_embeddings", new JsonObject { ["limit"] = "5" });
@@ -798,6 +1313,15 @@ try
         Assert(csBackend is not null && csBackend.Name == "native", "selector should prefer the native backend for csharp");
         Assert(csBackend!.SupportsLanguage("typescript") && !csBackend.SupportsLanguage("markdown"),
             "native backend should support typescript and reject languages without a grammar");
+        var javaNativeBackend = nativeSelector.SelectFor("java");
+        if (javaNativeBackend is not TreeSitterNativeBackend javaBackend || javaBackend.Name != "native")
+        {
+            throw new InvalidOperationException("selector should load the native Java grammar and prefer it for java on osx-arm64");
+        }
+
+        Assert(nativeStatus.NativeDetail.Contains("java abi=", StringComparison.OrdinalIgnoreCase),
+            "parser status native detail should include the Java grammar ABI");
+        Cozo.DotNet.LlmWiki.Tests.JavaExtractorContractTests.Run(javaBackend, Assert);
 
         var csParsed = csBackend.Parse("Sample.cs", csSample, "csharp");
         Assert(csParsed.Success && !csParsed.HasErrors, "native backend should parse valid C# without syntax errors: "
@@ -3071,6 +3595,43 @@ await Cozo.DotNet.LlmWiki.Tests.SkillsCommandTests.RunAsync((condition, message)
 // — codument-fractal first-class entry, legacy default untouched, invalid value rejected.
 await Cozo.DotNet.LlmWiki.Tests.WikiCliPipelineTests.RunAsync((condition, message) => Assert(condition, message));
 
+// CodeKnowledge schema v3 semantic-claim contract: read-only preflight, explicit reindex,
+// canonical writes, closed kinds, and incremental file-scoped cleanup.
+await Cozo.DotNet.LlmWiki.Tests.CodeSemanticClaimContractTests.RunAsync((condition, message) => Assert(condition, message));
+
+// Java/Spring AST-backed source observations: typed references, constraints, state transitions,
+// transaction scopes and route bindings, including conservative false-positive controls.
+await Cozo.DotNet.LlmWiki.Tests.JavaSourceSemanticClaimTests.RunAsync((condition, message) => Assert(condition, message));
+
+// Bounded source evidence packs and the strict onto-semantic-v1 candidate trust boundary.
+await Cozo.DotNet.LlmWiki.Tests.OntologySemanticCandidateContractTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticProjectorTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.OntologySemanticAssistedProposalTests.RunAsync((condition, message) => Assert(condition, message));
+
+// DEPA runtime snapshot / normalized XML / Markdown Wiki projections: all three formats share a
+// read-only exporter and refuse a non-empty output directory.
+await Cozo.DotNet.LlmWiki.Tests.DepaOntologyExporterTests.RunAsync((condition, message) => Assert(condition, message));
+
+// Independent onto_* generation storage: semantic records remain separate from CodeKnowledge
+// observations and DEPA judgments, with evidence-gated exportability and scoped refresh.
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyStoreTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyReviewServiceTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyMaterializationServiceTests.RunAsync((condition, message) => Assert(condition, message));
+
+// Deterministic ck_* to onto_* candidate projection: Java/Spring + frontend evidence is
+// conservative, repeatable, and must leave the independent DEPA layer untouched.
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateDeriverTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyInvestigationServiceTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAnalysisStoreTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentActionContractTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentBudgetTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgenticReconstructionServiceTests.RunAsync((condition, message) => Assert(condition, message));
+
+// Standard XML projection of onto_* semantic state: modules are generated from the evidence-gated
+// view, while pending candidates remain an audit artifact outside the ontology graph.
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyXmlExporterTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyQualityReportBuilderTests.RunAsync((condition, message) => Assert(condition, message));
+
 // Eval baseline task set + keyword scorer (add-llm-wiki-eval-baseline track T1.1)
 // — task-set-shape (>=20 well-formed tasks over real symbols) and scorer-discriminates.
 await Cozo.DotNet.LlmWiki.Tests.EvalBaselineTests.RunAsync((condition, message) => Assert(condition, message));
@@ -3081,3 +3642,39 @@ await Cozo.DotNet.LlmWiki.Tests.EvalBaselineTests.RunAsync((condition, message) 
 await Cozo.DotNet.LlmWiki.Tests.EvalOracleGateTests.RunAsync((condition, message) => Assert(condition, message));
 
 Console.WriteLine("LLM wiki smoke tests passed.");
+
+internal sealed class LlmEnvironmentOverride : IDisposable
+{
+    private static readonly string[] Keys =
+    [
+        "DEPA_WIKI_LLM_PROVIDER",
+        "DEPA_WIKI_LLM_BASE_URL",
+        "DEPA_WIKI_LLM_API_KEY",
+        "DEPA_WIKI_LLM_MODEL",
+        "DEPA_WIKI_LLM_TIMEOUT_SECONDS",
+        "DEPA_WIKI_CODEX_CLI_PATH",
+        "DEPA_WIKI_CODEX_CLI_MODEL_PROVIDER",
+        "DEPA_WIKI_CODEX_CLI_BASE_URL",
+        "DEPA_WIKI_CODEX_CLI_WIRE_API",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    ];
+
+    private readonly Dictionary<string, string?> _previous = Keys.ToDictionary(key => key, Environment.GetEnvironmentVariable, StringComparer.Ordinal);
+
+    public LlmEnvironmentOverride()
+    {
+        foreach (var key in Keys)
+        {
+            Environment.SetEnvironmentVariable(key, null);
+        }
+    }
+
+    public void Dispose()
+    {
+        foreach (var (key, value) in _previous)
+        {
+            Environment.SetEnvironmentVariable(key, value);
+        }
+    }
+}

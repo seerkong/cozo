@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ontology id="ExampleCatalog.Ontology" version="thin">
+  <Modules>
+    <TypeModule href="vfs://./types/records.xml" />
+  </Modules>
+</Ontology>

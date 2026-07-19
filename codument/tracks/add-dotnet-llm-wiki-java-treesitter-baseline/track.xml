@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-dotnet-llm-wiki-java-treesitter-baseline" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>为 C# 版 depa-wiki 增加 Tree-sitter Java grammar、extractor 与默认索引支持</Goal>
+    <Description>Parent mission G2 track；Java 语法与结构基线，不含跨文件调用消解和 Spring 推导。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-16T16:07:57Z</CreatedAt>
+    <UpdatedAt>2026-07-16T16:50:13Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/" />
+    <MaterialBundle role="output" name="semantic-parsing" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.SemanticParsing/" />
+    <MaterialBundle role="output" name="indexing" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Indexing/" />
+  </Ports>
+  <TaskSpace id="space_add-dotnet-llm-wiki-java-treesitter-baseline" name="add-dotnet-llm-wiki-java-treesitter-baseline" version="1">
+    <Description>Grammar and routing, Java extractor, index integration and regression.</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="Java grammar 与语言路由" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="接入 tree-sitter-java native grammar" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T1.1.1" name="编写 grammar 加载、ABI、语言选择与降级测试" status="DONE" order="0" />
+              <Task id="T1.1.2" name="实现构建脚本、native binding、打包和语言路由" status="DONE" order="1" />
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T1.1-AC1" checked="true">`.java` 默认入图并标记 java；native grammar 可加载且 ABI gate 生效</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="Java extractor" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="实现 Java 符号、结构边和调用站点提取" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T2.1.1" name="编写固定 Java 样例与 query/extractor 断言" status="DONE" order="0" />
+              <Task id="T2.1.2" name="实现 JavaExtractor 并接入 native backend" status="DONE" order="1" />
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T2.1-AC1" checked="true">Java declaration/structure/call-site fixtures 全部通过并携带稳定 identity/evidence</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="索引集成与回归" status="DONE" order="2">
+        <SubNodes>
+          <Task id="T3.1" name="集成 RepositoryIndexer 并完成多语言回归" status="DONE" order="0" priority="P0">
+            <SubNodes>
+              <Task id="T3.1.1" name="编写 Java repo batch 与 fallback 集成测试" status="DONE" order="0" />
+              <Task id="T3.1.2" name="实现 index integration 并运行既有测试" status="DONE" order="1" />
+            </SubNodes>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T3.1-AC1" checked="true">Java batch 有 symbols/relations；C#/TS/JS 行为不回归</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+</Track>

@@ -21,17 +21,17 @@ test.describe.serial('governance integrity tab (existential rules)', () => {
     await expect(page.getByTestId('governance-tab-integrity')).toBeVisible();
     await page.getByTestId('governance-tab-integrity').click();
 
-    // Seed the demo: rule + orphan assets.
+    // Seed the demo: rule + unowned resources.
     await expect(page.getByTestId('integrity-seed')).toBeVisible();
     await page.getByTestId('integrity-seed').click();
     await waitForStatusContains(page, 'integrity-status', /已初始化/, 60_000);
-    await expect(page.getByTestId('integrity-rules')).toContainText('asset_must_have_owner');
+    await expect(page.getByTestId('integrity-rules')).toContainText('resource_must_have_owner');
 
-    // Detect violations: the two orphan assets are listed.
+    // Detect violations: the two unowned resources are listed.
     await page.getByTestId('integrity-check').click();
     await waitForStatusContains(page, 'integrity-status', /2 条违例/, 60_000);
-    await expect(page.getByTestId('integrity-violations')).toContainText('a:orphan-1');
-    await expect(page.getByTestId('integrity-violations')).toContainText('a:orphan-2');
+    await expect(page.getByTestId('integrity-violations')).toContainText('r:unowned-1');
+    await expect(page.getByTestId('integrity-violations')).toContainText('r:unowned-2');
 
     // One-click chase: Skolem entities created, violations cleared.
     await page.getByTestId('integrity-apply').click();

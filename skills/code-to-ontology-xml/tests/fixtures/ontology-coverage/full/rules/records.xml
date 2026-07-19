@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RuleModule id="ExampleCatalog.Rules.Records">
+  <Rules>
+    <Rule id="ExampleCatalog.Rule.RecordNameRequired" scope="ExampleCatalog.Record" kind="Conditional">
+      <Statement>Record names are required.</Statement>
+      <Require><PropertyPresent property="name" /></Require>
+      <Violation code="RECORD_NAME_REQUIRED" message="Record name is required." />
+      <EvidenceRefs><EvidenceRef ref="backend:record-name-rule" /></EvidenceRefs>
+    </Rule>
+  </Rules>
+</RuleModule>

@@ -11,7 +11,7 @@ public static class DemoCatalog
         BuildProcurement(),
         BuildHr(),
         BuildCrm(),
-        BuildItAsset(),
+        BuildResourceGraph(),
         BuildApprovalFlow(),
         BuildOrgTimeline()
     ];
@@ -96,20 +96,20 @@ public static class DemoCatalog
             Risk("Opportunity", "amount", 1000));
     }
 
-    private static DemoDefinition BuildItAsset()
+    private static DemoDefinition BuildResourceGraph()
     {
-        var types = new[] { new DemoTypeDef("Asset"), new DemoTypeDef("Server", ParentType: "Asset"), new DemoTypeDef("Laptop", ParentType: "Asset"), new DemoTypeDef("Vehicle", ParentType: "Asset") };
-        var attrs = Attrs(A("Asset", "asset_tag", "String"), A("Server", "ram_gb", "Number"), A("Laptop", "owner", "String"), A("Vehicle", "mileage", "Number"));
-        var rels = Rels(R("depends_on", "Server", "Server"), R("located_in", "Asset", "Asset"), R("assigned_laptop", "Employee", "Laptop"));
+        var types = new[] { new DemoTypeDef("Resource"), new DemoTypeDef("ExecutableResource", ParentType: "Resource"), new DemoTypeDef("ApiService", ParentType: "ExecutableResource"), new DemoTypeDef("Worker", ParentType: "ExecutableResource"), new DemoTypeDef("Dataset", ParentType: "Resource") };
+        var attrs = Attrs(A("Resource", "resource_key", "String"), A("ApiService", "endpoint_count", "Number"), A("Worker", "throughput", "Number"), A("Dataset", "size_mb", "Number"));
+        var rels = Rels(R("depends_on", "ExecutableResource", "ExecutableResource"), R("contained_in", "Resource", "Resource"), R("produces", "ExecutableResource", "Dataset"));
         var batch = Batch(
-            [E("srv:web01", "Server", "Web Server 01"), E("srv:db01", "Server", "DB Server 01"), E("srv:cache01", "Server", "Cache Server 01"), E("lap:t01", "Laptop", "ThinkPad T14 #001"), E("lap:m01", "Laptop", "MacBook Pro #001"), E("veh:car01", "Vehicle", "Fleet Car A"), E("dc:bj", "Asset", "Beijing DC")],
-            [P("srv:web01", "asset_tag", "AST-SRV-001"), P("srv:web01", "ram_gb", 64), P("srv:db01", "asset_tag", "AST-SRV-002"), P("srv:db01", "ram_gb", 256), P("srv:cache01", "asset_tag", "AST-SRV-003"), P("srv:cache01", "ram_gb", 128), P("lap:t01", "asset_tag", "AST-LAP-001"), P("lap:t01", "owner", "Alice"), P("veh:car01", "asset_tag", "AST-VEH-001"), P("veh:car01", "mileage", 41000)],
-            [L("srv:web01", "depends_on", "srv:db01"), L("srv:web01", "depends_on", "srv:cache01"), L("srv:web01", "located_in", "dc:bj"), L("srv:db01", "located_in", "dc:bj"), L("srv:cache01", "located_in", "dc:bj"), L("lap:t01", "located_in", "dc:bj")]);
-        return Demo("it-asset", "IT资产管理（继承）", types, attrs, rels, batch,
-            TablePlan("dslQuery", "多态资产列表", "Asset", "asset_tag", null),
-            Impact("srv:web01", ["depends_on", "located_in"], "outgoing"),
-            Tree("dc:bj", ["located_in", "assigned_laptop"]),
-            Risk("Server", "ram_gb", 10));
+            [E("api:gateway", "ApiService", "Gateway API"), E("api:catalog", "ApiService", "Catalog API"), E("worker:indexer", "Worker", "Index Builder"), E("data:catalog", "Dataset", "Catalog Dataset"), E("data:index", "Dataset", "Search Index"), E("scope:platform", "Resource", "Platform Scope")],
+            [P("api:gateway", "resource_key", "gateway-api"), P("api:gateway", "endpoint_count", 18), P("api:catalog", "resource_key", "catalog-api"), P("api:catalog", "endpoint_count", 11), P("worker:indexer", "resource_key", "index-builder"), P("worker:indexer", "throughput", 1200), P("data:catalog", "resource_key", "catalog-data"), P("data:catalog", "size_mb", 640), P("data:index", "resource_key", "search-index"), P("data:index", "size_mb", 380)],
+            [L("api:gateway", "depends_on", "api:catalog"), L("api:catalog", "produces", "data:catalog"), L("worker:indexer", "produces", "data:index"), L("api:gateway", "contained_in", "scope:platform"), L("api:catalog", "contained_in", "scope:platform"), L("worker:indexer", "contained_in", "scope:platform"), L("data:catalog", "contained_in", "scope:platform"), L("data:index", "contained_in", "scope:platform")]);
+        return Demo("resource-graph", "通用资源图（继承）", types, attrs, rels, batch,
+            TablePlan("dslQuery", "多态资源列表", "Resource", "resource_key", null),
+            Impact("api:gateway", ["depends_on", "produces"], "outgoing"),
+            Tree("scope:platform", ["contained_in"]),
+            Risk("Dataset", "size_mb", 10));
     }
 
     private static DemoDefinition BuildApprovalFlow()

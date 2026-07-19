@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Mission id="converge-dotnet-om-bun-capability-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>让 cozo-lib-dotnet 的对象与本体系统覆盖 cozo-lib-bun/Node.js 参考实现的可观察能力；不明显的语义分歧以及保留更成熟 C# 设计的建议，均由用户裁决。</Goal>
+    <Description>以两轮分析得到的 14 项 gap 为证据基线，分行为运行时与可移植性、可选脚本运行时、权限治理、schema 演化、存在规则、公共 API surface 和跨实现验证等 tracks，逐步收敛 C# 与 Bun/Node.js OM 能力。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>deep</QuestionSeverity>
+    <Revision>34</Revision>
+    <CreatedAt>2026-07-16T16:31:58Z</CreatedAt>
+    <UpdatedAt>2026-07-18T14:11:59Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="mission">
+    <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/"/>
+    <MaterialBundle role="state" name="decisions" domain="mission" path="vfs://./decisions/"/>
+    <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/"/>
+    <MaterialBundle role="input" name="gap-evidence" domain="mission" path="vfs://./evidence.md"/>
+    <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="input" name="bun-om" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="output" name="dotnet-om" domain="source" path="vfs://@/cozo-lib-dotnet/src/Om.Core/"/>
+    <MaterialBundle role="output" name="dotnet-tests" domain="source" path="vfs://@/cozo-lib-dotnet/tests/"/>
+    <MaterialBundle role="output" name="behaviors" domain="codument" path="vfs://@/codument/behaviors/"/>
+  </Ports>
+  <TaskSpace id="space_converge-dotnet-om-bun-capability-parity" name="converge-dotnet-om-bun-capability-parity" version="1" cdt:child-mode="dag">
+    <Description>Evidence-driven convergence of the .NET OM capability surface with the Bun/Node.js reference, with explicit human decision gates for ambiguous divergences.</Description>
+    <SubNodes>
+      <TaskGroup id="G1" name="刷新证据与能力契约" status="DONE" order="0">
+        <Description>以 evidence.md 的 G01-G14 为初始事实，重新核对当前源码、测试和历史行为文档，防止实现启动时证据漂移。</Description>
+        <SubNodes>
+          <Task id="G1-T1" name="刷新 14 项 gap 的源码与测试证据" status="DONE" order="0"/>
+          <Task id="G1-T2" name="把每项 gap 分类为 parity、C# 保留或待人工决策" status="DONE" order="1"/>
+          <Task id="G1-T3" name="形成跨 Bun 与 C# 的可观察行为验收矩阵" status="DONE" order="2"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G2" name="人工决策门" status="DONE" order="1">
+        <Description>D0-D5 及 D3a/D3b 已由用户裁决并写入 decisions；后续如新证据改变选择后果，必须重新打开对应决策。</Description>
+        <SubNodes>
+          <Task id="G2-T0" name="确认采用可观察语义对等并保留惯用 C# API 形态" status="DONE" order="0"/>
+          <Task id="G2-T1" name="确认权限硬切 Bun 严格 path witness 与完整 ABAC" status="DONE" order="1"/>
+          <Task id="G2-T2" name="确认 additive V2 schema migration rollback 契约" status="DONE" order="2"/>
+          <Task id="G2-T3" name="确认采用 Om.Core 外部的进程内 Jint runtime" status="DONE" order="3"/>
+          <Task id="G2-T4" name="裁决 manifest 规范格式与 unresolved callback 导入策略" status="DONE" order="4"/>
+          <Task id="G2-T5" name="确认保留全部五项 C# 成熟设计" status="DONE" order="5"/>
+          <Task id="G2-T6" name="确认用 Keep Set Clear patch 表达父类型更新" status="DONE" order="6"/>
+          <Task id="G2-T7" name="冻结全部决策并据此更新下游验收" status="DONE" order="7"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G3" name="行为运行时核心对等" status="DONE" order="2">
+        <Description>补齐 CallParentActionAsync、action/mutation 继承、父子 interceptor 稳定顺序和行为定义 owner/scope/phase guardrails；按 D4 保留 C# 事务语义与显式 registry。公共 validation facade 归 G9。</Description>
+        <SubNodes>
+          <Task id="G3-T1" name="创建并执行 behavior runtime parity track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="sync-dotnet-om-behavior-runtime-parity"/>
+          </Task>
+          <Task id="G3-T2" name="验证继承、override 调父、interceptor 顺序与回滚" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G4" name="行为定义可移植性" status="DONE" order="3">
+        <Description>按 D3a=A 以 JSON 为 manifest 规范格式并提供 YAML 适配；按 D3b=A 允许缺失 callback 的 metadata 以 inactive/unresolved 状态导入，执行 fail-closed，并提供 requireReady 严格导入模式。</Description>
+        <SubNodes>
+          <Task id="G4-T1" name="创建并执行 behavior portability track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-om-behavior-portability"/>
+          </Task>
+          <Task id="G4-T2" name="验证 round-trip、缺失 callback 诊断与版本兼容" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G5" name="可选脚本运行时" status="DONE" order="4">
+        <Description>按 D3=C 与 D4，在独立 package/capsule 中接入进程内 Jint runtime，不让 Om.Core 直接依赖 JavaScript 引擎。</Description>
+        <SubNodes>
+          <Task id="G5-T1" name="创建并执行 optional script runtime track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-dotnet-om-optional-script-runtime"/>
+          </Task>
+          <Task id="G5-T2" name="验证脚本隔离、超时、错误映射与 manifest 绑定" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G6" name="权限治理对等" status="DONE" order="5">
+        <Description>按 D1=A 硬切到 Bun 的严格 permission path witness 与完整 ABAC，补齐 as-of、字段 hide 与可解释决策，不保留 legacy 权限模式。</Description>
+        <SubNodes>
+          <Task id="G6-T1" name="创建并执行 permission governance parity track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="sync-dotnet-om-permission-governance-parity"/>
+          </Task>
+          <Task id="G6-T2" name="验证 fail-closed、path witness、ABAC comparators 和字段级结果" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G7" name="Schema 演化可靠性对等" status="DONE" order="6">
+        <Description>按 D2=B 增加原子、strict-by-default、结构化结果的 V2 API，保留 obsolete 兼容 wrapper；初始化默认只检测 legacy schema 并要求显式迁移，可选自动升级；按 D4 保留 C# 快照覆盖面。</Description>
+        <SubNodes>
+          <Task id="G7-T1" name="创建并执行 schema evolution parity track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="harden-dotnet-om-schema-evolution-parity"/>
+          </Task>
+          <Task id="G7-T2" name="验证升级、preflight、rollback atomicity 与结构化 diff" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G8" name="存在规则治理对等" status="DONE" order="7">
+        <Description>补齐 existential rule 定义时操作符校验、运行时 alias 重解析和未初始化时的安全查询行为。</Description>
+        <SubNodes>
+          <Task id="G8-T1" name="创建并执行 existential governance parity track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="sync-dotnet-om-existential-governance-parity"/>
+          </Task>
+          <Task id="G8-T2" name="验证 rename alias、where operators 与 no-init 查询" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G9" name="公共 API surface 对等" status="DONE" order="8">
+        <Description>按 D5=C 用 Keep/Set/Clear patch/options 表达 parent 更新并逐步废弃歧义重载；补齐 traverse、公开 value type inference 和 ValidateConstraints facade，按 D0/D4 保持惯用 C# API 形态。</Description>
+        <SubNodes>
+          <Task id="G9-T1" name="创建并执行 public surface parity track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="complete-dotnet-om-public-surface-parity"/>
+          </Task>
+          <Task id="G9-T2" name="验证 API 可发现性、兼容重载与行为等价" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY" name="跨实现验证与收口" status="DONE" order="9">
+        <Description>在两侧补充同构用例，验证可观察行为一致，列明保留的语言惯用差异和用户决策后的有意分歧。</Description>
+        <SubNodes>
+          <Task id="VERIFY-T1" name="创建并执行 final capability parity verification track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-dotnet-om-bun-capability-parity"/>
+          </Task>
+          <Task id="VERIFY-T2" name="生成 G01-G14 证据闭环与 archive-ready 报告" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G10" name="第二轮事实刷新与决策冻结" status="DONE" order="10">
+        <Description>以 G01-G14 完成后的反向差异审计为触发，冻结 runtime 实例级 registry 生命周期、跨运行时 behavior portability wire contract、readiness 投影和源码不入 schema 的边界。</Description>
+        <SubNodes>
+          <Task id="G10-T1" name="确认 registry owner 为 runtime instance" status="DONE" order="0"/>
+          <Task id="G10-T2" name="确认 Bun 采用完整 catalog manifest binding readiness 契约" status="DONE" order="1"/>
+          <Task id="G10-T3" name="确认 DEPA 事实源与 runtime carrier 边界" status="DONE" order="2"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G11" name="统一 Registry 生命周期" status="DONE" order="11">
+        <Description>在 Bun 引入 runtime-instance callback registry 与 legacy compatibility adapter，在 .NET 暴露实例级清空 API；clear 只影响进程内 callback，不删除持久化定义与 binding identity。</Description>
+        <SubNodes>
+          <Task id="G11-T1" name="创建并执行 runtime registry lifecycle track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="unify-om-runtime-registry-lifecycle"/>
+          </Task>
+          <Task id="G11-T2" name="验证实例隔离、clear、legacy adapter 与并发 publication" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G12" name="反向增强 Bun 行为可移植性" status="DONE" order="12">
+        <Description>让 Bun 采用 C# V1 canonical JSON behavior manifest、binding identity 与 ready/unresolved 投影；函数体和脚本源码保持进程本地。</Description>
+        <SubNodes>
+          <Task id="G12-T1" name="创建并执行 Bun behavior portability track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-bun-om-behavior-portability"/>
+          </Task>
+          <Task id="G12-T2" name="验证 manifest round-trip、restart unresolved、fail-closed 与原子导入" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="G13" name="Bun 行为 Schema Versioning" status="DONE" order="13">
+        <Description>将五类 behavior definition 与 om_behavior_binding 纳入 Bun schema snapshot、keyed diff 与 rollback，并为缺少 behavior section 的 legacy snapshot 冻结显式兼容策略。</Description>
+        <SubNodes>
+          <Task id="G13-T1" name="裁决 legacy snapshot 缺失 behavior section 的回滚策略" status="DONE" order="0"/>
+          <Task id="G13-T2" name="创建并执行 Bun behavior schema versioning track" status="DONE" order="1">
+            <cdt:TrackLink state="bound" id="extend-bun-om-behavior-schema-versioning"/>
+          </Task>
+          <Task id="G13-T3" name="验证 snapshot diff rollback 与 readiness 重算" status="DONE" order="2"/>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="VERIFY2" name="第二轮跨实现验证与收口" status="DONE" order="14">
+        <Description>运行 Bun 与 .NET 配对场景和完整测试，验证 registry 生命周期、wire contract、readiness、snapshot/diff/rollback 与兼容入口，生成 G15-G17 证据矩阵。</Description>
+        <SubNodes>
+          <Task id="VERIFY2-T1" name="创建并执行 runtime portability verification track" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="verify-om-runtime-portability-parity"/>
+          </Task>
+          <Task id="VERIFY2-T2" name="生成 G15-G17 证据闭环并重新执行 mission completed gate" status="DONE" order="1"/>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_converge-dotnet-om-bun-capability-parity">
+      <Node id="G2"><After ref="G1"/></Node>
+      <Node id="G3"><After ref="G1"/><After ref="G2"/></Node>
+      <Node id="G4"><After ref="G2"/><After ref="G3"/></Node>
+      <Node id="G5"><After ref="G2"/><After ref="G4"/></Node>
+      <Node id="G6"><After ref="G2"/></Node>
+      <Node id="G7"><After ref="G2"/></Node>
+      <Node id="G8"><After ref="G1"/></Node>
+      <Node id="G9"><After ref="G1"/><After ref="G2"/></Node>
+      <Node id="VERIFY">
+        <After ref="G3"/>
+        <After ref="G4"/>
+        <After ref="G5"/>
+        <After ref="G6"/>
+        <After ref="G7"/>
+        <After ref="G8"/>
+        <After ref="G9"/>
+      </Node>
+      <Node id="G10"><After ref="VERIFY"/></Node>
+      <Node id="G11"><After ref="G10"/></Node>
+      <Node id="G12"><After ref="G11"/></Node>
+      <Node id="G13"><After ref="G12"/></Node>
+      <Node id="VERIFY2"><After ref="G11"/><After ref="G12"/><After ref="G13"/></Node>
+    </Dag>
+  </Schedule>
+  <Hooks>
+    <Hook on="mission:after-node">
+      <cdt:MissionReconcile max-rounds="3" on-drift="replan-or-block"/>
+    </Hook>
+  </Hooks>
+</Mission>

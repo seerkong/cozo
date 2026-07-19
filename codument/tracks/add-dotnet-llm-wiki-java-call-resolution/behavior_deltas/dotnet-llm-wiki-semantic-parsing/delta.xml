@@ -1,0 +1,13 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/java-call-resolution">
+    <requirement id="java-call-resolution">
+      <statement>Java 调用站点 SHALL 复用统一仓内调用消解器，并以 Java typed binding、package/import scope 与继承成员语义产出分级 CALLS/ACCESSES/METHOD_OVERRIDES/METHOD_IMPLEMENTS 事实；无法合法消解时 SHALL 保持无边并记录诊断。</statement>
+      <suite id="calls" name="Java 调用消解">
+        <case id="typed-receiver"><given>Java 字段、参数或局部变量具有仓内声明类型</given><when>通过该 receiver 调用方法或访问字段</when><then>目标 SHALL 以 binding evidence 消解到对应成员</then></case>
+        <case id="import-disambiguation"><given>不同 package 存在同名目标且当前文件显式或 wildcard/static import 其中之一</given><when>调用裸名或静态成员</when><then>import/package scope SHALL 优先唯一化合法目标</then></case>
+        <case id="super-and-derived"><given>Java 子类通过 super 调用基类成员并覆盖/实现同名同参方法</given><when>索引仓库</when><then>SHALL 产出继承成员 CALLS 与 METHOD_OVERRIDES/METHOD_IMPLEMENTS 事实</then></case>
+        <case id="unresolved-safe"><given>Java 调用仅命中仓外或非法候选</given><when>消解</when><then>SHALL 不乱连边并计入 unresolved 诊断</then></case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

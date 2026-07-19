@@ -84,7 +84,7 @@ function getDefaultGovernanceSeedTables() {
       columns: ['typeName', 'description', 'parent_type', 'mixins'],
       rows: [
         { typeName: 'User', description: 'User', parent_type: '', mixins: '' },
-        { typeName: 'Asset', description: 'Asset', parent_type: '', mixins: '' },
+        { typeName: 'Resource', description: 'Resource', parent_type: '', mixins: '' },
       ],
     },
     {
@@ -98,7 +98,7 @@ function getDefaultGovernanceSeedTables() {
       name: TABLE_NAMES.relations,
       columns: ['relName', 'fromType', 'toType', 'directed', 'description'],
       rows: [
-        { relName: 'owns', fromType: 'User', toType: 'Asset', directed: true, description: 'User owns Asset' },
+        { relName: 'owns', fromType: 'User', toType: 'Resource', directed: true, description: 'User owns Resource' },
       ],
     },
     {
@@ -106,7 +106,7 @@ function getDefaultGovernanceSeedTables() {
       columns: ['id', 'typeName', 'label'],
       rows: [
         { id: 'u:1', typeName: 'User', label: 'User 1' },
-        { id: 'a:1', typeName: 'Asset', label: 'Asset 1' },
+        { id: 'r:1', typeName: 'Resource', label: 'Resource 1' },
       ],
     },
     {
@@ -120,7 +120,7 @@ function getDefaultGovernanceSeedTables() {
       name: TABLE_NAMES.edges,
       columns: ['fromId', 'relName', 'toId', 'props'],
       rows: [
-        { fromId: 'u:1', relName: 'owns', toId: 'a:1', props: '{}' },
+        { fromId: 'u:1', relName: 'owns', toId: 'r:1', props: '{}' },
       ],
     },
     {
@@ -138,7 +138,7 @@ function getDefaultGovernanceSeedTables() {
           policy_id: 'pol:demo:allow-admin-owner',
           effect: 'allow',
           action: 'read',
-          resource_type: 'Asset',
+          resource_type: 'Resource',
           enabled: true,
           description: 'Allow read when owns + admin',
         },
@@ -338,26 +338,26 @@ async function seedGovernanceDemo(runner) {
   await seedGovernanceFromTables(runner, tables);
 }
 
-const INTEGRITY_DEMO_RULE = 'asset_must_have_owner';
+const INTEGRITY_DEMO_RULE = 'resource_must_have_owner';
 
 // Seeds a FRESH db for the integrity demo: governance ontology + the demo
-// rule + orphan assets. Callers swap the previous integrityDb for the result,
+// rule + unowned resources. Callers swap the previous integrityDb for the result,
 // so "初始化演示数据" is a deterministic reset.
 async function seedIntegrityDemo(runner) {
   await om.initSchema(runner);
   await seedGovernanceFromTables(runner);
 
   await om.defineExistentialRule(runner, INTEGRITY_DEMO_RULE, {
-    forEach: { type: 'Asset' },
+    forEach: { type: 'Resource' },
     exists: { rel: 'owns', direction: 'in', toType: 'User' },
     mode: 'materialize',
-    message: '每个资产必须有归属用户',
+    message: '每个资源必须有归属用户',
     materialize: { labelTemplate: 'auto owner for {fromId}' },
   });
 
-  // Orphan assets so the demo has violations to detect and materialize.
-  await om.upsertEntity(runner, 'a:orphan-1', 'Asset', 'Orphan Asset 1');
-  await om.upsertEntity(runner, 'a:orphan-2', 'Asset', 'Orphan Asset 2');
+  // Unowned resources so the demo has violations to detect and materialize.
+  await om.upsertEntity(runner, 'r:unowned-1', 'Resource', 'Unowned Resource 1');
+  await om.upsertEntity(runner, 'r:unowned-2', 'Resource', 'Unowned Resource 2');
 
   return om.listExistentialRules(runner);
 }
@@ -589,7 +589,7 @@ function createApp(options) {
     // GET /api/governance/seed-template
     .get('/api/governance/seed-template', async () => {
       const tables = getDefaultGovernanceSeedTables();
-      return { ok: true, tables, subjectId: 'u:1', resourceId: 'a:1', action: 'read' };
+      return { ok: true, tables, subjectId: 'u:1', resourceId: 'r:1', action: 'read' };
     })
 
     // POST /api/governance/seed (optional { tables })
@@ -610,7 +610,7 @@ function createApp(options) {
         try { governanceDb.close(); } catch (_) { /* ignore */ }
         governanceDb = nextDb;
 
-        return { ok: true, subjectId: 'u:1', resourceId: 'a:1', action: 'read' };
+        return { ok: true, subjectId: 'u:1', resourceId: 'r:1', action: 'read' };
       });
     })
 
@@ -636,7 +636,7 @@ function createApp(options) {
     })
 
     // POST /api/governance/integrity/seed-demo — deterministic reset:
-    // fresh db with ontology + demo rule + orphan assets.
+    // fresh db with ontology + demo rule + unowned resources.
     .post('/api/governance/integrity/seed-demo', async () => {
       return withOmRegistryLock(async () => {
         const nextDb = new CozoDb();

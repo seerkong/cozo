@@ -173,7 +173,7 @@ track 完成后更新行为登记表 `codument/behaviors/`（旧称 spec registr
 
 ## 5.0 条件提升（decision / memory）
 
-- **承重决策 → `decision://`**：优先读取 `decisions/*.md` 中明确标记为 durable / 长期项目决策的单文件决策（旧 track 可兼容读取 `decisions.md`）。把 durable 决策提升到 `codument/decisions/YYYY-MM/YYYY-MM-DD-HHmm-slug/decision.md`，并用 `decision://<slug>` 作长期引用；普通过程决策只保留在 archive。触发条件：一个原本一次性的取舍变成"以后都按这个来"的承重决策（见 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) §5）。
+- **承重决策 → `decision://`**：优先读取根级 `decisions.xnl` 中 `durable_candidate = true` 且 `status = "accepted"|"resolved"` 的决策；历史 track 兼容读取 `decisions/*.md` 中明确标记为 durable / 长期项目决策的单文件决策，以及旧根级 `decisions.md`。把 durable 决策提升到 `codument/decisions/YYYY-MM/YYYY-MM-DD-HHmm-slug/decision.md`，并用 `decision://<slug>` 作长期引用；普通过程决策只保留在 archive。触发条件：一个原本一次性的取舍变成"以后都按这个来"的承重决策（见 [knowledge-tiers.md](@codument/std/attractors/knowledge-tiers.md) §5）。
 - **长期记忆 → `memory://`**：**仅当** `config/attractor-profiles.xml` 的 `memory` profile `enabled=true` **且** track 中显式存在 `memory/{lessons,incidents,patterns,summaries}/*.md` 候选时，才提升 `memory://` 内容。**不要**从 proposal 或普通日志自动合成 memory。
 
 > `docs` profile `enabled` 本身**不**代表复制 durable decision 记录，也**不**触发隐式 docs/knowledge sync；旧 `feature.json` 的 `knowledgeSync.targets` 应由 `upgrade-workspace`/`migrate` 迁移为 docs profile + artifact 规则的目标。
@@ -188,7 +188,7 @@ track 完成后更新行为登记表 `codument/behaviors/`（旧称 spec registr
 2. 节点级 3-way 合并（临时引擎，不持久化平行 vcs）：复用 `xnl-vfs` `xnlFileHandler.merge` / `xnl-core` `diffNodes`+`applyMutations`（`metadataIdMode:"identity"`，按 `#id` 命中）。
 3. 冲突按 `config/modeling.xml` 的 `<MergePolicy>` 处置：默认保守（`human`=issues-first 报告并暂停，不静默覆盖），可配 `ours|theirs|base`。
 4. 合并结果写回 `codument/modeling/` 工作树（宿主 git 提交）；跑 `codument modeling lint` 给分形拆分建议。
-5. 把 track 设计方案按类目回写 `docs/impl/`（overview/howto/rules/reference/troubleshooting，见 docs-engineering-fractal）。
+5. 把 track 设计方案按类目回写 `codument/engineering/`（overview/howto/rules/reference/troubleshooting，见 docs-engineering-fractal）。
 
 > 详细规程见 `std/spec/modeling-delta.md`。modeling 是**结构真源**层；与 behaviors（行为契约）互不重复，modeling 节点引用 `behavior://`。
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code To Ontology XML"
+  short_description: "Read code and author evidence-backed ontologies"
+  default_prompt: "Use $code-to-ontology-xml to read these revision-pinned repositories, trace business flows, and author a strictly validated evidence-backed ontology XML bundle."

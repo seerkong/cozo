@@ -1,6 +1,9 @@
 {
   "tools": [
-    "claude"
+    "codex",
+    "claude",
+    "eidolon",
+    "sparrow"
   ],
-  "updated_at": "2026-07-04T16:57:13.210Z"
+  "updated_at": "2026-07-17T16:43:34.414Z"
 }

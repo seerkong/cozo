@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cozo.DotNet.LlmWiki.Core;
@@ -17,9 +19,11 @@ public sealed class LlmWikiToolRunner(CozoOm om)
 {
     private readonly RepositoryIndexer _indexer = new();
     private readonly TreeSitterCliParser _parser = new();
+    private readonly ParserBackendSelector _parserBackendSelector = ParserBackendSelector.CreateDefault();
     private readonly CozoVectorSearchService _vectorSearch = new();
     private readonly WikiCompiler _wiki = new();
     private readonly LlmWikiOverviewGraphBuilder _overviewGraph = new();
+    private readonly BusinessOntologyInvestigationService _investigation = new(om, new BusinessOntologyStore(om));
 
     public static JsonArray ToolsJson() =>
     [
@@ -61,6 +65,34 @@ public sealed class LlmWikiToolRunner(CozoOm om)
             ["rrfK"] = StringSchema("Reciprocal rank fusion K constant. Default: 60.")
         }, ["query"]),
         Tool("overview_graph", "Load a bounded repository CodeKnowledge overview graph.", new JsonObject { ["categories"] = StringArraySchema("Graph categories: code and/or docs."), ["maxNodes"] = StringSchema("Maximum graph nodes. Default: 300."), ["maxEdges"] = StringSchema("Maximum graph edges. Default: 600.") }),
+        Tool("ontology_investigation_overview", "Read a bounded business-ontology investigation overview. This is read-only and never exposes raw database queries.", new JsonObject { ["ontologyId"] = StringSchema("Optional dotted ontology id whose active generation is included.") }),
+        Tool("find_business_terms", "Find a business term across indexed semantic claims, code symbols, and an optional existing ontology. Results are stable, paginated, evidence-linked summaries.", new JsonObject { ["term"] = StringSchema("Business term to investigate."), ["ontologyId"] = StringSchema("Optional dotted ontology id."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["term"]),
+        Tool("list_use_case_slices", "List bounded business use-case slices rooted at indexed entry points for one existing ontology generation.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["ontologyId"]),
+        Tool("get_use_case_slice", "Read one bounded business use-case slice by its stable slice id.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["sliceId"] = StringSchema("Stable use-case slice id.") }, ["ontologyId", "sliceId"]),
+        Tool("find_semantic_patterns", "Find bounded indexed semantic patterns for one supported claim kind. It accepts no arbitrary database query text.", new JsonObject { ["kind"] = StringSchema("One of typed_reference, validation_constraint, persistence_constraint, state_field, state_value, state_assignment, transaction_scope, route_binding, business_guard."), ["term"] = StringSchema("Optional business-term filter."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["kind"]),
+        Tool("get_semantic_evidence", "Read bounded source excerpts only by existing indexed semantic evidence ids; arbitrary paths are not accepted.", new JsonObject { ["evidenceIds"] = StringArraySchema("One to 24 indexed semantic claim ids.") }, ["evidenceIds"]),
+        Tool("inspect_ontology_subject", "Inspect one existing ontology concept, relation, rule, lifecycle, or candidate with status, mappings, evidence ids, and reviews.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["subjectKind"] = StringSchema("concept, relation, rule, lifecycle, or candidate."), ["subjectId"] = StringSchema("Ontology subject id.") }, ["ontologyId", "subjectKind", "subjectId"]),
+        Tool("run_business_ontology_agent", "Run the bounded agentic business-ontology reconstruction loop through the fixed investigation tools and isolated analysis workspace. The operation accepts only ontologyId, generationId, workItem, and smaller optional budget caps; LLM provider configuration comes from the environment.", new JsonObject
+        {
+            ["ontologyId"] = StringSchema("Dotted ontology id."),
+            ["generationId"] = StringSchema("Active ontology generation id."),
+            ["workItem"] = StringSchema("Bounded business work item to investigate."),
+            ["maxTurns"] = StringSchema("Optional smaller turn cap; default 12."),
+            ["maxQueries"] = StringSchema("Optional smaller query cap; default 8."),
+            ["maxRows"] = StringSchema("Optional smaller row cap; default 200."),
+            ["maxSourceBytes"] = StringSchema("Optional smaller source-byte cap; default 32768."),
+            ["maxInputTokens"] = StringSchema("Optional smaller input-token cap; default 48000."),
+            ["maxOutputTokens"] = StringSchema("Optional smaller output-token cap; default 12000."),
+            ["maxWallClockSeconds"] = StringSchema("Optional smaller wall-clock cap in seconds; default 180."),
+        }, ["ontologyId", "generationId", "workItem"]),
+        Tool("export_business_ontology_candidates", "Publish one existing isolated analysis run as a validated, hypothesis-only candidate ontology bundle with diagnosis and advisory review artifacts. Output root, validator, evidence resolution, and publication paths are server-configured; this operation never accepts SQL, prompts, paths, provider configuration, records, or review decisions.", new JsonObject
+        {
+            ["ontologyId"] = StringSchema("Dotted ontology id."),
+            ["generationId"] = StringSchema("Ontology generation id."),
+            ["analysisRunId"] = StringSchema("Existing isolated analysis run id for this ontology generation."),
+            ["version"] = StringSchema("Optional bounded semantic version; default 0.0.0-hypothesis."),
+            ["bundleId"] = StringSchema("Optional safe bundle directory token; otherwise derived from the analysis run."),
+        }, ["ontologyId", "generationId", "analysisRunId"]),
         Tool("query_named", "Execute a registered CodeKnowledge NamedQuery.", new JsonObject { ["name"] = StringSchema("NamedQuery name"), ["parametersJson"] = StringSchema("JSON object parameters") }, ["name"]),
         Tool("trace", "Trace the shortest call path (CALLS edges) between two symbols. Inputs are symbol ids (symbol: prefix) or exact symbol names; an ambiguous name returns found=false with a bounded candidate list (id/name/kind/fileId/line) instead of guessing. Hops carry clickable path:line locations and per-edge confidence.", new JsonObject
         {
@@ -108,7 +140,7 @@ public sealed class LlmWikiToolRunner(CozoOm om)
             "impact_of_change" => await ImpactOfChangeToolAsync(args, cancellationToken),
             "docs_for_code" => await om.DocsForCodeAsync(Required(args, "targetId"), cancellationToken),
             "explain_relation" => await om.ExplainRelationAsync(Required(args, "fromId"), Required(args, "toId"), cancellationToken),
-            "parser_status" => await _parser.GetStatusAsync(cancellationToken),
+            "parser_status" => _parserBackendSelector.DescribeStatus(),
             "parse_file" => await _parser.ParseAsync(new SemanticParseRequest(
                 Required(args, "filePath"),
                 Optional(args, "language"),
@@ -129,6 +161,21 @@ public sealed class LlmWikiToolRunner(CozoOm om)
                 int.TryParse(Optional(args, "maxNodes"), out var maxNodes) ? maxNodes : 300,
                 int.TryParse(Optional(args, "maxEdges"), out var maxEdges) ? maxEdges : 600,
                 CategoriesFromArgs(args)), cancellationToken),
+            "ontology_investigation_overview" => await _investigation.GetOverviewAsync(Optional(args, "ontologyId"), cancellationToken),
+            "find_business_terms" => await _investigation.FindBusinessTermsAsync(
+                Required(args, "term"), Optional(args, "ontologyId"), Optional(args, "cursor"), OptionalPositiveLimit(args, "limit"), cancellationToken),
+            "list_use_case_slices" => await _investigation.ListUseCaseSlicesAsync(
+                Required(args, "ontologyId"), Optional(args, "cursor"), OptionalPositiveLimit(args, "limit"), cancellationToken),
+            "get_use_case_slice" => await _investigation.GetUseCaseSliceAsync(
+                Required(args, "ontologyId"), Required(args, "sliceId"), cancellationToken),
+            "find_semantic_patterns" => await _investigation.FindSemanticPatternsAsync(
+                Required(args, "kind"), Optional(args, "term"), Optional(args, "cursor"), OptionalPositiveLimit(args, "limit"), cancellationToken),
+            "get_semantic_evidence" => await _investigation.GetSemanticEvidenceAsync(
+                StringListFromArgs(args, "evidenceIds") ?? throw new ArgumentException("Missing required argument: evidenceIds"), cancellationToken),
+            "inspect_ontology_subject" => await _investigation.InspectOntologySubjectAsync(
+                Required(args, "ontologyId"), Required(args, "subjectKind"), Required(args, "subjectId"), cancellationToken),
+            "run_business_ontology_agent" => await RunBusinessOntologyAgentAsync(args, cancellationToken),
+            "export_business_ontology_candidates" => await ExportBusinessOntologyCandidatesAsync(args, cancellationToken),
             "query_named" => await QueryNamedAsync(args, cancellationToken),
             "trace" => await TraceAsync(args, cancellationToken),
             "check" => await CheckCyclesAsync(args, cancellationToken),
@@ -726,6 +773,340 @@ public sealed class LlmWikiToolRunner(CozoOm om)
         return await engine.ExecuteNamedAsync(new NamedQueryInput(name, parameters), cancellationToken);
     }
 
+    private async Task<object> RunBusinessOntologyAgentAsync(JsonObject args, CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, [
+            "ontologyId",
+            "generationId",
+            "workItem",
+            "maxTurns",
+            "maxQueries",
+            "maxRows",
+            "maxSourceBytes",
+            "maxInputTokens",
+            "maxOutputTokens",
+            "maxWallClockSeconds",
+        ]);
+        var ontologyId = Required(args, "ontologyId");
+        var generationId = Required(args, "generationId");
+        var workItem = RequiredBoundedWorkItem(args, "workItem");
+        var limits = BudgetLimitsFromArgs(args);
+        var inputDigest = Digest("run_business_ontology_agent_input", new
+        {
+            ontologyId,
+            generationId,
+            workItem,
+            budget = BudgetLimitsSummary(limits),
+        });
+        var startedAt = DateTimeOffset.UtcNow;
+        var runId = "analysis-run:agentic:" + Guid.NewGuid().ToString("N");
+        var store = new BusinessOntologyAnalysisStore(om);
+        var client = LlmClientFactory.FromEnvironment();
+
+        if (!client.IsAvailable)
+        {
+            var unavailableRun = new BusinessOntologyAnalysisRunInput(
+                runId,
+                ontologyId,
+                generationId,
+                "business-ontology-agentic-runner",
+                "unavailable",
+                "agentic business ontology reconstruction: " + workItem,
+                "failed",
+                startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                inputDigest);
+            await store.AppendRunAsync(unavailableRun, cancellationToken);
+            return BusinessOntologyAgentRunSummary(
+                ontologyId,
+                generationId,
+                workItem,
+                runId,
+                BusinessOntologyAgentRunStatuses.Blocked,
+                BusinessOntologyAgentPhases.Explore,
+                limits,
+                null,
+                [],
+                [],
+                [],
+                "unavailable_provider",
+                client.UnavailableReason,
+                null,
+                inputDigest);
+        }
+
+        var runInput = new BusinessOntologyAnalysisRunInput(
+            runId,
+            ontologyId,
+            generationId,
+            "business-ontology-agentic-runner",
+            "environment",
+            "agentic business ontology reconstruction: " + workItem,
+            "running",
+            startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            "",
+            inputDigest);
+        var source = new BusinessOntologyAgentLlmActionSource(client);
+        var result = await new BusinessOntologyAgenticReconstructionService(_investigation)
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                runId,
+                source,
+                limits,
+                startedAt,
+                new BusinessOntologyAgentPersistenceContext(store, runInput),
+                workItem), cancellationToken);
+
+        return BusinessOntologyAgentRunSummary(
+            ontologyId,
+            generationId,
+            workItem,
+            runId,
+            result.Status,
+            result.Phase,
+            limits,
+            result.BudgetState,
+            result.Queries,
+            result.Records,
+            result.Steps,
+            result.RejectionReason,
+            null,
+            source.LastModel,
+            inputDigest,
+            result.BudgetRejection,
+            result.Finish);
+    }
+
+    private async Task<object> ExportBusinessOntologyCandidatesAsync(JsonObject args, CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["ontologyId", "generationId", "analysisRunId", "version", "bundleId"]);
+        var configuration = CandidateExportConfiguration.Resolve();
+        var result = await new BusinessOntologyCandidateExportService(
+            om,
+            configuration.OutputRoot,
+            configuration.BunExecutable,
+            configuration.ValidatorScript)
+            .ExportAsync(new BusinessOntologyCandidateExportRequest(
+                Required(args, "ontologyId"),
+                Required(args, "generationId"),
+                Required(args, "analysisRunId"),
+                Optional(args, "version"),
+                Optional(args, "bundleId")), cancellationToken);
+        return new
+        {
+            schemaVersion = "business-ontology-candidate-export-summary-v1",
+            operation = "export_business_ontology_candidates",
+            result.OntologyId,
+            result.GenerationId,
+            result.AnalysisRunId,
+            result.Version,
+            result.BundleId,
+            published = result.PublishedRelativePath is not null,
+            bundlePath = result.PublishedRelativePath,
+            candidates = new { exported = result.CandidateCount, excluded = result.ExcludedCount },
+            artifacts = new { diagnosisItems = result.DiagnosisItemCount, reviewItems = result.ReviewItemCount },
+            provenance = new { result.InputDigest },
+        };
+    }
+
+    private static object BusinessOntologyAgentRunSummary(
+        string ontologyId,
+        string generationId,
+        string workItem,
+        string runId,
+        string status,
+        string phase,
+        BusinessOntologyAgentBudgetLimits limits,
+        BusinessOntologyAgentBudgetState? state,
+        IReadOnlyList<BusinessOntologyAgentQueryObservation> queries,
+        IReadOnlyList<BusinessOntologyAnalysisRecordInput> records,
+        IReadOnlyList<BusinessOntologyAgentStep> steps,
+        string? rejectionReason,
+        string? providerUnavailableReason,
+        string? model,
+        string inputDigest,
+        BusinessOntologyAgentBudgetRejection? budgetRejection = null,
+        BusinessOntologyAgentFinish? finish = null) => new
+        {
+            schemaVersion = "business-ontology-agent-run-summary-v1",
+            operation = "run_business_ontology_agent",
+            status,
+            phase,
+            ontologyId,
+            generationId,
+            workItem,
+            analysis = new
+            {
+                runId,
+                recordIds = records.Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                candidateDraftIds = records.Where(record => record.Kind == "candidate_draft").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                gapIds = records.Where(record => record.Kind == "gap").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                conflictIds = records.Where(record => record.Kind == "conflict").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+            },
+            budget = new
+            {
+                limits = BudgetLimitsSummary(limits),
+                used = state is null ? null : new
+                {
+                    state.TurnsUsed,
+                    state.QueriesUsed,
+                    state.RowsRead,
+                    state.SourceBytesRead,
+                    state.InputTokensUsed,
+                    state.OutputTokensUsed,
+                    state.InFlightEffects,
+                },
+                rejection = budgetRejection is null ? null : new
+                {
+                    budgetRejection.Metric,
+                    budgetRejection.Limit,
+                    budgetRejection.Used,
+                    budgetRejection.Requested,
+                    budgetRejection.Audit,
+                },
+            },
+            provenance = new
+            {
+                inputDigest,
+                model = model ?? "",
+                queryDigests = queries.Select(query => query.QueryDigest).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                evidenceIds = queries.SelectMany(query => query.EvidenceRefs.Select(evidence => evidence.EvidenceId)).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                operations = queries.GroupBy(query => query.Operation, StringComparer.Ordinal)
+                    .OrderBy(group => group.Key, StringComparer.Ordinal)
+                    .Select(group => new { operation = group.Key, count = group.Count() })
+                    .ToArray(),
+                stepCount = steps.Count,
+            },
+            finish = finish is null ? null : new
+            {
+                finish.Status,
+                finish.Reason,
+                finish.Unresolved,
+            },
+            diagnostics = new
+            {
+                rejectionReason,
+                providerUnavailableReason,
+            },
+        };
+
+    private static object BudgetLimitsSummary(BusinessOntologyAgentBudgetLimits limits) => new
+    {
+        limits.MaxTurns,
+        limits.MaxQueries,
+        limits.MaxRows,
+        limits.MaxSourceBytes,
+        limits.MaxInputTokens,
+        limits.MaxOutputTokens,
+        maxWallClockSeconds = (long)limits.MaxWallClock.TotalSeconds,
+        limits.MaxConcurrency,
+    };
+
+    private static BusinessOntologyAgentBudgetLimits BudgetLimitsFromArgs(JsonObject args)
+    {
+        var defaults = BusinessOntologyAgentBudgetLimits.Default;
+        return new BusinessOntologyAgentBudgetLimits(
+            OptionalSmallerPositiveLong(args, "maxTurns", defaults.MaxTurns),
+            OptionalSmallerPositiveLong(args, "maxQueries", defaults.MaxQueries),
+            OptionalSmallerPositiveLong(args, "maxRows", defaults.MaxRows),
+            OptionalSmallerPositiveLong(args, "maxSourceBytes", defaults.MaxSourceBytes),
+            OptionalSmallerPositiveLong(args, "maxInputTokens", defaults.MaxInputTokens),
+            OptionalSmallerPositiveLong(args, "maxOutputTokens", defaults.MaxOutputTokens),
+            TimeSpan.FromSeconds(OptionalSmallerPositiveLong(args, "maxWallClockSeconds", (long)defaults.MaxWallClock.TotalSeconds)),
+            defaults.MaxConcurrency);
+    }
+
+    private static long OptionalSmallerPositiveLong(JsonObject args, string name, long defaultValue)
+    {
+        var raw = Optional(args, name);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return defaultValue;
+        }
+        if (!long.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            || value <= 0)
+        {
+            throw new ArgumentException($"{name} must be a positive integer.");
+        }
+        if (value > defaultValue)
+        {
+            throw new ArgumentException($"{name} must be less than or equal to the default cap ({defaultValue}).");
+        }
+        return value;
+    }
+
+    private static string RequiredBoundedWorkItem(JsonObject args, string name)
+    {
+        var value = Required(args, name).Trim();
+        if (value.Length > 2048)
+        {
+            throw new ArgumentException($"{name} must be at most 2048 characters.");
+        }
+        return value;
+    }
+
+    private static void RequireExactProperties(JsonObject args, IReadOnlyList<string> allowed)
+    {
+        var allowedSet = allowed.ToHashSet(StringComparer.Ordinal);
+        var extras = args.Select(property => property.Key)
+            .Where(key => !allowedSet.Contains(key))
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .ToArray();
+        if (extras.Length != 0)
+        {
+            throw new ArgumentException(
+                "This bounded business-ontology operation rejected arguments: "
+                + string.Join(", ", extras));
+        }
+    }
+
+    private sealed record CandidateExportConfiguration(string OutputRoot, string BunExecutable, string ValidatorScript)
+    {
+        // Keep generated candidate bundles local to the selected workspace by default. Deployments
+        // that publish them elsewhere must opt in through DEPA_WIKI_CANDIDATE_ONTOLOGY_ROOT.
+        private static readonly string DefaultOutputRoot = Path.Combine(
+            Directory.GetCurrentDirectory(), ".depa-wiki", "ontology-candidates");
+
+        public static CandidateExportConfiguration Resolve()
+        {
+            var outputRoot = Path.GetFullPath(Environment.GetEnvironmentVariable("DEPA_WIKI_CANDIDATE_ONTOLOGY_ROOT") ?? DefaultOutputRoot);
+            Directory.CreateDirectory(outputRoot);
+            var workspaceRoot = FindWorkspaceRoot();
+            var validator = Path.Combine(workspaceRoot, "skills", "ontology-xml-dsl", "scripts", "validate-ontology-xml.ts");
+            if (!File.Exists(validator)) throw new InvalidOperationException("Canonical ontology XML validator is unavailable.");
+            return new CandidateExportConfiguration(outputRoot, FindBunExecutable(), validator);
+        }
+
+        private static string FindWorkspaceRoot()
+        {
+            foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+            {
+                for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
+                {
+                    if (File.Exists(Path.Combine(directory.FullName, "skills", "ontology-xml-dsl", "scripts", "validate-ontology-xml.ts")))
+                    {
+                        return directory.FullName;
+                    }
+                }
+            }
+            throw new InvalidOperationException("Could not locate the canonical ontology XML DSL workspace.");
+        }
+
+        private static string FindBunExecutable()
+        {
+            var candidates = new List<string>();
+            var bunInstall = Environment.GetEnvironmentVariable("BUN_INSTALL");
+            if (!string.IsNullOrWhiteSpace(bunInstall)) candidates.Add(Path.Combine(bunInstall, "bin", "bun"));
+            candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? "")
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(directory => Path.Combine(directory, "bun")));
+            return candidates.FirstOrDefault(File.Exists)
+                ?? throw new InvalidOperationException("Bun is required for canonical ontology XML validation.");
+        }
+    }
+
+    private static string Digest(string operation, object value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { operation, value }, LlmWikiJson.Options)))).ToLowerInvariant();
+
     private static JsonObject Tool(string name, string description, JsonObject properties, string[]? required = null) =>
         new()
         {
@@ -788,6 +1169,9 @@ public sealed class LlmWikiToolRunner(CozoOm om)
 
     private static int PositiveIntOrDefault(string? value, int fallback) =>
         int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
+
+    private static int? OptionalPositiveLimit(JsonObject args, string name) =>
+        Optional(args, name) is not { Length: > 0 } raw ? null : int.TryParse(raw, out var parsed) ? parsed : throw new ArgumentException($"{name} must be an integer.");
 
     private static IReadOnlyList<string>? SourceKindsFromArgs(JsonObject args) =>
         StringListFromArgs(args, "sourceKinds") ??

@@ -37,10 +37,11 @@ tracks/<id>/
   design.md               （可选）方案 / 决策摘要 / 风险 / 兼容 / 迁移
   behavior_deltas/<cap>/delta.xml   行为增量（<behavior-patch>，归档提升进 behaviors/）
   analysis/               规划/分析期的 planning-with-files 外部记忆（避免长对话丢上下文）
+    decision-tree.xnl       决策树 / frontier / assumptions（需要决策树时建）
     findings.md             直接找到的事实、约束、问题与结论
     knowledge.md            阅读后沉淀的知识上下文、术语与机制理解
-  decisions.md            决策问题/选项/用户答复/结论与理由（需要决策时建）
-  decisions/              archive-ready 的 durable 单文件决策（归档可提升 decision://）
+  decisions.xnl           决策问题/选项/用户答复/结论与理由（需要决策时建；旧 decisions.md 仅兼容 fallback）
+  decisions/              archive-ready 的 legacy durable 单文件决策（归档可提升 decision://）
   memory/                 （可选）长期记忆候选，按类别分子目录（归档且 memory profile 启用时提升 memory://）
   reports/                gap-loop / verify 的结构化报告（track://reports/...，按轮累积）
 ```
@@ -162,7 +163,7 @@ tracks/<id>/
     <TaskGroup id="P3" name="docs 同步与收尾" status="TODO" order="2">
       <Description>同步 docs，终态人工确认</Description>
       <SubNodes>
-        <Task id="T3.1" name="同步 docs/modeling 与 docs/impl" status="TODO" order="0" priority="P1">
+        <Task id="T3.1" name="同步 codument/modeling 与 codument/engineering" status="TODO" order="0" priority="P1">
           <Hooks><Hook on="task:after"><cdt:AttractorCheck use="docs"/></Hook></Hooks>
         </Task>
       </SubNodes>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-ontology-semantic-experiments-v2-v3" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>以预算受控、证据约束、可比较的方式完成 v2 单轮 Codex 提案实验和 v3 proposal/critic 实验，并导出独立 pending-only 业务本体候选制品。</Goal>
+    <Description>扩展既有 assisted semantic pipeline 的实验编排，不改变 `onto_*` evidence/review/promotion 边界；v2/v3 分别落至独立版本目录并记录成本与质量 provenance。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-18T18:20:00Z</CreatedAt>
+    <UpdatedAt>2026-07-18T20:15:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="semantic-baseline" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/BusinessOntologySemanticProjector.cs" />
+    <MaterialBundle role="input" name="codex-cli-provider" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.LlmClient/Providers/CodexCliLlmClient.cs" />
+    <MaterialBundle role="input" name="backend-index" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/" />
+    <MaterialBundle role="input" name="frontend-index" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/" />
+    <MaterialBundle role="output" name="tools" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/" />
+    <MaterialBundle role="output" name="cli" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/" />
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/" />
+    <MaterialBundle role="output" name="v2-artifact" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v2/ontology/" />
+    <MaterialBundle role="output" name="v3-artifact" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v3/ontology/" />
+  </Ports>
+  <TaskSpace id="space_add_ontology_semantic_experiments_v2_v3" name="add-ontology-semantic-experiments-v2-v3" version="1">
+    <Description>按实验合同、v2、v3、隔离运行与验证四阶段交付。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="实验合同、预算与制品 provenance" status="ACTIVE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="定义 v2/v3 profile、预算、slice selection 与 manifest 模型" status="DONE" order="0" priority="P0" />
+          <Task id="T1.2" name="扩展 derive-semantics CLI 的 experiment/budget/artifact 参数" status="DONE" order="1" priority="P0" />
+          <Task id="T1.3" name="实现 validated-result cache 和原子失败合同" status="NOT_STARTED" order="2" priority="P0" />
+          <Task id="T1.4" name="支持 provider-only Codex 路由，同时保持用户配置隔离" status="DONE" order="3" priority="P0" />
+          <Task id="T1.5" name="移除不兼容 provider 的远端 structured-output 依赖，保留本地闭包校验" status="DONE" order="4" priority="P0" />
+          <Task id="T1.6" name="收紧 assisted 候选 kind 映射提示，不放宽本地语义校验" status="DONE" order="5" priority="P0" />
+          <Task id="T1.7" name="优先选择具备双概念直接类型引用的实验切片" status="DONE" order="6" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="v2 单轮切片提案" status="ACTIVE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="按稳定排序构建 bounded slice evidence packs 并执行 v2" status="DONE" order="0" priority="P0" />
+          <Task id="T2.2" name="导出 v2 experiment manifest、candidate 与质量报告" status="NOT_STARTED" order="1" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="v3 proposal/critic 双轮" status="ACTIVE" order="2">
+        <SubNodes>
+          <Task id="T3.1" name="实现 closed critic envelope 和本地 critic validator" status="DONE" order="0" priority="P0" />
+          <Task id="T3.2" name="以同一 slices 执行 v3 并记录 keep/drop provenance" status="NOT_STARTED" order="1" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="测试、隔离运行与对照报告" status="NOT_STARTED" order="3">
+        <SubNodes>
+          <Task id="T4.1" name="覆盖预算、缓存、v2/v3 validator、原子失败与 promotion isolation" status="NOT_STARTED" order="0" priority="P0" />
+          <Task id="T4.2" name="在 fresh copied databases 上运行 bounded Codex v2/v3 并导出版本制品" status="NOT_STARTED" order="1" priority="P0" />
+          <Task id="T4.3" name="比较 v1/v2/v3 质量与成本，记录审核入口和剩余风险" status="NOT_STARTED" order="2" priority="P1" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="2" verify-round="true" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add_ontology_semantic_experiments_v2_v3">
+      <Node id="P2"><After ref="P1" /></Node>
+      <Node id="P3"><After ref="P2" /></Node>
+      <Node id="P4"><After ref="P3" /></Node>
+    </Dag>
+  </Schedule>
+</Track>

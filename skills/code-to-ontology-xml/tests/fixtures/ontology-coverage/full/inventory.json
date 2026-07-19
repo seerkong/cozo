@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "repositories": [
+    {
+      "exclude": [],
+      "include": [
+        "**/*.java"
+      ],
+      "key": "backend",
+      "language": "java",
+      "revision": "fixture-revision",
+      "stats": {
+        "filesExcluded": 0,
+        "filesFailed": 0,
+        "filesScanned": 2,
+        "filesUnresolved": 0
+      }
+    }
+  ],
+  "observations": [
+    {
+      "confidence": 1,
+      "kind": "java-type",
+      "language": "java",
+      "line": 1,
+      "observationKey": "backend|src/Record.java|1|java-type|example.Record",
+      "path": "src/Record.java",
+      "repository": "backend",
+      "resolver": "fixture",
+      "revision": "fixture-revision",
+      "symbol": "example.Record"
+    },
+    {
+      "confidence": 1,
+      "kind": "rule-signal",
+      "language": "java",
+      "line": 4,
+      "observationKey": "backend|src/RecordService.java|4|rule-signal|example.RecordService#create",
+      "path": "src/RecordService.java",
+      "repository": "backend",
+      "resolver": "fixture",
+      "revision": "fixture-revision",
+      "symbol": "example.RecordService#create"
+    },
+    {
+      "confidence": 1,
+      "kind": "lifecycle-signal",
+      "language": "java",
+      "line": 8,
+      "observationKey": "backend|src/RecordService.java|8|lifecycle-signal|example.RecordService#create",
+      "path": "src/RecordService.java",
+      "repository": "backend",
+      "resolver": "fixture",
+      "revision": "fixture-revision",
+      "symbol": "example.RecordService#create"
+    },
+    {
+      "confidence": 1,
+      "kind": "service-state-write",
+      "language": "java",
+      "line": 9,
+      "observationKey": "backend|src/RecordService.java|9|service-state-write|example.RecordService#create",
+      "path": "src/RecordService.java",
+      "repository": "backend",
+      "resolver": "fixture",
+      "revision": "fixture-revision",
+      "symbol": "example.RecordService#create"
+    },
+    {
+      "confidence": 1,
+      "kind": "mybatis-write",
+      "language": "java",
+      "line": 1,
+      "observationKey": "backend|src/RecordMapper.xml|1|mybatis-write|example.RecordMapper#insert",
+      "path": "src/RecordMapper.xml",
+      "repository": "backend",
+      "resolver": "fixture",
+      "revision": "fixture-revision",
+      "symbol": "example.RecordMapper#insert"
+    }
+  ],
+  "summary": {
+    "filesExcluded": 0,
+    "filesFailed": 0,
+    "filesScanned": 2,
+    "filesUnresolved": 0,
+    "observations": 5,
+    "signals": {
+      "lifecycles": 1,
+      "rules": 1
+    }
+  }
+}

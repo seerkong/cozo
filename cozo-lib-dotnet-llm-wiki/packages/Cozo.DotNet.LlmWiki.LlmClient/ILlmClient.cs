@@ -2,16 +2,16 @@ namespace Cozo.DotNet.LlmWiki.LlmClient;
 
 /// <summary>
 /// LLM backend contract (add-llm-wiki-llm-pipeline track, design §1.2). Availability is a
-/// first-class citizen: a missing key/model yields <see cref="IsAvailable"/>=false with a
-/// reason instead of a construction-time or call-time surprise — degradation is the normal
-/// path of the wiki pipeline, not an error path.
+/// first-class citizen: missing provider prerequisites yield <see cref="IsAvailable"/>=false
+/// with a reason instead of a construction-time or call-time surprise — degradation is the
+/// normal path of the wiki pipeline, not an error path.
 /// </summary>
 public interface ILlmClient
 {
-    /// <summary>Whether the client can serve completions (key + model configured, provider known).</summary>
+    /// <summary>Whether the client can serve completions (provider prerequisites configured and provider known).</summary>
     bool IsAvailable { get; }
 
-    /// <summary>Why the client is unavailable (missing key, missing model, unknown provider); null when available.</summary>
+    /// <summary>Why the client is unavailable; null when available.</summary>
     string? UnavailableReason { get; }
 
     /// <summary>Runs one completion. Throws <see cref="LlmException"/> on HTTP failure, empty response, or misuse while unavailable.</summary>

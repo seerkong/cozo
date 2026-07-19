@@ -1,0 +1,41 @@
+<behavior-patch capability="dotnet-llm-wiki-semantic-parsing" version="1">
+  <upsert selector="behavior://dotnet-llm-wiki-semantic-parsing/requirements/java-baseline">
+    <requirement id="java-baseline">
+      <statement>系统 SHALL 将 Java 作为 Tree-sitter 原生解析的一等语言：默认索引 `.java`，加载固定版本且 ABI 兼容的 Java grammar，并以统一 v2 事实模型产出 Java 符号树、结构边和调用站点；grammar 缺失或单文件解析失败时 SHALL 按既有降级策略继续索引。</statement>
+      <suite id="routing" name="文件路由与后端">
+        <case id="java-default-extension">
+          <given>仓库包含 `.java` 文件且调用默认索引配置</given>
+          <when>RepositoryIndexer 构建批次</when>
+          <then>文件 SHALL 被纳入索引并标记 language=`java`</then>
+        </case>
+        <case id="java-native-grammar">
+          <given>当前 RID 存在 ABI 兼容的 tree-sitter-java native library</given>
+          <when>解析 Java 文件</when>
+          <then>Native backend SHALL 被选择且产出 resolver=`treesitter` 的事实</then>
+        </case>
+        <case id="java-fallback">
+          <given>Java grammar 缺失、ABI 不兼容或某文件解析失败</given>
+          <when>索引仓库</when>
+          <then>系统 SHALL 返回结构化诊断并按既有 fallback 继续，不使整个索引失败</then>
+        </case>
+      </suite>
+      <suite id="extract" name="Java 符号与结构">
+        <case id="java-declarations">
+          <given>Java 样例包含 package、class、interface、enum、record、method、constructor 和 field</given>
+          <when>JavaExtractor 处理 Tree-sitter query matches</when>
+          <then>结果 SHALL 含正确 parent、visibility、signature、line range 与 `sym_key` 的符号树</then>
+        </case>
+        <case id="java-structure">
+          <given>Java 样例包含 import、extends、implements 与嵌套声明</given>
+          <when>结果写入 CodeKnowledge</when>
+          <then>系统 SHALL 产出 IMPORTS、EXTENDS、IMPLEMENTS、CONTAINS/HAS_METHOD/HAS_PROPERTY 结构边</then>
+        </case>
+        <case id="java-call-sites">
+          <given>Java 方法包含 invocation、object creation 和 member access</given>
+          <when>JavaExtractor 解析该方法</when>
+          <then>结果 SHALL 产出带 caller、receiver、target、arguments 和源码位置的标准调用站点</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

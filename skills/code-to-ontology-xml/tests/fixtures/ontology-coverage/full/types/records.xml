@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TypeModule id="ExampleCatalog.Types.Records">
+  <Types>
+    <Type id="ExampleCatalog.Record">
+      <Attributes>
+        <Attribute name="name" type="String" required="true" />
+        <Attribute name="status" type="String" required="true" />
+      </Attributes>
+      <EvidenceRefs><EvidenceRef ref="backend:record-type" /></EvidenceRefs>
+    </Type>
+  </Types>
+</TypeModule>

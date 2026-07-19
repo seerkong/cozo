@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="verify-om-runtime-portability-parity" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>独立验证 G15-G17 的 OM runtime registry lifecycle、behavior portability/readiness 与 Bun behavior schema versioning 对等能力，并为 mission completed gate 形成证据闭环。</Goal>
+    <Description>以 D6-D8 为冻结边界，构建跨 Bun/.NET 证据矩阵，运行 paired/full gates，验证 linked tracks，并完成最终纠偏收口。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <GapRound>2</GapRound>
+    <CreatedAt>2026-07-18T14:11:59Z</CreatedAt>
+    <UpdatedAt>2026-07-18T14:48:30Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="mission" domain="mission" path="vfs://@/codument/missions/active/converge-dotnet-om-bun-capability-parity/"/>
+    <MaterialBundle role="input" name="linked-tracks" domain="codument" path="vfs://@/codument/tracks/"/>
+    <MaterialBundle role="input" name="bun-runtime" domain="source" path="vfs://@/cozo-lib-bun/"/>
+    <MaterialBundle role="input" name="dotnet-runtime" domain="source" path="vfs://@/cozo-lib-dotnet/"/>
+    <MaterialBundle role="output" name="verification-reports" domain="codument" path="vfs://./reports/"/>
+  </Ports>
+  <TaskSpace id="space_verify-om-runtime-portability-parity" name="verify-om-runtime-portability-parity" version="1" cdt:child-mode="sequential">
+    <Description>冻结 G15-G17 审计面，运行跨实现 gates，并独立发布 mission closure evidence。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="构建 G15-G17 证据契约" status="DONE" order="0">
+        <Description>将 D6-D8、linked track 与源码/测试映射为可执行而非纯叙述的验收矩阵。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="建立 G15-G17 evidence matrix" status="DONE" order="0" priority="P0">
+            <Description>每行记录 desired、Bun/.NET observable evidence、持久/runtime 边界、命令、verdict 与 residual risk。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">G15、G16、G17 都有可执行证据且仅保留 D6-D8 有意差异</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T1.2" name="审计是否需要新增 paired case" status="DONE" order="1" priority="P0">
+            <Description>只有证据矩阵发现未测试的既定 observable contract 时才补充最小测试或无决策修复。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T1.2-AC1" checked="true">没有一行只依赖 prose；新增改动（如有）通过对应测试</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="执行跨运行时 gates" status="DONE" order="1">
+        <Description>重跑 Bun 和 .NET 的完整与 focused 入口，并校验所有 G15-G17 linked tracks。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="运行 Bun G15-G17 验证" status="DONE" order="0" priority="P0">
+            <Description>运行 lifecycle、behavior portability、schema versioning focused 和 Bun OM/full regression。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">focused、Bun OM 与 Bun full suites 通过并记录计数</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T2.2" name="运行 .NET G15-G16 验证" status="DONE" order="1" priority="P0">
+            <Description>构建并运行 OM harness、registry lifecycle 与 behavior portability 相关 fixtures。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.2-AC1" checked="true">.NET build 零警告通过；项目根目录的诊断 heartbeat Release harness 以 exit 0 和完成 marker 收口</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T2.3" name="严格校验 linked Codument controls" status="DONE" order="2" priority="P0">
+            <Description>确认 G15-G17 TrackLink 均可解析、status completed 且 strict-valid。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T2.3-AC1" checked="true">三个 linked tracks 与本 track 通过 strict validation</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="独立收口与 mission gate" status="DONE" order="2">
+        <Description>发布 issues-first G15-G17 verdict，审计工作区范围，并通过最后的 AttractorCheck 与 GapLoop。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="发布 G15-G17 final matrix" status="DONE" order="0" priority="P0">
+            <Description>独立判定每行 PASS 或精确阻塞，写出意图差异和残余风险。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">G15-G17 均有 fresh PASS，或明确 BLOCKED 原因</cdt:Criterion></cdt:Acceptance>
+          </Task>
+          <Task id="T3.2" name="验证 mission completed gate readiness" status="DONE" order="1" priority="P0">
+            <Description>检查 reports 一致性、XML、strict、source/test evidence 与 dirty-worktree scope 边界。</Description>
+            <cdt:Acceptance><cdt:Criterion id="T3.2-AC1" checked="true">本 track 和 mission evidence 内部一致，完成门可执行</cdt:Criterion></cdt:Acceptance>
+          </Task>
+        </SubNodes>
+        <Hooks>
+          <Hook on="phase:after"><cdt:AttractorCheck use="coding"/></Hook>
+          <Hook on="phase:after"><cdt:GapLoop max-rounds="3" on-exhausted="block" verify-round="true"/></Hook>
+        </Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Parallel max-concurrent="1" spot-check="true"/>
+  </Schedule>
+  <Hooks/>
+</Track>

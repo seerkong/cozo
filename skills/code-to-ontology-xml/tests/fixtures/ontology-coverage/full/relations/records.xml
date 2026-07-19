@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RelationModule id="ExampleCatalog.Relations.Records">
+  <Relations>
+    <Relation id="ExampleCatalog.Relation.RelatedRecord" name="relatedRecord" from="ExampleCatalog.Record" to="ExampleCatalog.Record" directed="true" min="0" max="*">
+      <EvidenceRefs><EvidenceRef ref="backend:record-type" /></EvidenceRefs>
+    </Relation>
+  </Relations>
+</RelationModule>

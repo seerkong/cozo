@@ -16,6 +16,18 @@ public static class CozoOmCodeKnowledgeExtensions
         return CodeKnowledgeSchema.InitAsync(om, reindex, cancellationToken);
     }
 
+    /// <summary>
+    /// Checks whether ck_semantic_claim can be queried without changing the database. A non-ready
+    /// result is an explicit reindex gate; ontology projection must not call schema initialization.
+    /// </summary>
+    public static Task<CodeSemanticClaimPreflight> PreflightSemanticClaimsAsync(
+        this CozoOm om,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(om);
+        return CodeKnowledgeSchema.PreflightSemanticClaimsAsync(om, cancellationToken);
+    }
+
     public static async Task<CodeKnowledgeIndexResult> IndexCodeKnowledgeAsync(
         this CozoOm om,
         CodeKnowledgeBatch batch,
@@ -23,6 +35,9 @@ public static class CozoOmCodeKnowledgeExtensions
     {
         ArgumentNullException.ThrowIfNull(om);
         ArgumentNullException.ThrowIfNull(batch);
+        var semanticClaims = (batch.SemanticClaims ?? [])
+            .Select(NormalizeSemanticClaim)
+            .ToArray();
         await using var tx = await om.Runtime.Store.BeginTransactionAsync(write: true, cancellationToken);
 
         foreach (var item in batch.Repositories ?? [])
@@ -60,6 +75,23 @@ public static class CozoOmCodeKnowledgeExtensions
                     ("start_line", item.StartLine), ("end_line", item.EndLine), ("signature", item.Signature),
                     ("parent_id", item.ParentId), ("lang", item.Lang), ("visibility", item.Visibility),
                     ("exported", item.Exported), ("sym_key", item.SymKey), ("doc_id", item.DocId), ("resolver", item.Resolver)),
+                cancellationToken: cancellationToken);
+        }
+
+        foreach (var item in semanticClaims)
+        {
+            await tx.RunAsync(
+                """
+                ?[claim_id, subject_id, kind, payload_json, file_id, start_line, end_line, confidence, resolver, evidence] <-
+                  [[$claim_id, $subject_id, $kind, $payload_json, $file_id, $start_line, $end_line, $confidence, $resolver, $evidence]]
+                :put ck_semantic_claim {claim_id => subject_id, kind, payload_json, file_id, start_line, end_line, confidence, resolver, evidence}
+                """,
+                Params(
+                    ("claim_id", item.ClaimId), ("subject_id", item.SubjectId), ("kind", item.Kind),
+                    ("payload_json", item.PayloadJson), ("file_id", item.FileId),
+                    ("start_line", item.StartLine), ("end_line", item.EndLine),
+                    ("confidence", item.Confidence), ("resolver", item.Resolver),
+                    ("evidence", item.Evidence)),
                 cancellationToken: cancellationToken);
         }
 
@@ -181,15 +213,17 @@ public static class CozoOmCodeKnowledgeExtensions
             batch.Diagnostics?.Count ?? 0,
             batch.Owners?.Count ?? 0,
             batch.EntryPoints?.Count ?? 0,
-            batch.ExternalCalls?.Count ?? 0);
+            batch.ExternalCalls?.Count ?? 0,
+            semanticClaims.Length);
     }
 
     /// <summary>
     /// File-level fact removal (add-llm-wiki-incremental-indexing track, design.md §2). Deletes
     /// every observation-layer fact owned by the given files in one transaction: ck_symbol rows,
-    /// ck_edge rows (owned via file_id or via a from_id symbol of the file), ck_doc_block rows,
-    /// ck_entry_point / ck_external_call rows keyed by the files' symbols, and ck_diagnostic rows
-    /// targeting the files or their symbols. ck_file rows are deleted only for
+    /// ck_edge rows (owned via file_id or via a from_id symbol of the file), ck_semantic_claim
+    /// rows (owned via file_id or subject_id), ck_doc_block rows, ck_entry_point /
+    /// ck_external_call rows keyed by the files' symbols, and ck_diagnostic rows targeting the
+    /// files or their symbols. ck_file rows are deleted only for
     /// <paramref name="removedFileIds"/> (changed files get their row re-put by the caller).
     /// Derived layers (community/process/search) are not touched — the index tail recomputes them.
     /// Internal by design: the public knob is RepositoryIndexRequest.IncrementalMode.
@@ -215,6 +249,17 @@ public static class CozoOmCodeKnowledgeExtensions
 
             // Order matters: every sym[...] rule reads ck_symbol, so the tables that join through
             // it (edges/entry points/external calls/diagnostics) are cleared before the symbols.
+            await tx.RunAsync(
+                """
+                fids[fid] <- $file_ids
+                sym[s] := *ck_symbol{ symbol_id: s, file_id: f }, fids[f]
+                ?[claim_id] := *ck_semantic_claim{ claim_id, file_id }, fids[file_id]
+                ?[claim_id] := *ck_semantic_claim{ claim_id, subject_id }, sym[subject_id]
+                :rm ck_semantic_claim {claim_id}
+                """,
+                fileParams,
+                cancellationToken: cancellationToken);
+
             await tx.RunAsync(
                 """
                 fids[fid] <- $file_ids
@@ -304,6 +349,67 @@ public static class CozoOmCodeKnowledgeExtensions
                 ("file_id", edge.FileId), ("line", edge.Line),
                 ("confidence", edge.Confidence), ("resolver", edge.Resolver), ("evidence", edge.Evidence)),
             cancellationToken: cancellationToken);
+
+    private static CodeSemanticClaimFact NormalizeSemanticClaim(CodeSemanticClaimFact claim)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        RequireText(claim.ClaimId, nameof(claim.ClaimId));
+        RequireText(claim.SubjectId, nameof(claim.SubjectId));
+        RequireText(claim.FileId, nameof(claim.FileId));
+        RequireText(claim.Evidence, nameof(claim.Evidence));
+        if (!CodeSemanticClaimKinds.IsSupported(claim.Kind))
+        {
+            throw new ArgumentException(
+                $"Unsupported semantic claim kind '{claim.Kind}'. Allowed values: " +
+                string.Join(", ", CodeSemanticClaimKinds.All.Order(StringComparer.Ordinal)) + ".",
+                nameof(claim));
+        }
+
+        if (claim.StartLine < 1 || claim.EndLine < claim.StartLine)
+        {
+            throw new ArgumentException(
+                $"Semantic claim '{claim.ClaimId}' must have a one-based non-empty source line range.",
+                nameof(claim));
+        }
+
+        if (!double.IsFinite(claim.Confidence) || claim.Confidence is < 0 or > 1)
+        {
+            throw new ArgumentException(
+                $"Semantic claim '{claim.ClaimId}' confidence must be finite and between 0 and 1.",
+                nameof(claim));
+        }
+
+        if (claim.Resolver is not ("treesitter" or "spring_annotation"))
+        {
+            throw new ArgumentException(
+                $"Semantic claim '{claim.ClaimId}' resolver must be 'treesitter' or 'spring_annotation'.",
+                nameof(claim));
+        }
+
+        var payloadJson = CodeSemanticClaimIdentity.CanonicalizePayload(claim.PayloadJson);
+        var expectedClaimId = CodeSemanticClaimIdentity.Create(
+            claim.FileId,
+            claim.Kind,
+            payloadJson,
+            claim.StartLine,
+            claim.EndLine);
+        if (!string.Equals(claim.ClaimId, expectedClaimId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                $"Semantic claim id does not match its canonical source identity; expected '{expectedClaimId}'.",
+                nameof(claim));
+        }
+
+        return claim with { PayloadJson = payloadJson };
+    }
+
+    private static void RequireText(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("Value cannot be null, empty, or whitespace.", parameterName);
+        }
+    }
 
     public static OmQueryRegistry CreateCodeKnowledgeRegistry() =>
         new OmQueryRegistry()
