@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="it-asset-semantic-ontology-export" version="1">
+  <upsert selector="behavior://it-asset-semantic-ontology-export/requirements/complete-evidence-pagination">
+    <requirement id="complete-evidence-pagination">
+      <statement>The investigation CLI SHALL enumerate all indexed semantic evidence through deterministic bounded pages, and SHALL NOT silently truncate the underlying relation at a fixed row count.</statement>
+      <suite id="evidence-pagination" name="证据分页">
+        <case id="enumerate-beyond-5000">
+          <given>an indexed database contains more than 5,000 semantic claims</given>
+          <when>an external analyzer follows evidence-list continuation cursors</when>
+          <then>the analyzer SHALL be able to observe every claim exactly once in claim-id order</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://it-asset-semantic-ontology-export/requirements/external-final-delivery">
+    <requirement id="external-final-delivery">
+      <statement>The system SHALL produce a complete IT Asset semantic ontology artifact outside this repository, including business concepts, properties, relations, rules, lifecycles, evidence references, domain coverage, provenance, and unresolved gaps.</statement>
+      <suite id="semantic-delivery" name="最终语义交付">
+        <case id="business-meaning-not-symbol-projection">
+          <given>the external synthesizer consumes indexed code evidence</given>
+          <when>it emits the final ontology</when>
+          <then>each normative item SHALL use business language, cite evidence ids, and be rejected when it is only a renamed implementation symbol</then>
+        </case>
+        <case id="source-databases-remain-unchanged">
+          <given>the two original IT Asset source databases</given>
+          <when>the delivery runner rebuilds investigation facts</when>
+          <then>it SHALL operate only on disposable copies and SHALL not write source databases or accepted ontology facts</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://it-asset-semantic-ontology-export/requirements/executable-cozo-om-package">
+    <requirement id="executable-cozo-om-package">
+      <statement>The external solution SHALL provide the retained IT Asset semantic subset as an installable Node.js package that depends on the local cozo-lib-bun package through a file: dependency and initializes the business schema through public cozo-om APIs.</statement>
+      <suite id="cozo-om-materialization" name="可执行 Cozo OM 建模">
+        <case id="install-and-validate-ontology">
+          <given>an empty in-memory CozoDB and the external ontology package</given>
+          <when>the caller installs the IT Asset ontology</when>
+          <then>the package SHALL define the evidence-backed types, relations, rules, and lifecycles, and its cross-entity and lifecycle constraints SHALL be executable</then>
+        </case>
+        <case id="local-source-dependency">
+          <given>the package manifest</given>
+          <when>the workspace resolves cozo-lib-bun</when>
+          <then>the dependency SHALL use a local file: specifier targeting this repository and SHALL NOT use an npm registry version</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

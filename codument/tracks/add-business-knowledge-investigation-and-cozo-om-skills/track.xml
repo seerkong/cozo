@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-business-knowledge-investigation-and-cozo-om-skills" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>将既有数据库业务知识调查与可执行 Cozo OM 建模固化为两个职责明确的项目 skill。</Goal>
+    <Description>调查 skill 只读访问 evidence CLI 并输出账本；建模 skill 只消费审查过的账本并生成基于本地 cozo-lib-bun 的运行包。</Description>
+    <QuestionMode>decision-tree</QuestionMode><QuestionSeverity>auto</QuestionSeverity><CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-26T11:00:00Z</CreatedAt><UpdatedAt>2026-07-26T11:00:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="investigation-cli" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
+    <MaterialBundle role="input" name="cozo-om-runtime" domain="bun" path="vfs://@/cozo-lib-bun/" />
+    <MaterialBundle role="output" name="investigation-skill" domain="skill" path="vfs://@/skills/investigate-business-knowledge-db/" />
+    <MaterialBundle role="output" name="cozo-om-modeling-skill" domain="skill" path="vfs://@/skills/model-business-knowledge-cozo-om/" />
+  </Ports>
+  <TaskSpace id="space_add-business-knowledge-investigation-and-cozo-om-skills" name="add-business-knowledge-investigation-and-cozo-om-skills" version="1">
+    <SubNodes>
+      <TaskGroup id="P1" name="只读数据库调查 skill" status="DONE" order="0"><SubNodes>
+        <Task id="T1.1" name="固化 CLI 分页、图导航和账本边界" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">skill 明确只使用 investigate 路由、完成 evidence cursor 分页、禁止源码库与本体写入</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+      <TaskGroup id="P2" name="可执行 Cozo OM 建模 skill" status="DONE" order="1"><SubNodes>
+        <Task id="T2.1" name="固化 reviewed ledger 到本地依赖运行包的实现契约" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">skill 规定 local file: cozo-lib-bun、公共 OM API、业务注释和内存 CozoDB 验证</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+      <TaskGroup id="P3" name="skill 结构验证" status="DONE" order="2"><SubNodes>
+        <Task id="T3.1" name="生成 UI metadata 并运行 skill validator" status="DONE" order="0" priority="P1"><cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">两个 SKILL.md 通过基础结构与 frontmatter 校验</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Dag for="space_add-business-knowledge-investigation-and-cozo-om-skills"><Node id="P2"><After ref="P1" /></Node><Node id="P3"><After ref="P2" /></Node></Dag></Schedule>
+</Track>

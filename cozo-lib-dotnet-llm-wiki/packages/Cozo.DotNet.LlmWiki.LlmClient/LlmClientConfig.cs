@@ -38,7 +38,7 @@ public sealed record LlmClientConfig(
     /// provider-only Codex routing variables DEPA_WIKI_CODEX_CLI_MODEL_PROVIDER,
     /// DEPA_WIKI_CODEX_CLI_BASE_URL, and DEPA_WIKI_CODEX_CLI_WIRE_API.
     /// </summary>
-    internal static LlmClientConfig FromEnvironment(Func<string, string?> getEnv)
+    public static LlmClientConfig FromEnvironment(Func<string, string?> getEnv)
     {
         var provider = Normalize(getEnv("DEPA_WIKI_LLM_PROVIDER"));
         var apiKey = IsCodexCli(provider)

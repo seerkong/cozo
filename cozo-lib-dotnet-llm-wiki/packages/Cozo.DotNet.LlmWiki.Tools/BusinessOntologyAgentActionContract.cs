@@ -30,7 +30,11 @@ internal static class BusinessOntologyAgentActionContract
                     "get_use_case_slice",
                     "find_semantic_patterns",
                     "get_semantic_evidence",
-                    "inspect_ontology_subject"
+                    "inspect_ontology_subject",
+                    "discover_domain_charters",
+                    "list_cross_layer_use_cases",
+                    "find_state_rule_clusters",
+                    "find_implementation_clusters"
                   ]
                 },
                 "parameters": {"type": "object"},
@@ -68,6 +72,26 @@ internal static class BusinessOntologyAgentActionContract
                 }
               },
               "required": ["schemaVersion", "action", "identity", "status", "reason", "unresolved"]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "schemaVersion": {"const": "business-ontology-agent-action-v1"},
+                "action": {"const": "synthesize"},
+                "identity": {"$ref": "#/$defs/identity"},
+                "domainCharters": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"$ref": "#/$defs/domainCharter"}
+                },
+                "clusters": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"$ref": "#/$defs/semanticCluster"}
+                }
+              },
+              "required": ["schemaVersion", "action", "identity", "domainCharters", "clusters"]
             }
           ],
           "$defs": {
@@ -108,6 +132,42 @@ internal static class BusinessOntologyAgentActionContract
                 }
               },
               "required": ["recordId", "kind", "subjectKind", "subjectId", "title", "body", "status", "uncertainty", "queryDigest", "evidenceIds"]
+            },
+            "domainCharter": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string"},
+                "nameZh": {"$ref": "#/$defs/nonEmptyString"},
+                "descriptionZh": {"$ref": "#/$defs/nonEmptyString"},
+                "evidenceIds": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/identityString"}},
+                "workflowNames": {"type": "array", "items": {"$ref": "#/$defs/nonEmptyString"}}
+              },
+              "required": ["id", "nameZh", "descriptionZh", "evidenceIds", "workflowNames"]
+            },
+            "implementationAnchor": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "symbolId": {"$ref": "#/$defs/identityString"},
+                "role": {"$ref": "#/$defs/nonEmptyString"},
+                "relativePath": {"$ref": "#/$defs/nonEmptyString"},
+                "evidenceId": {"$ref": "#/$defs/identityString"}
+              },
+              "required": ["symbolId", "role", "relativePath", "evidenceId"]
+            },
+            "semanticCluster": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {"$ref": "#/$defs/identityString"},
+                "domainId": {"type": "string"},
+                "conceptId": {"type": "string"},
+                "nameZh": {"$ref": "#/$defs/nonEmptyString"},
+                "descriptionZh": {"$ref": "#/$defs/nonEmptyString"},
+                "implementationAnchors": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/implementationAnchor"}}
+              },
+              "required": ["id", "domainId", "conceptId", "nameZh", "descriptionZh", "implementationAnchors"]
             }
           }
         }
@@ -119,12 +179,14 @@ internal static class BusinessOntologyAgentActionKinds
     public const string Query = "query";
     public const string Record = "record";
     public const string Finish = "finish";
+    public const string Synthesize = "synthesize";
 
     public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         Query,
         Record,
         Finish,
+        Synthesize,
     };
 }
 
@@ -137,6 +199,10 @@ internal static class BusinessOntologyAgentQueryOperations
     public const string FindSemanticPatterns = "find_semantic_patterns";
     public const string GetSemanticEvidence = "get_semantic_evidence";
     public const string InspectOntologySubject = "inspect_ontology_subject";
+    public const string DiscoverDomainCharters = "discover_domain_charters";
+    public const string ListCrossLayerUseCases = "list_cross_layer_use_cases";
+    public const string FindStateRuleClusters = "find_state_rule_clusters";
+    public const string FindImplementationClusters = "find_implementation_clusters";
 
     public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -147,6 +213,10 @@ internal static class BusinessOntologyAgentQueryOperations
         FindSemanticPatterns,
         GetSemanticEvidence,
         InspectOntologySubject,
+        DiscoverDomainCharters,
+        ListCrossLayerUseCases,
+        FindStateRuleClusters,
+        FindImplementationClusters,
     };
 }
 
@@ -170,7 +240,9 @@ internal sealed record BusinessOntologyAgentActionValidationContext(
     string RunId,
     IReadOnlySet<string> AvailableEvidenceIds,
     IReadOnlySet<string>? AvailableQueryDigests = null,
-    DateTimeOffset? RecordCreatedAtUtc = null);
+    DateTimeOffset? RecordCreatedAtUtc = null,
+    IReadOnlyDictionary<string, IReadOnlySet<string>>? EvidenceIdsByQueryDigest = null,
+    IReadOnlyDictionary<string, BusinessOntologyInvestigationEvidenceRef>? EvidenceRefsById = null);
 
 internal sealed record BusinessOntologyAgentActionIdentity(string RunId, string TurnId);
 
@@ -201,6 +273,13 @@ internal sealed record ValidatedBusinessOntologyFinishAction(
     IReadOnlyList<string> Unresolved)
     : ValidatedBusinessOntologyAgentAction(SchemaVersion, BusinessOntologyAgentActionKinds.Finish, Identity);
 
+internal sealed record ValidatedBusinessOntologySynthesizeAction(
+    string SchemaVersion,
+    BusinessOntologyAgentActionIdentity Identity,
+    IReadOnlyList<BusinessOntologySemanticDomainCharter> DomainCharters,
+    IReadOnlyList<BusinessOntologySemanticCluster> Clusters)
+    : ValidatedBusinessOntologyAgentAction(SchemaVersion, BusinessOntologyAgentActionKinds.Synthesize, Identity);
+
 /// <summary>
 /// Strict local trust boundary for one untrusted model action. Validation is pure: it normalizes
 /// query/record/finish payloads but never dispatches tools and never appends analysis records.
@@ -209,6 +288,7 @@ internal sealed class BusinessOntologyAgentActionValidator
 {
     private static readonly Regex Identity = new("^[A-Za-z0-9][A-Za-z0-9:_./-]{0,191}$", RegexOptions.CultureInvariant);
     private static readonly Regex Fqn = new("^[A-Z][A-Za-z0-9]*(?:\\.[A-Z][A-Za-z0-9]*)+$", RegexOptions.CultureInvariant);
+    private static readonly Regex Cursor = new("^[A-Za-z0-9+/=]+\\.[0-9A-Fa-f]+$", RegexOptions.CultureInvariant);
 
     private static readonly HashSet<string> RecordKinds = new(["observation", "hypothesis", "conflict", "gap", "candidate_draft"], StringComparer.Ordinal);
     private static readonly HashSet<string> RecordStatuses = new(["observed", "open", "proposed", "confirmed", "rejected", "resolved", "superseded"], StringComparer.Ordinal);
@@ -240,7 +320,7 @@ internal sealed class BusinessOntologyAgentActionValidator
         RequireExactProperties(
             root,
             "$",
-            ["schemaVersion", "action", "identity", "operation", "parameters", "reason", "records", "status", "unresolved"],
+            ["schemaVersion", "action", "identity", "operation", "parameters", "reason", "records", "status", "unresolved", "domainCharters", "clusters"],
             ["schemaVersion", "action", "identity"]);
 
         var schemaVersion = RequireString(root, "schemaVersion", "$");
@@ -252,7 +332,7 @@ internal sealed class BusinessOntologyAgentActionValidator
         var action = RequireString(root, "action", "$");
         if (!BusinessOntologyAgentActionKinds.All.Contains(action))
         {
-            throw Invalid("$.action", "must be query, record, or finish.");
+            throw Invalid("$.action", "must be query, record, finish, or synthesize.");
         }
 
         var identity = ValidateActionIdentity(root.GetProperty("identity"), context);
@@ -261,6 +341,7 @@ internal sealed class BusinessOntologyAgentActionValidator
             BusinessOntologyAgentActionKinds.Query => ValidateQuery(schemaVersion, identity, root, context),
             BusinessOntologyAgentActionKinds.Record => ValidateRecord(schemaVersion, identity, root, context),
             BusinessOntologyAgentActionKinds.Finish => ValidateFinish(schemaVersion, identity, root),
+            BusinessOntologyAgentActionKinds.Synthesize => ValidateSynthesize(schemaVersion, identity, root, context),
             _ => throw new InvalidOperationException($"Unsupported action '{action}'."),
         };
     }
@@ -355,6 +436,94 @@ internal sealed class BusinessOntologyAgentActionValidator
             RequireStringArray(root.GetProperty("unresolved"), "$.unresolved"));
     }
 
+    private static ValidatedBusinessOntologySynthesizeAction ValidateSynthesize(
+        string schemaVersion,
+        BusinessOntologyAgentActionIdentity identity,
+        JsonElement root,
+        BusinessOntologyAgentActionValidationContext context)
+    {
+        RequireExactProperties(
+            root,
+            "$",
+            ["schemaVersion", "action", "identity", "domainCharters", "clusters"],
+            ["schemaVersion", "action", "identity", "domainCharters", "clusters"]);
+        if (context.EvidenceRefsById is not { } evidenceRefsById)
+        {
+            throw Invalid("$", "synthesize actions require runtime-owned evidence references.");
+        }
+
+        var charters = RequireArray(root.GetProperty("domainCharters"), "$.domainCharters");
+        var charterIds = new HashSet<string>(StringComparer.Ordinal);
+        var domainCharters = new List<BusinessOntologySemanticDomainCharter>();
+        var charterIndex = 0;
+        foreach (var charterElement in charters)
+        {
+            var path = $"$.domainCharters[{charterIndex++}]";
+            var charter = RequireObject(charterElement, path);
+            RequireExactProperties(charter, path, ["id", "nameZh", "descriptionZh", "evidenceIds", "workflowNames"], ["id", "nameZh", "descriptionZh", "evidenceIds", "workflowNames"]);
+            var id = RequireDomainId(charter, "id", path);
+            if (!charterIds.Add(id))
+            {
+                throw Invalid(path + ".id", $"duplicates domain charter '{id}'.");
+            }
+            var nameZh = RequireChineseString(charter, "nameZh", path);
+            var descriptionZh = RequireChineseString(charter, "descriptionZh", path);
+            var evidenceIds = RequireKnownEvidenceIds(charter.GetProperty("evidenceIds"), path + ".evidenceIds", context);
+            var workflowNames = RequireUniqueStrings(charter.GetProperty("workflowNames"), path + ".workflowNames");
+            domainCharters.Add(new BusinessOntologySemanticDomainCharter(id, nameZh, descriptionZh, evidenceIds, workflowNames));
+        }
+        if (domainCharters.Count == 0)
+        {
+            throw Invalid("$.domainCharters", "must contain at least one domain charter.");
+        }
+
+        var clusters = RequireArray(root.GetProperty("clusters"), "$.clusters");
+        var clusterIds = new HashSet<string>(StringComparer.Ordinal);
+        var conceptIds = new HashSet<string>(StringComparer.Ordinal);
+        var semanticClusters = new List<BusinessOntologySemanticCluster>();
+        var clusterIndex = 0;
+        foreach (var clusterElement in clusters)
+        {
+            var path = $"$.clusters[{clusterIndex++}]";
+            var cluster = RequireObject(clusterElement, path);
+            RequireExactProperties(cluster, path, ["id", "domainId", "conceptId", "nameZh", "descriptionZh", "implementationAnchors"], ["id", "domainId", "conceptId", "nameZh", "descriptionZh", "implementationAnchors"]);
+            var id = RequireIdentity(cluster, "id", path);
+            if (!clusterIds.Add(id))
+            {
+                throw Invalid(path + ".id", $"duplicates semantic cluster '{id}'.");
+            }
+            var domainId = RequireDomainId(cluster, "domainId", path);
+            if (!charterIds.Contains(domainId))
+            {
+                throw Invalid(path + ".domainId", $"does not name a declared domain charter '{domainId}'.");
+            }
+            var conceptId = RequireString(cluster, "conceptId", path);
+            if (!BusinessOntologySemanticIdentifierGrammar.IsValidConceptId(conceptId, domainId))
+            {
+                throw Invalid(path + ".conceptId", "must be exactly two PascalCase business segments whose first segment is the domain root and whose final segment is not an implementation technical suffix.");
+            }
+            if (!conceptIds.Add(conceptId))
+            {
+                throw Invalid(path + ".conceptId", $"duplicates semantic concept '{conceptId}'.");
+            }
+
+            var anchors = ValidateImplementationAnchors(cluster.GetProperty("implementationAnchors"), path + ".implementationAnchors", context, evidenceRefsById);
+            semanticClusters.Add(new BusinessOntologySemanticCluster(
+                id,
+                domainId,
+                conceptId,
+                RequireChineseString(cluster, "nameZh", path),
+                RequireChineseString(cluster, "descriptionZh", path),
+                anchors));
+        }
+        if (semanticClusters.Count == 0)
+        {
+            throw Invalid("$.clusters", "must contain at least one semantic cluster.");
+        }
+
+        return new ValidatedBusinessOntologySynthesizeAction(schemaVersion, identity, domainCharters, semanticClusters);
+    }
+
     private static BusinessOntologyAgentActionIdentity ValidateActionIdentity(
         JsonElement element,
         BusinessOntologyAgentActionValidationContext context)
@@ -409,6 +578,12 @@ internal sealed class BusinessOntologyAgentActionValidator
         {
             throw Invalid(path + ".queryDigest", $"references unknown query digest '{queryDigest}'.");
         }
+        if (context.EvidenceIdsByQueryDigest is not { } evidenceIdsByQueryDigest
+            || !evidenceIdsByQueryDigest.TryGetValue(queryDigest, out var directEvidenceIds)
+            || directEvidenceIds is null)
+        {
+            throw Invalid(path + ".queryDigest", $"has no direct evidence provenance for query digest '{queryDigest}'.");
+        }
 
         var evidenceIds = RequireStringArray(record.GetProperty("evidenceIds"), path + ".evidenceIds");
         if (evidenceIds.Count == 0)
@@ -425,6 +600,10 @@ internal sealed class BusinessOntologyAgentActionValidator
             if (!context.AvailableEvidenceIds.Contains(evidenceId))
             {
                 throw Invalid(path + ".evidenceIds", $"references unknown evidence '{evidenceId}'.");
+            }
+            if (!directEvidenceIds.Contains(evidenceId))
+            {
+                throw Invalid(path + ".evidenceIds", $"references evidence '{evidenceId}' outside query digest '{queryDigest}' provenance.");
             }
         }
 
@@ -464,13 +643,13 @@ internal sealed class BusinessOntologyAgentActionValidator
                 RequireExactProperties(parameters, "$.parameters", ["term", "ontologyId", "cursor", "limit"], ["term"]);
                 RequireBoundedString(parameters, "term", "$.parameters", 160);
                 OptionalFqn(parameters, "ontologyId", "$.parameters");
-                OptionalBoundedString(parameters, "cursor", "$.parameters", 1024);
+                OptionalCursor(parameters, "cursor", "$.parameters");
                 OptionalLimit(parameters, "limit", "$.parameters");
                 break;
             case BusinessOntologyAgentQueryOperations.ListUseCaseSlices:
                 RequireExactProperties(parameters, "$.parameters", ["ontologyId", "cursor", "limit"], ["ontologyId"]);
                 RequireFqn(parameters, "ontologyId", "$.parameters");
-                OptionalBoundedString(parameters, "cursor", "$.parameters", 1024);
+                OptionalCursor(parameters, "cursor", "$.parameters");
                 OptionalLimit(parameters, "limit", "$.parameters");
                 break;
             case BusinessOntologyAgentQueryOperations.GetUseCaseSlice:
@@ -486,7 +665,7 @@ internal sealed class BusinessOntologyAgentActionValidator
                     throw Invalid("$.parameters.kind", "is not a supported semantic claim kind.");
                 }
                 OptionalBoundedString(parameters, "term", "$.parameters", 160);
-                OptionalBoundedString(parameters, "cursor", "$.parameters", 1024);
+                OptionalCursor(parameters, "cursor", "$.parameters");
                 OptionalLimit(parameters, "limit", "$.parameters");
                 break;
             case BusinessOntologyAgentQueryOperations.GetSemanticEvidence:
@@ -519,7 +698,191 @@ internal sealed class BusinessOntologyAgentActionValidator
                 }
                 RequireString(parameters, "subjectId", "$.parameters");
                 break;
+            case BusinessOntologyAgentQueryOperations.DiscoverDomainCharters:
+                RequireExactProperties(parameters, "$.parameters", ["term", "cursor", "limit"], ["term"]);
+                RequireBoundedString(parameters, "term", "$.parameters", 160);
+                OptionalCursor(parameters, "cursor", "$.parameters");
+                OptionalLimit(parameters, "limit", "$.parameters");
+                break;
+            case BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases:
+                RequireExactProperties(parameters, "$.parameters", ["entrySymbolId", "domainSeed", "cursor", "limit"], []);
+                var hasEntry = parameters.TryGetProperty("entrySymbolId", out var entryValue) && entryValue.ValueKind != JsonValueKind.Null;
+                var hasDomain = parameters.TryGetProperty("domainSeed", out var domainValue) && domainValue.ValueKind != JsonValueKind.Null;
+                if (hasEntry == hasDomain)
+                {
+                    throw Invalid("$.parameters", "must specify exactly one of entrySymbolId or domainSeed.");
+                }
+                if (hasEntry)
+                {
+                    var entrySymbolId = RequireString(parameters, "entrySymbolId", "$.parameters");
+                    if (!entrySymbolId.StartsWith("symbol:", StringComparison.Ordinal) || !Identity.IsMatch(entrySymbolId))
+                    {
+                        throw Invalid("$.parameters.entrySymbolId", "must be a bounded symbol id.");
+                    }
+                }
+                if (hasDomain) RequireBoundedString(parameters, "domainSeed", "$.parameters", 160);
+                OptionalCursor(parameters, "cursor", "$.parameters");
+                OptionalLimit(parameters, "limit", "$.parameters");
+                break;
+            case BusinessOntologyAgentQueryOperations.FindStateRuleClusters:
+                RequireExactProperties(parameters, "$.parameters", ["term", "cursor", "limit"], ["term"]);
+                RequireBoundedString(parameters, "term", "$.parameters", 160);
+                OptionalCursor(parameters, "cursor", "$.parameters");
+                OptionalLimit(parameters, "limit", "$.parameters");
+                break;
+            case BusinessOntologyAgentQueryOperations.FindImplementationClusters:
+                RequireExactProperties(parameters, "$.parameters", ["domainSeed", "evidenceIds", "cursor", "limit"], []);
+                var hasClusterDomain = parameters.TryGetProperty("domainSeed", out var clusterDomain) && clusterDomain.ValueKind != JsonValueKind.Null;
+                var hasEvidenceIds = parameters.TryGetProperty("evidenceIds", out var evidenceValues) && evidenceValues.ValueKind != JsonValueKind.Null;
+                if (hasClusterDomain == hasEvidenceIds)
+                {
+                    throw Invalid("$.parameters", "must specify exactly one of domainSeed or evidenceIds.");
+                }
+                if (hasClusterDomain) RequireBoundedString(parameters, "domainSeed", "$.parameters", 160);
+                if (hasEvidenceIds)
+                {
+                    var clusterEvidenceIds = RequireStringArray(parameters.GetProperty("evidenceIds"), "$.parameters.evidenceIds");
+                    if (clusterEvidenceIds.Count is < 1 or > SemanticEvidencePackBuilder.MaxAnchors
+                        || clusterEvidenceIds.Distinct(StringComparer.Ordinal).Count() != clusterEvidenceIds.Count)
+                    {
+                        throw Invalid("$.parameters.evidenceIds", $"must contain 1..{SemanticEvidencePackBuilder.MaxAnchors} unique ids.");
+                    }
+                    foreach (var evidenceId in clusterEvidenceIds)
+                    {
+                        if (evidenceId.Contains('/', StringComparison.Ordinal) || !Identity.IsMatch(evidenceId) || !context.AvailableEvidenceIds.Contains(evidenceId))
+                        {
+                            throw Invalid("$.parameters.evidenceIds", $"references unknown evidence '{evidenceId}'.");
+                        }
+                    }
+                }
+                OptionalCursor(parameters, "cursor", "$.parameters");
+                OptionalLimit(parameters, "limit", "$.parameters");
+                break;
         }
+    }
+
+    private static IReadOnlyList<BusinessOntologySemanticImplementationAnchor> ValidateImplementationAnchors(
+        JsonElement element,
+        string path,
+        BusinessOntologyAgentActionValidationContext context,
+        IReadOnlyDictionary<string, BusinessOntologyInvestigationEvidenceRef> evidenceRefsById)
+    {
+        var elements = RequireArray(element, path);
+        if (elements.Length < 2)
+        {
+            throw Invalid(path, "must contain at least two implementation anchors.");
+        }
+
+        var symbolIds = new HashSet<string>(StringComparer.Ordinal);
+        var relativePaths = new HashSet<string>(StringComparer.Ordinal);
+        var roles = new HashSet<string>(StringComparer.Ordinal);
+        var anchors = new List<BusinessOntologySemanticImplementationAnchor>();
+        for (var index = 0; index < elements.Length; index++)
+        {
+            var anchorPath = $"{path}[{index}]";
+            var anchor = RequireObject(elements[index], anchorPath);
+            RequireExactProperties(anchor, anchorPath, ["symbolId", "role", "relativePath", "evidenceId"], ["symbolId", "role", "relativePath", "evidenceId"]);
+            var symbolId = RequireIdentity(anchor, "symbolId", anchorPath);
+            var role = RequireString(anchor, "role", anchorPath);
+            var relativePath = RequireRelativePath(anchor, "relativePath", anchorPath);
+            var evidenceId = RequireIdentity(anchor, "evidenceId", anchorPath);
+            if (!symbolIds.Add(symbolId))
+            {
+                throw Invalid(anchorPath + ".symbolId", $"duplicates implementation symbol '{symbolId}'.");
+            }
+            if (!relativePaths.Add(relativePath))
+            {
+                throw Invalid(anchorPath + ".relativePath", $"duplicates implementation path '{relativePath}'.");
+            }
+            roles.Add(role);
+            if (!context.AvailableEvidenceIds.Contains(evidenceId)
+                || !evidenceRefsById.TryGetValue(evidenceId, out var evidenceRef)
+                || !StringComparer.Ordinal.Equals(evidenceRef.EvidenceId, evidenceId)
+                || !StringComparer.Ordinal.Equals(evidenceRef.SymbolId, symbolId)
+                || !StringComparer.Ordinal.Equals(evidenceRef.Path, relativePath))
+            {
+                throw Invalid(anchorPath + ".evidenceId", "must match a runtime-owned evidence id, symbol id, and relative path.");
+            }
+            anchors.Add(new BusinessOntologySemanticImplementationAnchor(symbolId, role, relativePath, evidenceId));
+        }
+        if (roles.Count < 2)
+        {
+            throw Invalid(path, "must span at least two implementation roles.");
+        }
+        return anchors;
+    }
+
+    private static IReadOnlyList<string> RequireKnownEvidenceIds(
+        JsonElement element,
+        string path,
+        BusinessOntologyAgentActionValidationContext context)
+    {
+        var evidenceIds = RequireUniqueStrings(element, path);
+        if (evidenceIds.Count == 0)
+        {
+            throw Invalid(path, "must contain at least one evidence id.");
+        }
+        foreach (var evidenceId in evidenceIds)
+        {
+            ValidateIdentity(evidenceId, path);
+            if (!context.AvailableEvidenceIds.Contains(evidenceId))
+            {
+                throw Invalid(path, $"references unknown evidence '{evidenceId}'.");
+            }
+        }
+        return evidenceIds;
+    }
+
+    private static IReadOnlyList<string> RequireUniqueStrings(JsonElement element, string path)
+    {
+        var values = RequireStringArray(element, path);
+        if (values.Count != values.Distinct(StringComparer.Ordinal).Count())
+        {
+            throw Invalid(path, "must not contain duplicate values.");
+        }
+        return values;
+    }
+
+    private static string RequireChineseString(JsonElement element, string propertyName, string path)
+    {
+        var value = RequireString(element, propertyName, path);
+        if (!value.Any(character => character is >= '\u4e00' and <= '\u9fff'))
+        {
+            throw Invalid(path + "." + propertyName, "must contain Chinese business text.");
+        }
+        return value;
+    }
+
+    private static string RequireDomainId(JsonElement element, string propertyName, string path)
+    {
+        var value = RequireString(element, propertyName, path);
+        if (!BusinessOntologySemanticIdentifierGrammar.IsValidDomainId(value))
+        {
+            throw Invalid(path + "." + propertyName, "must be one PascalCase business root, optionally followed by one PascalCase business-domain segment, and must not end with an implementation technical suffix.");
+        }
+        return value;
+    }
+
+    private static string RequireRelativePath(JsonElement element, string propertyName, string path)
+    {
+        var relativePath = RequireString(element, propertyName, path);
+        if (relativePath.StartsWith("/", StringComparison.Ordinal)
+            || relativePath.StartsWith("\\", StringComparison.Ordinal)
+            || Regex.IsMatch(relativePath, "^[A-Za-z]:[\\\\/]", RegexOptions.CultureInvariant)
+            || relativePath.Split(['/', '\\']).Any(segment => segment == ".."))
+        {
+            throw Invalid(path + "." + propertyName, "must be a relative path without parent traversal.");
+        }
+        return relativePath;
+    }
+
+    private static JsonElement[] RequireArray(JsonElement element, string path)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            throw Invalid(path, "must be an array.");
+        }
+        return element.EnumerateArray().ToArray();
     }
 
     private static JsonDocument ParseStrict(string json)
@@ -638,6 +1001,18 @@ internal sealed class BusinessOntologyAgentActionValidator
             {
                 throw Invalid(path + "." + propertyName, $"must not exceed {maxLength} characters.");
             }
+        }
+    }
+
+    private static void OptionalCursor(JsonElement element, string propertyName, string path)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+        if (value.ValueKind != JsonValueKind.String || value.GetString() is not { Length: > 0 and <= 1024 } cursor || !Cursor.IsMatch(cursor))
+        {
+            throw Invalid(path + "." + propertyName, "must be a bounded signed investigation cursor.");
         }
     }
 

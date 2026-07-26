@@ -134,7 +134,7 @@ internal static class BusinessOntologyCandidateBundleBuilderTests
 
         await PublicationContractAsync(builder, result, evidence, assert);
         await ArtifactOutputContractAsync(analysis, builder, result, evidence, assert);
-        await SharedExportOperationContractAsync(om, assert);
+        await SharedExportOperationContractAsync(om, evidence, assert);
     }
 
     private static async Task PublicationContractAsync(
@@ -413,39 +413,60 @@ internal static class BusinessOntologyCandidateBundleBuilderTests
 
     private static IReadOnlyList<BusinessOntologyAnalysisRecordInput> Records(string runId, IReadOnlyList<string> evidence) =>
     [
-        Record("draft:type", "concept", "type", "SampleDomain.Ticket", "候选工单类型", """
+        Record(runId, "draft:type", "concept", "type", "SampleDomain.Ticket", "候选工单类型", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"type","semantic":{"id":"SampleDomain.Ticket","descriptionZh":"资产工单。","abstract":false}}
             """, evidence[0]),
-        Record("draft:property", "attribute", "property", Asset + ".assetCode", "候选资产编码", """
+        Record(runId, "draft:property", "attribute", "property", Asset + ".assetCode", "候选资产编码", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"property","semantic":{"ownerConceptId":"__ASSET__","name":"assetCode","valueType":"String","required":true,"descriptionZh":"资产编码。"}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal), evidence[1]),
-        Record("draft:relation", "relation", "relation", "SampleDomain.Relation.AssetOwnedBy", "候选资产归属", """
+        Record(runId, "draft:relation", "relation", "relation", "SampleDomain.Relation.AssetOwnedBy", "候选资产归属", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"relation","semantic":{"id":"SampleDomain.Relation.AssetOwnedBy","name":"ownedBy","fromConceptId":"__ASSET__","toConceptId":"__OWNER__","directed":true,"min":"0","max":"1","descriptionZh":"资产归属责任人。"}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal).Replace("__OWNER__", Owner, StringComparison.Ordinal), evidence[2]),
-        Record("draft:rule", "rule", "rule", "SampleDomain.Rule.AssetCodeRequired", "候选编码规则", """
+        Record(runId, "draft:rule", "rule", "rule", "SampleDomain.Rule.AssetCodeRequired", "候选编码规则", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"rule","semantic":{"id":"SampleDomain.Rule.AssetCodeRequired","scope":"__ASSET__","kind":"Conditional","statementZh":"资产编码必须存在。","require":{"PropertyPresent":{"property":"assetCode"}},"violationCode":"ASSET_CODE_REQUIRED","violationMessageZh":"资产编码不能为空。"}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal), evidence[3]),
-        Record("draft:lifecycle", "lifecycle", "lifecycle", "SampleDomain.Lifecycle.Asset", "候选资产生命周期", """
+        Record(runId, "draft:lifecycle", "lifecycle", "lifecycle", "SampleDomain.Lifecycle.Asset", "候选资产生命周期", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"lifecycle","semantic":{"id":"SampleDomain.Lifecycle.Asset","subject":"__ASSET__","stateProperty":"status","initial":"draft","descriptionZh":"资产登记生命周期。","states":[{"id":"draft","terminal":false,"descriptionZh":"草稿"},{"id":"registered","terminal":true,"descriptionZh":"已登记"}],"transitions":[{"id":"SampleDomain.Transition.RegisterAsset","action":"register","from":"draft","to":"registered","descriptionZh":"登记资产。","effects":[{"SetProperty":{"property":"status","value":"registered"}}]}]}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal), evidence[4]),
-        Record("draft:unresolved-relation", "rule", "rule", "SampleDomain.Rule.RequiresMissingRelation", "未闭包规则", """
+        Record(runId, "draft:unresolved-relation", "rule", "rule", "SampleDomain.Rule.RequiresMissingRelation", "未闭包规则", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"rule","semantic":{"id":"SampleDomain.Rule.RequiresMissingRelation","scope":"__ASSET__","kind":"Existential","statementZh":"资产需要未声明关系。","require":{"ExistsRelated":{"relation":"SampleDomain.Relation.NotExported","direction":"out","targetType":"__OWNER__"}},"violationCode":"RELATION_REQUIRED","violationMessageZh":"关联缺失。"}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal).Replace("__OWNER__", Owner, StringComparison.Ordinal), evidence[4]),
-        Record("draft:unresolved-lifecycle-effect", "lifecycle", "lifecycle", "SampleDomain.Lifecycle.AssetQueue", "未闭包生命周期", """
+        Record(runId, "draft:unresolved-lifecycle-effect", "lifecycle", "lifecycle", "SampleDomain.Lifecycle.AssetQueue", "未闭包生命周期", """
             {"schemaVersion":"candidate-draft-to-ontology-xml-v1","xmlKind":"lifecycle","semantic":{"id":"SampleDomain.Lifecycle.AssetQueue","subject":"__ASSET__","stateProperty":"queueState","initial":"pending","descriptionZh":"资产排队生命周期。","states":[{"id":"pending","terminal":false,"descriptionZh":"待处理"},{"id":"queued","terminal":true,"descriptionZh":"已排队"}],"transitions":[{"id":"SampleDomain.Transition.QueueAsset","action":"queue","from":"pending","to":"queued","descriptionZh":"加入队列。","effects":[{"CreateRelation":{"relation":"SampleDomain.Relation.NotExported","targetRef":"subject.queue"}}]}]}}
             """.Replace("__ASSET__", Asset, StringComparison.Ordinal), evidence[4])
     ];
 
-    private static BusinessOntologyAnalysisRecordInput Record(string recordId, string subjectKind, string kind, string subjectId, string title, string body, string evidenceId) =>
-        new("analysis:candidate-bundle", recordId, "candidate_draft", subjectKind, subjectId, title, body, "proposed", 0.2, "sha256:" + recordId, "2026-07-19T00:00:10Z", [evidenceId]);
+    private static BusinessOntologyAnalysisRecordInput Record(string runId, string recordId, string subjectKind, string kind, string subjectId, string title, string body, string evidenceId) =>
+        new(runId, recordId, "candidate_draft", subjectKind, subjectId, title, body, "proposed", 0.2, "sha256:" + recordId, "2026-07-19T00:00:10Z", [evidenceId]);
 
-    private static async Task SharedExportOperationContractAsync(CozoOm om, Action<bool, string> assert)
+    private static async Task SharedExportOperationContractAsync(
+        CozoOm om,
+        IReadOnlyList<BusinessOntologyCandidateEvidenceFact> evidence,
+        Action<bool, string> assert)
     {
-        var outputRoot = Path.Combine(Path.GetTempPath(), "onto-candidate-shared-operation-" + Guid.NewGuid().ToString("N"));
+        const string poisonOntologyId = "PoisonDomain.Ontology";
+        const string poisonGenerationId = "poison-generation";
+        const string poisonAnalysisRunId = "analysis:poison-run";
+        const string poisonVersion = "7.7.7-poison";
+        const string poisonBundleId = "poison-bundle-id";
+        var outputRoot = Path.Combine(Path.GetTempPath(), "poison-output-root-" + Guid.NewGuid().ToString("N"));
         var previousRoot = Environment.GetEnvironmentVariable("DEPA_WIKI_CANDIDATE_ONTOLOGY_ROOT");
         try
         {
             Environment.SetEnvironmentVariable("DEPA_WIKI_CANDIDATE_ONTOLOGY_ROOT", outputRoot);
+            var analysis = new BusinessOntologyAnalysisStore(om);
+            await analysis.AppendRunAsync(new BusinessOntologyAnalysisRunInput(
+                poisonAnalysisRunId,
+                poisonOntologyId,
+                poisonGenerationId,
+                "poison-agent-id",
+                "poison-model-id",
+                "poison-export-fixture",
+                "completed",
+                "2026-07-19T00:00:00Z",
+                "2026-07-19T00:01:00Z",
+                "sha256:poison-input"));
+            await analysis.AppendRecordsAsync(Records(poisonAnalysisRunId, evidence.Select(item => item.Id).ToArray()));
             var runner = new LlmWikiToolRunner(om);
             var operation = "export_business_ontology_candidates";
             assert(LlmWikiToolRunner.ToolsJson().Any(tool => tool?["name"]?.GetValue<string>() == operation),
@@ -453,33 +474,50 @@ internal static class BusinessOntologyCandidateBundleBuilderTests
 
             var result = await runner.CallAsync(operation, new JsonObject
             {
-                ["ontologyId"] = OntologyId,
-                ["generationId"] = GenerationId,
-                ["analysisRunId"] = "analysis:candidate-bundle",
-                ["version"] = "0.0.0-hypothesis",
-                ["bundleId"] = "shared-export",
+                ["ontologyId"] = poisonOntologyId,
+                ["generationId"] = poisonGenerationId,
+                ["analysisRunId"] = poisonAnalysisRunId,
+                ["version"] = poisonVersion,
+                ["bundleId"] = poisonBundleId,
             });
             var summary = JsonSerializer.SerializeToNode(result)?.AsObject()
                 ?? throw new InvalidOperationException("candidate export should return a JSON object");
-            assert(summary["published"]?.GetValue<bool>() == true &&
-                   summary["bundlePath"]?.GetValue<string>() == "shared-export" &&
-                   summary["candidates"]?["exported"]?.GetValue<int>() == 5 &&
-                   summary["artifacts"]?["diagnosisItems"]?.GetValue<int>() == 9,
-                "the shared operation should publish only a relative bundle path with candidate and diagnosis counts");
-            assert(File.Exists(Path.Combine(outputRoot, "shared-export", "ontology.xml")) &&
-                   File.Exists(Path.Combine(outputRoot, "shared-export", "analysis", "diagnosis.json")),
+            var serializedSummary = summary.ToJsonString();
+            assert(summary.Select(item => item.Key).OrderBy(item => item, StringComparer.Ordinal).SequenceEqual(
+                       ["candidates", "diagnosis", "operation", "provenance", "published", "schemaVersion"],
+                       StringComparer.Ordinal)
+                   && summary["schemaVersion"]?.GetValue<string>() == "business-ontology-candidate-export-summary-v1"
+                   && summary["operation"]?.GetValue<string>() == operation
+                   && summary["published"]?.GetValue<bool>() == true
+                   && summary["candidates"]?["exported"]?.GetValue<int>() == 5
+                   && summary["candidates"]?["excluded"]?.GetValue<int>() == 2
+                   && summary["diagnosis"]?["items"]?.GetValue<int>() == 7
+                   && summary["provenance"]?["inputDigest"]?.GetValue<string>() is { Length: > 0 },
+                "the shared operation should return only its safe export summary fields and counts");
+            assert(File.Exists(Path.Combine(outputRoot, poisonBundleId, "ontology.xml")) &&
+                   File.Exists(Path.Combine(outputRoot, poisonBundleId, "analysis", "diagnosis.json")),
                 "the shared operation should compose publication and independent diagnosis artifacts under its configured root");
-            assert(!summary.ToJsonString().Contains(outputRoot, StringComparison.Ordinal),
-                "the shared operation response must not disclose the configured absolute output root");
+            assert(!new[]
+                {
+                    poisonOntologyId,
+                    poisonGenerationId,
+                    poisonAnalysisRunId,
+                    poisonVersion,
+                    poisonBundleId,
+                    outputRoot,
+                    "poison-output-root",
+                }
+                .Any(poison => serializedSummary.Contains(poison, StringComparison.Ordinal)),
+                "the shared operation response must not disclose raw identifiers, bundle names, or paths");
 
             var rawSqlRejected = false;
             try
             {
                 await runner.CallAsync(operation, new JsonObject
                 {
-                    ["ontologyId"] = OntologyId,
-                    ["generationId"] = GenerationId,
-                    ["analysisRunId"] = "analysis:candidate-bundle",
+                    ["ontologyId"] = poisonOntologyId,
+                    ["generationId"] = poisonGenerationId,
+                    ["analysisRunId"] = poisonAnalysisRunId,
                     ["sql"] = "?[x] := *onto_concept{x}",
                 });
             }

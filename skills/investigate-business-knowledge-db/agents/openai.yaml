@@ -1,0 +1,4 @@
+interface:
+  display_name: "Investigate Business Knowledge DB"
+  short_description: "Investigate evidence in existing project databases."
+  default_prompt: "Use $investigate-business-knowledge-db to extract an evidence-backed business knowledge ledger from this database."

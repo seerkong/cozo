@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business Ontology Synthesis"
+  short_description: "Run safe pending v3 ontology synthesis"
+  default_prompt: "Use $business-ontology-semantic-synthesis to run a bounded pending v3 semantic ontology synthesis."

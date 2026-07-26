@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="business-ontology-semantic-synthesis" version="1">
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/domain-led-exploration">
+    <requirement id="domain-led-exploration">
+      <statement>系统 SHALL 以可审计的业务域 charter 为工作单元探索索引事实，而不是以文件、类或预组装符号切片直接生成本体类型。</statement>
+      <suite id="semantic-domain-discovery" name="业务域探索">
+        <case id="cluster-implementation-anchors">
+          <given>一个业务域工作项包含入口、调用、数据、前端或状态等可查询证据</given>
+          <when>系统运行 v3 语义探索</when>
+          <then>系统 SHALL 记录 domain charter、查询轨迹、证据引用和由多个实现锚点聚合得到的 semantic cluster</then>
+        </case>
+        <case id="do-not-name-code-symbol-as-concept">
+          <given>候选概念仅由一个代码符号支撑或其标识符等同于实现 FQN</given>
+          <when>系统评估候选本体项</when>
+          <then>系统 SHALL 将该项作为未收敛的实现映射或 gap，而不是把它写入 semantic candidate bundle 的业务类型集合</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/semantic-model-completeness">
+    <requirement id="semantic-model-completeness">
+      <statement>系统 SHALL 从业务域证据归纳类型、属性、关系、规则和生命周期，并明确区分已证实、待审核与证据不足的结论。</statement>
+      <suite id="semantic-modeling" name="语义建模">
+        <case id="model-business-not-symbol-graph">
+          <given>同一业务含义由多个服务、数据对象、接口或前端交互实现</given>
+          <when>系统生成 semantic candidate bundle</when>
+          <then>系统 SHALL 使用稳定的业务名称聚合这些实现映射，并为每个关系、规则或状态迁移保留可追溯证据</then>
+        </case>
+        <case id="fail-empty-semantic-graph">
+          <given>运行后的候选图没有经证据支撑的关系、规则或生命周期，或与符号投影实质等价</given>
+          <when>系统生成质量报告</when>
+          <then>系统 SHALL 将运行标记为 semantic_quality_failed，列出缺失原因和下一步调查建议，不得报告为成功语义导出</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/critic-and-provenance">
+    <requirement id="critic-and-provenance">
+      <statement>系统 SHALL 以独立 critic 校验 semantic candidate bundle 的证据闭包、跨层一致性、概念聚合质量和符号投影相似度。</statement>
+      <suite id="semantic-critic" name="语义质检">
+        <case id="reject-unsupported-or-duplicate-candidates">
+          <given>候选缺少有效证据、重复已有业务概念、将实现名伪装为业务名，或前后端事实冲突</given>
+          <when>critic 审核候选</when>
+          <then>系统 SHALL 将其拒绝或降级为 diagnosis，并保留原因、证据与 critic 决定</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/pending-only-publication">
+    <requirement id="pending-only-publication">
+      <statement>系统 SHALL 将 v3 输出发布为独立的 pending semantic candidate bundle、review packet 和质量报告；只有显式人工 promotion 才能写入 accepted ontology 或其 canonical XML 导出。</statement>
+      <suite id="publication-boundary" name="发布边界">
+        <case id="no-implicit-promotion">
+          <given>v3 运行完成且至少一个候选通过本地质量门</given>
+          <when>系统发布 v3 制品</when>
+          <then>系统 SHALL 不修改 accepted `onto_*` generation，并提供逐项 accept reject defer 或 request-evidence 的 review 输入</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/read-only-investigation-cli">
+    <requirement id="read-only-investigation-cli">
+      <statement>系统 SHALL 通过层级 investigate 路由向外部语义分析器暴露稳定、只读且有界的索引证据；该入口不负责 prompt、模型 provider、agent loop、任意 SQL、任意路径读取或本体写入。</statement>
+      <suite id="investigation-cli-contract" name="外部语义调查 CLI 合同">
+        <case id="whitelisted-route-and-parameters-only">
+          <given>外部调用方以 resource/action 路径请求业务调查</given>
+          <when>系统解析 investigate 命令</when>
+          <then>系统 SHALL 仅将已登记路径映射到只读 investigation 操作，并拒绝未登记路径以及 prompt、SQL、路径或其他未声明参数。</then>
+        </case>
+        <case id="bounded-object-body-and-query-precedence">
+          <given>调用方同时提供 flag query 参数和 JSON object body，或以 --json - 提供多行 body</given>
+          <when>系统构造调查操作参数</when>
+          <then>系统 SHALL 仅接受受限大小的 JSON object、保留结构化字段、令显式 flag 覆盖同名 body 字段，并将非对象或歧义 body 拒绝为受控参数错误。</then>
+        </case>
+        <case id="existing-database-only">
+          <given>调用方通过 investigate 选择持久化 Cozo 数据库</given>
+          <when>系统打开调查存储</when>
+          <then>系统 SHALL 仅打开既有数据库且不得创建数据目录、数据库文件、索引事实或 ontology 事实。</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-ontology-semantic-synthesis/requirements/domain-topology-investigation">
+    <requirement id="domain-topology-investigation">
+      <statement>系统 SHALL 为一个显式业务术语返回可视化消费的只读领域根源拓扑：节点具有稳定标识、层级、连接度与权重，边只来自已索引入口、调用路径、语义观察或证据。</statement>
+      <suite id="domain-topology" name="领域拓扑调查">
+        <case id="weighted-layered-graph">
+          <given>调用方为一个已索引业务术语请求领域拓扑</given>
+          <when>系统构建 topology graph</when>
+          <then>系统 SHALL 返回 domain、entry-point、subject、semantic-claim 与 evidence 层节点，返回可供节点大小映射的非负 weight 和连接边，并以固定上限与确定排序控制输出。</then>
+        </case>
+        <case id="topology-is-evidence-not-ontology">
+          <given>拓扑中的节点只由静态索引事实或调用路径连接</given>
+          <when>系统返回 topology graph</when>
+          <then>系统 SHALL 将其描述为调查证据，不得写入 ontology、不得生成候选业务概念，也不得声称静态分组已经完成业务语义理解。</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

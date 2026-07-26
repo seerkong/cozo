@@ -18,11 +18,55 @@ depa-wiki ontology review apply --ontology-id <Fqn> --decisions <file> [--repo <
 depa-wiki wiki --repo <path> --out <dir> [--pipeline legacy|codument-fractal] [options]
 depa-wiki tools
 depa-wiki call <tool-name> [--arguments-json json] [--tool-arg value] [options]
+depa-wiki investigate <resource> <action> [query flags] [--json <object>|-] [storage options]
 depa-wiki hook augment [--budget <chars>] [options]
 depa-wiki hook staleness [options]
 depa-wiki hooks install|uninstall|status [--work-dir <path>]
 depa-wiki skills generate|clean|status [--work-dir <path>] [--target-dir <path>] [--max-skills <n>] [--budget <chars>]
 ```
+
+### `investigate <resource> <action>`
+
+外部业务语义分析器应通过这个只读入口获取证据，而在自己的环境中维护 prompt、模型、检索策略、agent loop 和候选审核。路径是可扩展的 API 风格命名空间，目前支持：
+
+```text
+overview get
+terms find
+patterns find
+evidence list
+evidence get
+domains discover
+use-cases list
+state-rules find
+implementations find
+topology domain
+ontology subjects inspect
+ontology use-cases list
+ontology use-cases get
+```
+
+普通 flag 是 query 参数；`--json` 是对象型 body。两者可同时使用，flag 覆盖同名 body 字段。`--json -` 从 stdin 读取一个最多 1 MiB 的多行 JSON object，适合 heredoc 和外部 agent 传递结构化输入。该入口只映射白名单 investigation 操作，不接受 SQL、prompt、任意源码路径或 mutation。
+
+```bash
+depa-wiki investigate domains discover \
+  --term asset --limit 10 --db "$DB"
+
+# JSON graph for progressive domain -> entry point -> subject -> claim -> evidence navigation.
+# It is deterministically capped at 20 entry points, 160 subjects, 240 claims,
+# 160 CALLS edges, and 680 total edges; truncated results set truncated=true.
+depa-wiki investigate topology domain --term asset --db "$DB"
+
+# Enumerate every indexed semantic claim by following nextCursor until it is null.
+depa-wiki investigate evidence list --limit 500 --db "$DB"
+
+depa-wiki investigate evidence get --db "$DB" --json - <<'JSON'
+{
+  "evidenceIds": ["claim:asset-state", "claim:asset-validation"]
+}
+JSON
+```
+
+现有 `call <tool-name>` 仍保留兼容性，也支持 `--json -`；新集成应优先使用 `investigate`，以免获得模型编排或写操作。
 
 ## 各子命令
 
@@ -249,6 +293,22 @@ depa-wiki call semantic_search --work-dir "$REPO" --query "SampleService" --limi
 # 或直接传 JSON
 depa-wiki call semantic_search --work-dir "$REPO" --arguments-json '{"query":"SampleService","limit":5}'
 ```
+
+### `call publish_business_semantic_synthesis`
+
+v3 discovers bounded business domains, synthesizes evidence-bound pending candidates, routes them through an independent critic, and emits a review-only artifact bundle. The source database is read-only for this operation; run it against a copied database rather than a live project store. The tool accepts only optional literal `domainTerms` (one to six); it accepts no output path, ontology ID, SQL, prompt, provider configuration, evidence IDs, or review decision.
+
+`DEPA_WIKI_SEMANTIC_ARTIFACT_ROOT` is mandatory and server-owned. `DEPA_WIKI_SEMANTIC_BASELINE_ONTOLOGY_ID` optionally selects an existing deterministic code-symbol projection in the same copied database. If that baseline is absent or unreadable, publication still stays pending but `quality-report.json` is `semantic_quality_failed`; it is never reported as a semantic success.
+
+```bash
+export DEPA_WIKI_SEMANTIC_ARTIFACT_ROOT="$ARTIFACT_ROOT"
+export DEPA_WIKI_SEMANTIC_BASELINE_ONTOLOGY_ID="ItAssetManagement.Ontology"
+depa-wiki call publish_business_semantic_synthesis \
+  --db "$COPIED_DB" --work-dir "$PROJECT" \
+  --arguments-json '{"domainTerms":["asset","acceptance"]}'
+```
+
+Publication atomically creates a digest-derived run directory with `domain-charters.json`, `semantic-candidate.xml`, `review-packet.json`, `quality-report.json`, and `provenance.json`. `keep` remains a pending review candidate; no `onto_*` mutation or promotion occurs.
 
 全部工具见 [MCP 工具参考](mcp-tools.md)。
 

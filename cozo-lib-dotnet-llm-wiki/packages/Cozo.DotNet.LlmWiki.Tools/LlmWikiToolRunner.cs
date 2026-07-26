@@ -70,8 +70,14 @@ public sealed class LlmWikiToolRunner(CozoOm om)
         Tool("list_use_case_slices", "List bounded business use-case slices rooted at indexed entry points for one existing ontology generation.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["ontologyId"]),
         Tool("get_use_case_slice", "Read one bounded business use-case slice by its stable slice id.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["sliceId"] = StringSchema("Stable use-case slice id.") }, ["ontologyId", "sliceId"]),
         Tool("find_semantic_patterns", "Find bounded indexed semantic patterns for one supported claim kind. It accepts no arbitrary database query text.", new JsonObject { ["kind"] = StringSchema("One of typed_reference, validation_constraint, persistence_constraint, state_field, state_value, state_assignment, transaction_scope, route_binding, business_guard."), ["term"] = StringSchema("Optional business-term filter."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["kind"]),
+        Tool("list_semantic_evidence", "Enumerate indexed semantic evidence in deterministic claim-id pages. This is read-only, bounded, and accepts neither SQL nor paths.", new JsonObject { ["term"] = StringSchema("Optional business-term filter."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 500.") }),
         Tool("get_semantic_evidence", "Read bounded source excerpts only by existing indexed semantic evidence ids; arbitrary paths are not accepted.", new JsonObject { ["evidenceIds"] = StringArraySchema("One to 24 indexed semantic claim ids.") }, ["evidenceIds"]),
         Tool("inspect_ontology_subject", "Inspect one existing ontology concept, relation, rule, lifecycle, or candidate with status, mappings, evidence ids, and reviews.", new JsonObject { ["ontologyId"] = StringSchema("Dotted ontology id."), ["subjectKind"] = StringSchema("concept, relation, rule, lifecycle, or candidate."), ["subjectId"] = StringSchema("Ontology subject id.") }, ["ontologyId", "subjectKind", "subjectId"]),
+        Tool("discover_domain_charters", "Discover bounded domain-charter seeds from indexed entry points, claims, roles, and call paths. This reads only ck_* facts and never requires or writes an ontology generation.", new JsonObject { ["term"] = StringSchema("Literal domain term."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["term"]),
+        Tool("list_cross_layer_use_cases", "List bounded route-to-call-path-to-role use-case slices from one entry symbol or literal domain seed. This reads only ck_* facts and accepts neither ontology ids nor source paths.", new JsonObject { ["entrySymbolId"] = StringSchema("One indexed symbol: id."), ["domainSeed"] = StringSchema("Literal domain seed."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }),
+        Tool("find_state_rule_clusters", "Group bounded indexed state fields, values, transitions, guards, validation, and persistence claims by subject and call path. This is read-only and evidence-linked.", new JsonObject { ["term"] = StringSchema("Literal domain term."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }, ["term"]),
+        Tool("find_implementation_clusters", "Find bounded cross-role implementation anchors by literal domain seed or existing semantic evidence ids. The response carries a pending semantic-cluster-shaped anchor group only; it never writes analysis or onto_* facts.", new JsonObject { ["domainSeed"] = StringSchema("Literal domain seed."), ["evidenceIds"] = StringArraySchema("One to 24 existing indexed semantic claim ids."), ["cursor"] = StringSchema("Continuation cursor returned by this operation."), ["limit"] = StringSchema("Page size from 1 to 50.") }),
+        Tool("get_domain_topology", "Return a bounded layered evidence graph for a literal domain term. Nodes carry degree, direct observation count, and a visualization-only weight; this never writes ontology facts or makes business-semantic conclusions.", new JsonObject { ["term"] = StringSchema("Literal domain term.") }, ["term"]),
         Tool("run_business_ontology_agent", "Run the bounded agentic business-ontology reconstruction loop through the fixed investigation tools and isolated analysis workspace. The operation accepts only ontologyId, generationId, workItem, and smaller optional budget caps; LLM provider configuration comes from the environment.", new JsonObject
         {
             ["ontologyId"] = StringSchema("Dotted ontology id."),
@@ -85,6 +91,14 @@ public sealed class LlmWikiToolRunner(CozoOm om)
             ["maxOutputTokens"] = StringSchema("Optional smaller output-token cap; default 12000."),
             ["maxWallClockSeconds"] = StringSchema("Optional smaller wall-clock cap in seconds; default 180."),
         }, ["ontologyId", "generationId", "workItem"]),
+        Tool("run_business_semantic_synthesis", "Run the independent v3 discover, controlled exploration/synthesis, critic, and pending-only semantic synthesis path. It accepts only optional bounded literal domain terms; LLM provider configuration comes from the environment.", new JsonObject
+        {
+            ["domainTerms"] = StringArraySchema("Optional one to six literal domain terms. Omit to use bounded automatic discovery."),
+        }),
+        Tool("publish_business_semantic_synthesis", "Run v3 semantic synthesis and atomically publish only its pending review artifacts to the server-configured artifact root. It never writes accepted ontology data and accepts no path or review decision.", new JsonObject
+        {
+            ["domainTerms"] = StringArraySchema("Optional one to six literal domain terms. Omit to use bounded automatic discovery."),
+        }),
         Tool("export_business_ontology_candidates", "Publish one existing isolated analysis run as a validated, hypothesis-only candidate ontology bundle with diagnosis and advisory review artifacts. Output root, validator, evidence resolution, and publication paths are server-configured; this operation never accepts SQL, prompts, paths, provider configuration, records, or review decisions.", new JsonObject
         {
             ["ontologyId"] = StringSchema("Dotted ontology id."),
@@ -170,11 +184,20 @@ public sealed class LlmWikiToolRunner(CozoOm om)
                 Required(args, "ontologyId"), Required(args, "sliceId"), cancellationToken),
             "find_semantic_patterns" => await _investigation.FindSemanticPatternsAsync(
                 Required(args, "kind"), Optional(args, "term"), Optional(args, "cursor"), OptionalPositiveLimit(args, "limit"), cancellationToken),
+            "list_semantic_evidence" => await _investigation.ListSemanticEvidenceAsync(
+                Optional(args, "term"), Optional(args, "cursor"), OptionalPositiveLimit(args, "limit"), cancellationToken),
             "get_semantic_evidence" => await _investigation.GetSemanticEvidenceAsync(
                 StringListFromArgs(args, "evidenceIds") ?? throw new ArgumentException("Missing required argument: evidenceIds"), cancellationToken),
             "inspect_ontology_subject" => await _investigation.InspectOntologySubjectAsync(
                 Required(args, "ontologyId"), Required(args, "subjectKind"), Required(args, "subjectId"), cancellationToken),
+            "discover_domain_charters" => await DiscoverDomainChartersToolAsync(args, cancellationToken),
+            "list_cross_layer_use_cases" => await ListCrossLayerUseCasesToolAsync(args, cancellationToken),
+            "find_state_rule_clusters" => await FindStateRuleClustersToolAsync(args, cancellationToken),
+            "find_implementation_clusters" => await FindImplementationClustersToolAsync(args, cancellationToken),
+            "get_domain_topology" => await GetDomainTopologyToolAsync(args, cancellationToken),
             "run_business_ontology_agent" => await RunBusinessOntologyAgentAsync(args, cancellationToken),
+            "run_business_semantic_synthesis" => await RunBusinessSemanticSynthesisAsync(args, cancellationToken),
+            "publish_business_semantic_synthesis" => await PublishBusinessSemanticSynthesisAsync(args, cancellationToken),
             "export_business_ontology_candidates" => await ExportBusinessOntologyCandidatesAsync(args, cancellationToken),
             "query_named" => await QueryNamedAsync(args, cancellationToken),
             "trace" => await TraceAsync(args, cancellationToken),
@@ -185,6 +208,64 @@ public sealed class LlmWikiToolRunner(CozoOm om)
             "health_score" => await om.GetHealthScoreAsync(DepaOptionsFromArgs(args, includeDimension: false), cancellationToken),
             _ => new { error = $"Unknown tool: {name}" },
         };
+
+    private Task<BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter>> DiscoverDomainChartersToolAsync(
+        JsonObject args,
+        CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["term", "cursor", "limit"]);
+        return _investigation.DiscoverDomainChartersAsync(
+            Required(args, "term"),
+            Optional(args, "cursor"),
+            OptionalPositiveLimit(args, "limit"),
+            cancellationToken);
+    }
+
+    private Task<BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase>> ListCrossLayerUseCasesToolAsync(
+        JsonObject args,
+        CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["entrySymbolId", "domainSeed", "cursor", "limit"]);
+        return _investigation.ListCrossLayerUseCasesAsync(
+            Optional(args, "entrySymbolId"),
+            Optional(args, "domainSeed"),
+            Optional(args, "cursor"),
+            OptionalPositiveLimit(args, "limit"),
+            cancellationToken);
+    }
+
+    private Task<BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster>> FindStateRuleClustersToolAsync(
+        JsonObject args,
+        CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["term", "cursor", "limit"]);
+        return _investigation.FindStateRuleClustersAsync(
+            Required(args, "term"),
+            Optional(args, "cursor"),
+            OptionalPositiveLimit(args, "limit"),
+            cancellationToken);
+    }
+
+    private Task<BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster>> FindImplementationClustersToolAsync(
+        JsonObject args,
+        CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["domainSeed", "evidenceIds", "cursor", "limit"]);
+        return _investigation.FindImplementationClustersAsync(
+            Optional(args, "domainSeed"),
+            StringListFromArgs(args, "evidenceIds"),
+            Optional(args, "cursor"),
+            OptionalPositiveLimit(args, "limit"),
+            cancellationToken);
+    }
+
+    private Task<BusinessOntologyDomainTopology> GetDomainTopologyToolAsync(
+        JsonObject args,
+        CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["term"]);
+        return _investigation.GetDomainTopologyAsync(Required(args, "term"), cancellationToken);
+    }
 
     // --- DEPA conformance tools (track add-llm-wiki-depa-conformance-tools T2.1) ---
 
@@ -817,10 +898,17 @@ public sealed class LlmWikiToolRunner(CozoOm om)
                 startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
                 inputDigest);
             await store.AppendRunAsync(unavailableRun, cancellationToken);
+            await store.AppendRunCompletionAsync(
+                new BusinessOntologyAnalysisRunCompletionInput(
+                    runId,
+                    BusinessOntologyAgentRunStatuses.Blocked,
+                    startedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                    0,
+                    0,
+                    0,
+                    ""),
+                CancellationToken.None);
             return BusinessOntologyAgentRunSummary(
-                ontologyId,
-                generationId,
-                workItem,
                 runId,
                 BusinessOntologyAgentRunStatuses.Blocked,
                 BusinessOntologyAgentPhases.Explore,
@@ -857,9 +945,6 @@ public sealed class LlmWikiToolRunner(CozoOm om)
                 workItem), cancellationToken);
 
         return BusinessOntologyAgentRunSummary(
-            ontologyId,
-            generationId,
-            workItem,
             runId,
             result.Status,
             result.Phase,
@@ -873,7 +958,112 @@ public sealed class LlmWikiToolRunner(CozoOm om)
             source.LastModel,
             inputDigest,
             result.BudgetRejection,
-            result.Finish);
+            result.Finish,
+            result.PendingSyntheses);
+    }
+
+    private async Task<object> RunBusinessSemanticSynthesisAsync(JsonObject args, CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["domainTerms"]);
+        var domainTerms = LiteralStringListFromArgs(args, "domainTerms");
+        var modelerConfiguration = LlmClientConfig.FromEnvironment(Environment.GetEnvironmentVariable);
+        var criticConfiguration = LlmClientConfig.FromEnvironment(Environment.GetEnvironmentVariable);
+        var result = await new BusinessOntologySemanticSynthesisOrchestrator(
+                new BusinessOntologyInvestigationServiceOperations(_investigation),
+                new BusinessOntologySemanticLlmDependency(
+                    "modeler",
+                    LlmClientFactory.Create(modelerConfiguration),
+                    modelerConfiguration),
+                new BusinessOntologySemanticLlmDependency(
+                    "critic",
+                    LlmClientFactory.Create(criticConfiguration),
+                    criticConfiguration))
+            .RunAsync(new BusinessOntologySemanticSynthesisRequest(domainTerms), cancellationToken);
+
+        return new
+        {
+            schemaVersion = "business-ontology-semantic-synthesis-summary-v1",
+            operation = "run_business_semantic_synthesis",
+            status = ControlledSemanticSynthesisStatus(result.Status),
+            phases = result.PhaseTrace.Select(ControlledSemanticSynthesisPhase).ToArray(),
+            domains = new
+            {
+                completed = result.DomainStatuses.Count(item => item.Status is "completed" or "cached"),
+                failed = result.DomainStatuses.Count(item => item.Status == "failed"),
+                cancelled = result.DomainStatuses.Count(item => item.Status == "cancelled"),
+                cached = result.DomainStatuses.Count(item => item.FromCache),
+            },
+            publication = new
+            {
+                pending = (result.PendingEnvelope?.PendingCandidateCount ?? 0) > 0,
+                acceptedOntologyMutationCount = result.PendingEnvelope?.AcceptedOntologyMutationCount ?? 0,
+                candidateDomainCount = result.PendingEnvelope?.DomainCount ?? 0,
+                pendingCandidateCount = result.PendingEnvelope?.PendingCandidateCount ?? 0,
+                reviewCandidateCount = result.PendingEnvelope?.ReviewCandidateCount ?? 0,
+                diagnosisCandidateCount = result.PendingEnvelope?.DiagnosisCandidateCount ?? 0,
+            },
+            provenance = new
+            {
+                inputDigest = result.PendingEnvelope?.InputDigest,
+                criticDigest = result.PendingEnvelope?.CriticDigest,
+                criticSnapshotDigest = result.PendingEnvelope?.CriticRouting.Provenance.SnapshotDigest,
+            },
+        };
+    }
+
+    private async Task<object> PublishBusinessSemanticSynthesisAsync(JsonObject args, CancellationToken cancellationToken)
+    {
+        RequireExactProperties(args, ["domainTerms"]);
+        var domainTerms = LiteralStringListFromArgs(args, "domainTerms");
+        var modelerConfiguration = LlmClientConfig.FromEnvironment(Environment.GetEnvironmentVariable);
+        var criticConfiguration = LlmClientConfig.FromEnvironment(Environment.GetEnvironmentVariable);
+        var artifactRoot = Environment.GetEnvironmentVariable("DEPA_WIKI_SEMANTIC_ARTIFACT_ROOT");
+        if (string.IsNullOrWhiteSpace(artifactRoot))
+        {
+            throw new InvalidOperationException("DEPA_WIKI_SEMANTIC_ARTIFACT_ROOT must configure pending semantic artifact publication.");
+        }
+        IBusinessOntologySemanticPublicationQualityEvaluator qualityEvaluator = new BusinessOntologySemanticUnavailablePublicationQualityEvaluator();
+        var baselineOntologyId = Environment.GetEnvironmentVariable("DEPA_WIKI_SEMANTIC_BASELINE_ONTOLOGY_ID");
+        if (!string.IsNullOrWhiteSpace(baselineOntologyId))
+        {
+            try
+            {
+                qualityEvaluator = await BusinessOntologySemanticPublicationQualityEvaluator.CreateAsync(
+                    new BusinessOntologyStore(om), baselineOntologyId, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Publication remains pending-only; an unavailable trusted baseline is recorded as a
+                // quality failure rather than exposed as a database detail or treated as a pass.
+                qualityEvaluator = new BusinessOntologySemanticUnavailablePublicationQualityEvaluator();
+            }
+        }
+        var result = await new BusinessOntologySemanticSynthesisOrchestrator(
+                new BusinessOntologyInvestigationServiceOperations(_investigation),
+                new BusinessOntologySemanticLlmDependency("modeler", LlmClientFactory.Create(modelerConfiguration), modelerConfiguration),
+                new BusinessOntologySemanticLlmDependency("critic", LlmClientFactory.Create(criticConfiguration), criticConfiguration),
+                qualityEvaluator.SourceFingerprint)
+            .RunAsync(new BusinessOntologySemanticSynthesisRequest(domainTerms), cancellationToken,
+                new BusinessOntologySemanticArtifactPublisher(artifactRoot, qualityEvaluator));
+        return new
+        {
+            schemaVersion = "business-ontology-semantic-publication-summary-v1",
+            operation = "publish_business_semantic_synthesis",
+            status = ControlledSemanticSynthesisStatus(result.Status),
+            published = result.PendingEnvelope is not null,
+            publication = new
+            {
+                pendingCandidateCount = result.PendingEnvelope?.PendingCandidateCount ?? 0,
+                reviewCandidateCount = result.PendingEnvelope?.ReviewCandidateCount ?? 0,
+                diagnosisCandidateCount = result.PendingEnvelope?.DiagnosisCandidateCount ?? 0,
+                acceptedOntologyMutationCount = result.PendingEnvelope?.AcceptedOntologyMutationCount ?? 0,
+            },
+            provenance = new { inputDigest = result.PendingEnvelope?.InputDigest, criticDigest = result.PendingEnvelope?.CriticDigest },
+        };
     }
 
     private async Task<object> ExportBusinessOntologyCandidatesAsync(JsonObject args, CancellationToken cancellationToken)
@@ -895,23 +1085,14 @@ public sealed class LlmWikiToolRunner(CozoOm om)
         {
             schemaVersion = "business-ontology-candidate-export-summary-v1",
             operation = "export_business_ontology_candidates",
-            result.OntologyId,
-            result.GenerationId,
-            result.AnalysisRunId,
-            result.Version,
-            result.BundleId,
             published = result.PublishedRelativePath is not null,
-            bundlePath = result.PublishedRelativePath,
             candidates = new { exported = result.CandidateCount, excluded = result.ExcludedCount },
-            artifacts = new { diagnosisItems = result.DiagnosisItemCount, reviewItems = result.ReviewItemCount },
-            provenance = new { result.InputDigest },
+            diagnosis = new { items = result.DiagnosisItemCount },
+            provenance = new { inputDigest = result.InputDigest },
         };
     }
 
-    private static object BusinessOntologyAgentRunSummary(
-        string ontologyId,
-        string generationId,
-        string workItem,
+    internal static object BusinessOntologyAgentRunSummary(
         string runId,
         string status,
         string phase,
@@ -925,23 +1106,21 @@ public sealed class LlmWikiToolRunner(CozoOm om)
         string? model,
         string inputDigest,
         BusinessOntologyAgentBudgetRejection? budgetRejection = null,
-        BusinessOntologyAgentFinish? finish = null) => new
+        BusinessOntologyAgentFinish? finish = null,
+        IReadOnlyList<BusinessOntologyAgentPendingSynthesis>? pendingSyntheses = null) => new
         {
             schemaVersion = "business-ontology-agent-run-summary-v1",
             operation = "run_business_ontology_agent",
-            status,
-            phase,
-            ontologyId,
-            generationId,
-            workItem,
+            status = ControlledRunStatus(status),
+            phase = ControlledPhase(phase),
             analysis = new
             {
-                runId,
-                recordIds = records.Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                candidateDraftIds = records.Where(record => record.Kind == "candidate_draft").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                gapIds = records.Where(record => record.Kind == "gap").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                conflictIds = records.Where(record => record.Kind == "conflict").Select(record => record.RecordId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                recordCount = records.Count,
+                candidateDraftCount = records.Count(record => record.Kind == "candidate_draft"),
+                gapCount = records.Count(record => record.Kind == "gap"),
+                conflictCount = records.Count(record => record.Kind == "conflict"),
             },
+            pendingSynthesis = PendingSynthesisSummary(pendingSyntheses),
             budget = new
             {
                 limits = BudgetLimitsSummary(limits),
@@ -961,33 +1140,81 @@ public sealed class LlmWikiToolRunner(CozoOm om)
                     budgetRejection.Limit,
                     budgetRejection.Used,
                     budgetRejection.Requested,
-                    budgetRejection.Audit,
                 },
             },
             provenance = new
             {
                 inputDigest,
-                model = model ?? "",
-                queryDigests = queries.Select(query => query.QueryDigest).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                evidenceIds = queries.SelectMany(query => query.EvidenceRefs.Select(evidence => evidence.EvidenceId)).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
-                operations = queries.GroupBy(query => query.Operation, StringComparer.Ordinal)
-                    .OrderBy(group => group.Key, StringComparer.Ordinal)
-                    .Select(group => new { operation = group.Key, count = group.Count() })
-                    .ToArray(),
+                queryCount = queries.Count,
+                evidenceCount = queries.SelectMany(query => query.EvidenceRefs)
+                    .Select(evidence => evidence.EvidenceId)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count(),
                 stepCount = steps.Count,
             },
             finish = finish is null ? null : new
             {
-                finish.Status,
-                finish.Reason,
-                finish.Unresolved,
+                Status = ControlledFinishStatus(finish.Status),
+                unresolvedCount = finish.Unresolved.Count,
             },
             diagnostics = new
             {
-                rejectionReason,
-                providerUnavailableReason,
+                rejected = !string.IsNullOrWhiteSpace(rejectionReason),
+                providerUnavailable = !string.IsNullOrWhiteSpace(providerUnavailableReason),
             },
         };
+
+    private static object PendingSynthesisSummary(
+        IReadOnlyList<BusinessOntologyAgentPendingSynthesis>? pendingSyntheses)
+    {
+        var syntheses = pendingSyntheses ?? [];
+        return new
+        {
+            charterCount = syntheses.Sum(synthesis => synthesis.DomainCharters.Count),
+            clusterCount = syntheses.Sum(synthesis => synthesis.Clusters.Count),
+            workflowCount = syntheses.Sum(synthesis => synthesis.DomainCharters.Sum(charter => charter.WorkflowNames.Count)),
+            anchorCount = syntheses.Sum(synthesis => synthesis.Clusters.Sum(cluster => cluster.ImplementationAnchors.Count)),
+        };
+    }
+
+    private static string? ControlledRunStatus(string value) => value is
+        BusinessOntologyAgentRunStatuses.Running or
+        BusinessOntologyAgentRunStatuses.Finished or
+        BusinessOntologyAgentRunStatuses.Rejected or
+        BusinessOntologyAgentRunStatuses.BudgetExhausted or
+        BusinessOntologyAgentRunStatuses.Blocked or
+        BusinessOntologyAgentRunStatuses.Cancelled or
+        BusinessOntologyAgentRunStatuses.TimedOut
+        ? value
+        : null;
+
+    private static string? ControlledSemanticSynthesisStatus(string value) => value is
+        BusinessOntologySemanticSynthesisStatuses.Completed or
+        BusinessOntologySemanticSynthesisStatuses.CompletedWithFailures or
+        BusinessOntologySemanticSynthesisStatuses.Blocked or
+        BusinessOntologySemanticSynthesisStatuses.Cancelled
+        ? value
+        : null;
+
+    private static string? ControlledSemanticSynthesisPhase(string value) => value is
+        "discover:completed" or "discover:failed" or "discover:cancelled" or "discover:skipped" or
+        "explore:completed" or "explore:completed_with_failures" or "explore:cancelled" or "explore:skipped" or
+        "synthesize:completed" or "synthesize:completed_with_failures" or "synthesize:cancelled" or "synthesize:skipped" or
+        "critic:completed" or "critic:failed" or "critic:cancelled" or "critic:skipped" or
+        "publish:pending" or "publish:not_published"
+        ? value
+        : null;
+
+    private static string? ControlledPhase(string value) => value is
+        BusinessOntologyAgentPhases.Explore or
+        BusinessOntologyAgentPhases.Verify or
+        BusinessOntologyAgentPhases.Reconcile or
+        BusinessOntologyAgentPhases.Model
+        ? value
+        : null;
+
+    private static string? ControlledFinishStatus(string value) =>
+        BusinessOntologyAgentFinishStatuses.All.Contains(value) ? value : null;
 
     private static object BudgetLimitsSummary(BusinessOntologyAgentBudgetLimits limits) => new
     {
@@ -1204,5 +1431,29 @@ public sealed class LlmWikiToolRunner(CozoOm om)
         return Optional(args, name) is { Length: > 0 } raw
             ? raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : null;
+    }
+
+    private static IReadOnlyList<string>? LiteralStringListFromArgs(JsonObject args, string name)
+    {
+        if (!args.TryGetPropertyValue(name, out var value) || value is null)
+        {
+            return null;
+        }
+
+        if (value is JsonArray array)
+        {
+            if (array.Any(item => item?.GetValueKind() != JsonValueKind.String))
+            {
+                throw new ArgumentException($"{name} must contain only literal strings.");
+            }
+            return array.Select(item => item!.GetValue<string>()).ToArray();
+        }
+
+        if (value.GetValueKind() != JsonValueKind.String)
+        {
+            throw new ArgumentException($"{name} must be a literal string or string array.");
+        }
+        return value.GetValue<string>()
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }

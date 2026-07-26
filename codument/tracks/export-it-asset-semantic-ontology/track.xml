@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="export-it-asset-semantic-ontology" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>completed</Status>
+    <Goal>从两个 IT Asset 项目的数据库证据中直接交付外部语义本体设计，而不将静态观察或代码符号投影误称为业务理解。</Goal>
+    <Description>仓库补齐只读、可续页的 investigation CLI；外部 solution 负责模型提示词、编排、批评、最终 XML/JSON 制品，以及使用 cozo-lib-bun 实现的可执行本体包。源数据库与 accepted ontology 均不写入。</Description>
+    <QuestionMode>decision-tree</QuestionMode><QuestionSeverity>auto</QuestionSeverity><CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-25T12:00:00Z</CreatedAt><UpdatedAt>2026-07-26T10:15:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="backend-source-db" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/depa-wiki.db" />
+    <MaterialBundle role="input" name="frontend-source-db" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/depa-wiki.db" />
+    <MaterialBundle role="input" name="investigation-cli" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
+    <MaterialBundle role="output" name="external-ontology" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v4/" />
+    <MaterialBundle role="output" name="executable-ontology-package" domain="bun" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/packages/it-asset-management-ontology/" />
+  </Ports>
+  <TaskSpace id="space_export-it-asset-semantic-ontology" name="export-it-asset-semantic-ontology" version="1">
+    <SubNodes>
+      <TaskGroup id="P1" name="完整证据调查合同" status="DONE" order="0"><SubNodes>
+        <Task id="T1.1" name="建立可续页的完整 semantic evidence CLI" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T1.1-AC1" checked="true">超过 5,000 条 claim 的数据库可由 CLI 完整枚举</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+      <TaskGroup id="P2" name="外部语义编排" status="DONE" order="1"><SubNodes>
+        <Task id="T2.1" name="实现外部证据采集、提示词、结构化 critic 与制品写入" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T2.1-AC1" checked="true">提示词与模型编排不进入 cozo 仓库</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+      <TaskGroup id="P3" name="双库实际交付" status="DONE" order="2"><SubNodes>
+        <Task id="T3.1" name="在数据库副本上运行并导出最终 IT Asset 本体" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T3.1-AC1" checked="true">最终产物包含业务概念、关系、规则、生命周期、证据、覆盖和缺口</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+      <TaskGroup id="P4" name="可执行本体包交付" status="DONE" order="3"><SubNodes>
+        <Task id="T4.1" name="将证据支持的业务语义注册为 cozo-om schema" status="DONE" order="0" priority="P0"><cdt:Acceptance><cdt:Criterion id="T4.1-AC1" checked="true">外部 Bun workspace 中存在真实 Node.js 包，以 file: 依赖 cozo-lib-bun，并可初始化 14 类型、7 关系、10 业务约束和 2 生命周期约束</cdt:Criterion><cdt:Criterion id="T4.1-AC2" checked="true">包在内存 CozoDB 中通过 schema、跨实体和生命周期验证测试</cdt:Criterion></cdt:Acceptance></Task>
+      </SubNodes></TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Dag for="space_export-it-asset-semantic-ontology"><Node id="P2"><After ref="P1" /></Node><Node id="P3"><After ref="P2" /></Node><Node id="P4"><After ref="P3" /></Node></Dag></Schedule>
+</Track>

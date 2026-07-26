@@ -5,13 +5,23 @@
 需要 .NET SDK（当前目标框架 net10.0）。在仓库根目录：
 
 ```bash
-dotnet build cozo-lib-dotnet-llm-wiki/Cozo.DotNet.LlmWiki.slnx -c Release
+cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh build cozo-lib-dotnet-llm-wiki/Cozo.DotNet.LlmWiki.slnx -c Release
 ```
 
 跑测试（可选，验证构建健康）：
 
 ```bash
-dotnet run --project cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj
+cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh run --project cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj
+```
+
+该 wrapper 会禁用 MSBuild/编译服务器复用、为 `build`/`test` 限制一个 MSBuild worker，并在退出时关闭
+构建服务器。对本地的 LLM Wiki 测试宿主，它还默认关闭 analyzers、串行构建项目引用，避免大型单程序集
+测试在内存压力下长期占满 Roslyn；CI 与直接 `dotnet` 命令不受影响，仍保留 analyzer 检查。需要本地完整
+analyzer 校验时运行：
+
+```bash
+LLM_WIKI_FAST_LOCAL_TESTS=0 cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh build \
+  cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/Cozo.DotNet.LlmWiki.Tests.csproj
 ```
 
 ## 2. 安装为 `depa-wiki` 命令（符号链接）

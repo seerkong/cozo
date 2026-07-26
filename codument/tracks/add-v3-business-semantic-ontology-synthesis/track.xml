@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Track id="add-v3-business-semantic-ontology-synthesis" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>提供可组合、只读、可审计的业务语义 investigation CLI，使外部语义分析器能够基于索引事实完成提示词、模型编排和人工审核，而不将代码符号投影误报为业务理解。</Goal>
+    <Description>本仓库维护 investigation 数据面和 CLI 合同；提示词、模型 provider、agent loop、语义归纳和 candidate 审核制品由外部工具维护。既有 v3 pending 编排保留为兼容实现，但不再作为本 track 的推进方向。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-19T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-25T23:30:00Z</UpdatedAt>
+    <GapRound>5</GapRound>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/" />
+    <MaterialBundle role="input" name="investigation-and-analysis" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/" />
+    <MaterialBundle role="input" name="ontology-xml-dsl" domain="skill" path="vfs://@/skills/ontology-xml-dsl/" />
+    <MaterialBundle role="input" name="indexed-facts" domain="external-runtime" path="vfs://external/depa-wiki-copied-database/" />
+    <MaterialBundle role="output" name="tools" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.Tools/" />
+    <MaterialBundle role="output" name="cli" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer/" />
+    <MaterialBundle role="output" name="tests" domain="dotnet" path="vfs://@/cozo-lib-dotnet-llm-wiki/tests/Cozo.DotNet.LlmWiki.Tests/" />
+    <MaterialBundle role="output" name="semantic-skill" domain="skill" path="vfs://@/skills/business-ontology-semantic-synthesis/" />
+    <MaterialBundle role="output" name="candidate-artifacts" domain="external-runtime" path="vfs://external/ontology-artifacts/v3/" />
+  </Ports>
+  <TaskSpace id="space_add_v3_business_semantic_ontology_synthesis" name="add-v3-business-semantic-ontology-synthesis" version="1" cdt:child-mode="dag">
+    <Description>将实现事实收敛为可审计业务域语义，并以独立 critic 和质量门拒绝符号投影伪成功。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="语义合同与反例基线" status="DONE" order="0">
+        <SubNodes>
+          <Task id="T1.1" name="记录 v2 符号投影反例并定义 semantic_quality_failed 判定" status="DONE" order="0" priority="P0" />
+          <Task id="T1.2" name="定义 domain charter、semantic cluster、candidate bundle、critic verdict 与质量报告合同" status="DONE" order="1" priority="P0" />
+          <Task id="T1.3" name="定义业务命名、聚合度、证据闭包和投影差异的本地质量门" status="DONE" order="2" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P2" name="领域化调查与聚类" status="DONE" order="1">
+        <SubNodes>
+          <Task id="T2.1" name="补齐业务域、跨层用例、状态/规则和实现聚类的只读调查操作" status="DONE" order="0" priority="P0" />
+          <Task id="T2.2" name="扩展 agent action schema 以产出并验证 domain charter 与 semantic cluster" status="DONE" order="1" priority="P0" />
+          <Task id="T2.3" name="实现按域预算、确定性排序、缓存和失败原子性" status="DONE" order="2" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P3" name="语义归纳与独立 critic" status="DONE" order="2">
+        <SubNodes>
+          <Task id="T3.1" name="实现 discover-explore-synthesize-critic-publish 多阶段编排和 Codex CLI 路由" status="DONE" order="0" priority="P0" />
+          <Task id="T3.2" name="实现候选概念的多实现映射、中文说明、关系、规则和生命周期归纳" status="DONE" order="1" priority="P0" />
+          <Task id="T3.3" name="实现 critic 的 keep merge drop defer verdict 与诊断闭包" status="DONE" order="2" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="2" verify-round="true" on-exhausted="block" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P4" name="pending 制品、review 与测试" status="DONE" order="3">
+        <SubNodes>
+          <Task id="T4.1" name="导出 semantic-candidate XML、domain charters、review packet、质量报告和 provenance" status="DONE" order="0" priority="P0" />
+          <Task id="T4.2" name="覆盖语义聚合、跨端佐证、规则/生命周期、符号投影拒绝、无证据拒绝和无隐式 promotion" status="DONE" order="1" priority="P0" />
+          <Task id="T4.3" name="编写可复用三层 semantic synthesis skill 与配置化 CLI 说明" status="DONE" order="2" priority="P1" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="5" verify-round="true" on-exhausted="block" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P5" name="小预算真实实验与人工验收入口" status="ABANDONED" order="4">
+        <SubNodes>
+          <Task id="T5.1" name="在配置化 copied database 上以受限 Codex 预算运行 v3，不写入源数据库" status="DONE" order="0" priority="P0" />
+          <Task id="T5.2" name="对照基础投影并报告语义质量、成本、未解决域与人工审核样本" status="ABANDONED" order="1" priority="P0" />
+          <Task id="T5.3" name="仅在用户明确审核后交接后续 promotion 工作，不在本 track 自动提升" status="ABANDONED" order="2" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="2" verify-round="true" on-exhausted="block" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P6" name="外部语义分析边界与 Investigation CLI" status="DONE" order="5">
+        <SubNodes>
+          <Task id="T6.1" name="定义层级只读 investigate 路由，将路径映射到稳定 investigation 操作" status="DONE" order="0" priority="P0" />
+          <Task id="T6.2" name="支持 flag query 参数与 stdin 多行 JSON body，并定义覆盖与输入边界" status="DONE" order="1" priority="P0" />
+          <Task id="T6.3" name="补齐 CLI 合同测试和外部语义分析调用说明" status="DONE" order="2" priority="P1" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="5" verify-round="true" on-exhausted="block" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+      <TaskGroup id="P7" name="领域拓扑与双库 dogfood 挖掘" status="ACTIVE" order="6">
+        <SubNodes>
+          <Task id="T7.1" name="提供可视化消费的领域根源拓扑：层级节点、关联边、连接度与稳定权重" status="DONE" order="0" priority="P0" />
+          <Task id="T7.2" name="在两个 IT Asset 数据库副本上显式重建 semantic claim，仅用只读 CLI 进行挖掘" status="DONE" order="1" priority="P0" />
+          <Task id="T7.3" name="记录可证明语义、跨端差异、缺失证据与外部分析器后续输入" status="DONE" order="2" priority="P0" />
+          <Task id="T7.4" name="在第 5 轮修补后完成独立 fresh gap-loop 复核" status="ACTIVE" order="3" priority="P0" />
+        </SubNodes>
+        <Hooks><Hook on="phase:after"><cdt:GapLoop max-rounds="5" verify-round="true" on-exhausted="block" /></Hook><Hook on="phase:after"><cdt:AttractorCheck use="coding" /></Hook></Hooks>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule>
+    <Dag for="space_add_v3_business_semantic_ontology_synthesis">
+      <Node id="P2"><After ref="P1" /></Node>
+      <Node id="P3"><After ref="P2" /></Node>
+      <Node id="P4"><After ref="P3" /></Node>
+      <Node id="P5"><After ref="P4" /></Node>
+      <Node id="P6"><After ref="P4" /></Node>
+      <Node id="P7"><After ref="P6" /></Node>
+    </Dag>
+  </Schedule>
+</Track>

@@ -63,9 +63,15 @@ cozo-lib-dotnet-llm-wiki/scripts/dotnet-safe.sh run --project cozo-lib-dotnet-ll
 ```
 
 `scripts/dotnet-safe.sh` is required for finite local build/test automation: it disables
-MSBuild node reuse and shuts down build servers on exit. It deliberately rejects `dotnet watch`
-and long-lived application servers. The test CLI helper also has a 30-second timeout and kills
-its entire child process tree; do not replace its explicit `dotnet depa-wiki.dll` host with
+MSBuild node reuse, adds `--disable-build-servers` to build-like commands, limits local
+`build`/`test` commands to one MSBuild worker, and shuts down build servers on exit. For this one
+monolithic test executable it also defaults
+`LLM_WIKI_FAST_LOCAL_TESTS=1`, which disables analyzers and serializes project references only
+for the test project. CI and direct `dotnet` commands retain analyzers; use
+`LLM_WIKI_FAST_LOCAL_TESTS=0` when a local full analyzer build is needed. It deliberately rejects
+`dotnet watch` and long-lived application servers. The test CLI helper defaults to a 90-second
+process budget (override with `DEPA_WIKI_TEST_CLI_TIMEOUT_SECONDS`, 1-300) and kills its entire
+child process tree on timeout; do not replace its explicit `dotnet depa-wiki.dll` host with
 `Environment.ProcessPath`, which is the test apphost and would recursively start the suite.
 
 前端工作台开发见 `cozo-lib-dotnet-llm-wiki-viz/`（`VITE_API_BASE=http://127.0.0.1:4176 npm run dev`，或 `npm run build` 后用 `--serve --static-dir` 服务）。

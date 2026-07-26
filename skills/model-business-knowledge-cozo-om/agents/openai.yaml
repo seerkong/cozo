@@ -1,0 +1,4 @@
+interface:
+  display_name: "Model Business Knowledge with Cozo OM"
+  short_description: "Build runnable Cozo OM packages from reviewed knowledge."
+  default_prompt: "Use $model-business-knowledge-cozo-om to create a runnable cozo-lib-bun package from these reviewed business concepts."

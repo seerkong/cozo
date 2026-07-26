@@ -13,6 +13,8 @@ using Cozo.DotNet.Om.CodeKnowledge;
 using Cozo.DotNet.Om.Depa;
 
 const string DepaWikiCliChildEnvironment = "DEPA_WIKI_TEST_CLI_CHILD";
+const int DefaultDepaWikiCliTestTimeoutSeconds = 90;
+const int MaximumDepaWikiCliTestTimeoutSeconds = 300;
 
 // Process-safety circuit breaker (2026-07-19): this test executable used to be selected as
 // the host for depa-wiki.dll. That re-entered this entire top-level test program recursively.
@@ -84,7 +86,8 @@ static async Task<(int ExitCode, string Stdout, string Stderr)> RunDepaWikiCliAs
     using var process = System.Diagnostics.Process.Start(info) ?? throw new InvalidOperationException("Failed to start depa-wiki CLI.");
     var stdoutTask = process.StandardOutput.ReadToEndAsync();
     var stderrTask = process.StandardError.ReadToEndAsync();
-    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+    var timeoutBudget = ResolveDepaWikiCliTestTimeout();
+    using var timeout = new CancellationTokenSource(timeoutBudget);
     try
     {
         await process.WaitForExitAsync(timeout.Token);
@@ -95,12 +98,26 @@ static async Task<(int ExitCode, string Stdout, string Stderr)> RunDepaWikiCliAs
         process.Kill(entireProcessTree: true);
         await process.WaitForExitAsync();
         await Task.WhenAll(stdoutTask, stderrTask);
-        throw new TimeoutException("depa-wiki CLI test exceeded the 30-second process budget.");
+        throw new TimeoutException(
+            $"depa-wiki CLI test exceeded the {timeoutBudget.TotalSeconds:0}-second process budget.");
     }
 
     var stdout = await stdoutTask;
     var stderr = await stderrTask;
     return (process.ExitCode, stdout, stderr);
+}
+
+static TimeSpan ResolveDepaWikiCliTestTimeout()
+{
+    var configured = Environment.GetEnvironmentVariable("DEPA_WIKI_TEST_CLI_TIMEOUT_SECONDS");
+    if (int.TryParse(configured, out var seconds)
+        && seconds > 0
+        && seconds <= MaximumDepaWikiCliTestTimeoutSeconds)
+    {
+        return TimeSpan.FromSeconds(seconds);
+    }
+
+    return TimeSpan.FromSeconds(DefaultDepaWikiCliTestTimeoutSeconds);
 }
 
 static string ResolveDotnetHost()
@@ -269,6 +286,35 @@ if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_AGENT_CONTROLLER_ONLY") ==
     return;
 }
 
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_DOMAIN_WORK_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticDomainWorkTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology semantic domain work tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_SEMANTIC_ORCHESTRATION_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticSynthesisOrchestratorTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology semantic synthesis orchestration tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("BUSINESS_ONTO_SEMANTIC_SYNTHESIS_ONLY") == "1")
+{
+    Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticSynthesisContractTests.Run((condition, message) => Assert(condition, message));
+    Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticPendingDraftTests.Run((condition, message) => Assert(condition, message));
+    Console.WriteLine("Business ontology semantic synthesis contract tests passed.");
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("INVESTIGATION_CLI_ONLY") == "1")
+{
+    await Cozo.DotNet.LlmWiki.Tests.InvestigationCliTests.RunAsync((condition, message) => Assert(condition, message));
+    Console.WriteLine("Investigation CLI tests passed.");
+    return;
+}
+
 var root = Path.Combine(Path.GetTempPath(), $"llm-wiki-test-{Guid.NewGuid():N}");
 Directory.CreateDirectory(root);
 try
@@ -284,8 +330,8 @@ try
     Assert(semanticSearchSchema.ContainsKey("mode") && semanticSearchSchema.ContainsKey("rrfK"),
         "semantic_search schema should expose add-only mode and rrfK parameters");
     Assert(toolNames.Contains("overview_graph"), "shared tool metadata should include overview_graph");
-    // The shared tool matrix contains the legacy 18 tools plus seven fixed, read-only business
-    // ontology investigation operations. It deliberately does not expose arbitrary Datalog.
+    // The shared tool matrix contains legacy tools plus fixed, read-only business investigation
+    // operations. It deliberately does not expose arbitrary Datalog.
     string[] expectedToolMatrix =
     [
         "index_repo", "build_wiki", "symbol_context", "impact_of_change", "docs_for_code",
@@ -294,10 +340,12 @@ try
         "depa_conformance", "fact_grade_map", "health_score",
         "ontology_investigation_overview", "find_business_terms", "list_use_case_slices",
         "get_use_case_slice", "find_semantic_patterns", "get_semantic_evidence", "inspect_ontology_subject",
-        "run_business_ontology_agent"
+        "discover_domain_charters", "list_cross_layer_use_cases", "find_state_rule_clusters",
+        "find_implementation_clusters", "run_business_ontology_agent", "run_business_semantic_synthesis",
+        "publish_business_semantic_synthesis", "export_business_ontology_candidates"
     ];
-    Assert(toolNames.Length == 26 && expectedToolMatrix.All(toolNames.Contains),
-        "shared tool metadata should expose exactly the 26-tool matrix including the agentic run operation (got: "
+    Assert(toolNames.Length == 33 && expectedToolMatrix.All(toolNames.Contains),
+        "shared tool metadata should expose exactly the 33-tool matrix including bounded v3 semantic publication (got: "
         + string.Join(", ", toolNames) + ")");
     string[] expectedAgentRunProperties =
     [
@@ -413,7 +461,7 @@ try
             var httpAgentJson = JsonNode.Parse(httpAgentText)!.AsObject();
             Assert(httpAgentJson["schemaVersion"]!.GetValue<string>() == "business-ontology-agent-run-summary-v1"
                     && httpAgentJson["status"]!.GetValue<string>() == "blocked"
-                    && httpAgentJson["diagnostics"]!["providerUnavailableReason"] is not null
+                    && httpAgentJson["diagnostics"]!["providerUnavailable"]!.GetValue<bool>()
                     && !httpAgentText.Contains("sourceExcerpt", StringComparison.OrdinalIgnoreCase)
                     && !httpAgentText.Contains("if (record.state", StringComparison.OrdinalIgnoreCase),
                 "HTTP /api/tools/call should return a structured unavailable-provider summary without raw source/model output");
@@ -857,7 +905,7 @@ try
     Assert(agentUnavailableJson["schemaVersion"]!.GetValue<string>() == "business-ontology-agent-run-summary-v1"
             && agentUnavailableJson["operation"]!.GetValue<string>() == "run_business_ontology_agent"
             && agentUnavailableJson["status"]!.GetValue<string>() == "blocked"
-            && agentUnavailableJson["diagnostics"]!["providerUnavailableReason"] is not null
+            && agentUnavailableJson["diagnostics"]!["providerUnavailable"]!.GetValue<bool>()
             && agentUnavailableJson.ToJsonString(LlmWikiJson.Options) is var agentUnavailableText
             && !agentUnavailableText.Contains("sourceExcerpt", StringComparison.OrdinalIgnoreCase)
             && !agentUnavailableText.Contains("if (record.state", StringComparison.OrdinalIgnoreCase),
@@ -3595,6 +3643,10 @@ await Cozo.DotNet.LlmWiki.Tests.SkillsCommandTests.RunAsync((condition, message)
 // — codument-fractal first-class entry, legacy default untouched, invalid value rejected.
 await Cozo.DotNet.LlmWiki.Tests.WikiCliPipelineTests.RunAsync((condition, message) => Assert(condition, message));
 
+// External semantic analyzers use the read-only, path-oriented investigate CLI. It accepts
+// query-like flags and bounded JSON bodies, including multiline stdin through --json -.
+await Cozo.DotNet.LlmWiki.Tests.InvestigationCliTests.RunAsync((condition, message) => Assert(condition, message));
+
 // CodeKnowledge schema v3 semantic-claim contract: read-only preflight, explicit reindex,
 // canonical writes, closed kinds, and incremental file-scoped cleanup.
 await Cozo.DotNet.LlmWiki.Tests.CodeSemanticClaimContractTests.RunAsync((condition, message) => Assert(condition, message));
@@ -3624,8 +3676,12 @@ await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyCandidateDeriverTests.RunAsync((
 await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyInvestigationServiceTests.RunAsync((condition, message) => Assert(condition, message));
 await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAnalysisStoreTests.RunAsync((condition, message) => Assert(condition, message));
 await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentActionContractTests.RunAsync((condition, message) => Assert(condition, message));
+Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticSynthesisContractTests.Run((condition, message) => Assert(condition, message));
+Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticPendingDraftTests.Run((condition, message) => Assert(condition, message));
 await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgentBudgetTests.RunAsync((condition, message) => Assert(condition, message));
 await Cozo.DotNet.LlmWiki.Tests.BusinessOntologyAgenticReconstructionServiceTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticDomainWorkTests.RunAsync((condition, message) => Assert(condition, message));
+await Cozo.DotNet.LlmWiki.Tests.BusinessOntologySemanticSynthesisOrchestratorTests.RunAsync((condition, message) => Assert(condition, message));
 
 // Standard XML projection of onto_* semantic state: modules are generated from the evidence-gated
 // view, while pending candidates remain an audit artifact outside the ontology graph.

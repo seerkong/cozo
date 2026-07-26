@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<behavior-patch capability="business-knowledge-skills" version="1">
+  <upsert selector="behavior://business-knowledge-skills/requirements/read-only-investigation">
+    <requirement id="read-only-investigation">
+      <statement>The project SHALL provide a skill that extracts business knowledge only through bounded read-only investigation routes, completes evidence cursor pagination, and records evidence, interpretation, confidence, and gaps separately.</statement>
+      <suite id="database-investigation" name="数据库业务知识调查">
+        <case id="no-claim-to-ontology-shortcut">
+          <given>an existing CodeKnowledge database</given>
+          <when>an agent investigates business semantics</when>
+          <then>the agent SHALL not treat raw claims, symbols, topology, or counts as accepted business ontology and SHALL not mutate the database</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+  <upsert selector="behavior://business-knowledge-skills/requirements/executable-cozo-om-modeling">
+    <requirement id="executable-cozo-om-modeling">
+      <statement>The project SHALL provide a skill that turns only reviewed business knowledge into a tested runnable Cozo OM package using a local file: dependency on cozo-lib-bun and public OM schema APIs.</statement>
+      <suite id="cozo-om-package-modeling" name="可执行 Cozo OM 建模">
+        <case id="reviewed-ledger-only">
+          <given>a reviewed business knowledge ledger</given>
+          <when>an agent implements an ontology package</when>
+          <then>the package SHALL define only evidence-backed schema and constraints, include business comments, and pass an in-memory CozoDB test</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

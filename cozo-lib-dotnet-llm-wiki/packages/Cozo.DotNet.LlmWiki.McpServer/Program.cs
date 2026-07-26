@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Cozo.DotNet;
+using Cozo.DotNet.LlmWiki.McpServer;
 using Cozo.DotNet.LlmWiki.Indexing;
 using Cozo.DotNet.LlmWiki.LlmClient;
 using Cozo.DotNet.LlmWiki.Server;
@@ -38,6 +39,7 @@ internal sealed class LlmWikiCli
             "wiki" => await RunWikiAsync(args.Skip(1).ToArray()),
             "tools" => RunTools(),
             "call" => await RunCallAsync(args.Skip(1).ToArray()),
+            "investigate" => await RunInvestigateAsync(args.Skip(1).ToArray()),
             // Claude Code agent hooks (add-llm-wiki-agent-hooks track): wiring only — every
             // behavior (stdin JSON, silent degrade, budget) lives in the testable HookCommands.
             "hook" => await Cozo.DotNet.LlmWiki.McpServer.HookCommands.RunAsync(
@@ -389,7 +391,38 @@ internal sealed class LlmWikiCli
         var runner = new LlmWikiToolRunner(new CozoOm(db));
         try
         {
-            var result = await runner.CallAsync(toolName, LlmWikiCliOptions.ToolArguments(options));
+            var result = await runner.CallAsync(toolName, await LlmWikiCliOptions.ToolArgumentsAsync(options, Console.In));
+            Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
+            return 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or JsonException)
+        {
+            Console.Error.WriteLine(new JsonObject { ["error"] = ex.Message }.ToJsonString(LlmWikiJson.Options));
+            return 2;
+        }
+    }
+
+    private static async Task<int> RunInvestigateAsync(string[] args)
+    {
+        var firstOption = Array.FindIndex(args, item => item.StartsWith("--", StringComparison.Ordinal));
+        var pathCount = firstOption < 0 ? args.Length : firstOption;
+        if (pathCount == 0)
+        {
+            PrintInvestigateUsage();
+            return 2;
+        }
+
+        try
+        {
+            var toolName = InvestigationCliRoutes.Resolve(args.Take(pathCount).ToArray());
+            var options = LlmWikiCliOptions.Parse(args.Skip(pathCount).ToArray());
+            var storage = CozoWikiStorageOptions.From(options, Directory.GetCurrentDirectory(), createDirectories: false);
+            EnsureExistingDatabase(storage);
+            using var db = new CozoDb(storage.Engine, storage.DbPath);
+            var runner = new LlmWikiToolRunner(new CozoOm(db));
+            var toolArguments = await LlmWikiCliOptions.ToolArgumentsAsync(options, Console.In);
+            InvestigationCliRoutes.ValidateArguments(toolName, toolArguments);
+            var result = await runner.CallAsync(toolName, toolArguments);
             Console.WriteLine(JsonSerializer.Serialize(result, LlmWikiJson.Options));
             return 0;
         }
@@ -432,6 +465,7 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  depa-wiki wiki --repo <path> --out <dir> [--pipeline legacy|codument-fractal] [options]");
         Console.Error.WriteLine("  depa-wiki tools");
         Console.Error.WriteLine("  depa-wiki call <tool-name> [--arguments-json|--args json] [--tool-arg value] [options]");
+        Console.Error.WriteLine("  depa-wiki investigate <resource> <action> [query flags] [--json <object>|-] [storage options]");
         Console.Error.WriteLine("  depa-wiki hook augment [--budget <chars>] [options]   (Claude Code PostToolUse hook: stdin JSON -> graph context)");
         Console.Error.WriteLine("  depa-wiki hook staleness [options]                    (Claude Code SessionStart hook: index-behind-HEAD hint)");
         Console.Error.WriteLine("  depa-wiki hooks install|uninstall|status [--work-dir <path>]  (manage the hook entries in <work-dir>/.claude/settings.json, merge-safe)");
@@ -491,6 +525,17 @@ internal sealed class LlmWikiCli
         Console.Error.WriteLine("  depa-wiki call semantic_search --work-dir ~/path/to/my/project --query SampleService --limit 5 --source-kinds code,docs");
         Console.Error.WriteLine("  depa-wiki call overview_graph --work-dir ~/path/to/my/project --categories code,docs --max-nodes 400 --max-edges 900");
         Console.Error.WriteLine("  depa-wiki call query_named --work-dir ~/path/to/my/project --name code_impact --parameters-json '{\"symbolId\":\"...\"}'");
+        Console.Error.WriteLine("  depa-wiki investigate domains discover --term asset --limit 10 --db /tmp/project.db");
+        Console.Error.WriteLine("  depa-wiki investigate evidence get --json - --db /tmp/project.db <<'JSON'");
+        Console.Error.WriteLine("  {\"evidenceIds\":[\"claim:...\"]}");
+        Console.Error.WriteLine("  JSON");
+    }
+
+    private static void PrintInvestigateUsage()
+    {
+        Console.Error.WriteLine("Investigation paths (all read-only):");
+        Console.Error.WriteLine("  " + string.Join(", ", InvestigationCliRoutes.Paths));
+        Console.Error.WriteLine("  Flags act as query parameters. --json accepts an object or - for a bounded JSON object on stdin; flags override same-name JSON fields.");
     }
 
     private static void EnsureExistingDatabase(CozoWikiStorageOptions storage)

@@ -67,9 +67,9 @@ internal static class BusinessOntologyAnalysisStoreTests
                 "codex-cli",
                 "gpt-5.6-terra",
                 "reconstruct submit record lifecycle",
-                "completed",
+                "running",
                 "2026-07-19T00:00:00Z",
-                "2026-07-19T00:01:00Z",
+                "",
                 "sha256:input");
             var runAppend = await analysisStore.AppendRunAsync(run);
             var runReplay = await analysisStore.AppendRunAsync(run);
@@ -217,15 +217,42 @@ internal static class BusinessOntologyAnalysisStoreTests
             assert(unknownEvidenceRejected,
                 "analysis records must close over indexed ck_semantic_claim or active onto_evidence ids");
 
+            var completion = new BusinessOntologyAnalysisRunCompletionInput(
+                run.RunId,
+                "finished",
+                "2026-07-19T00:02:00Z",
+                3,
+                2,
+                0,
+                "");
+            var completionAppend = await analysisStore.AppendRunCompletionAsync(completion);
+            var completionReplay = await analysisStore.AppendRunCompletionAsync(completion);
+            assert(completionAppend.Appended && !completionReplay.Appended,
+                "analysis run completion should append exactly once and replay idempotently");
+
+            var conflictingCompletionRejected = false;
+            try
+            {
+                await analysisStore.AppendRunCompletionAsync(completion with { Status = "blocked" });
+            }
+            catch (InvalidOperationException)
+            {
+                conflictingCompletionRejected = true;
+            }
+            assert(conflictingCompletionRejected,
+                "analysis run completions must remain immutable and reject terminal upserts");
+
             var workspace = await analysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
             var draft = workspace.Records.Single(item => item.RecordId == "draft:candidate-submit-transition");
-            assert(workspace.Runs.Single().RunId == run.RunId
+            assert(workspace.Runs is [{ RunId: var runId, Status: "completed", CompletedAt: "2026-07-19T00:02:00Z" }]
+                    && runId == run.RunId
                     && workspace.Records.Count == 2
+                    && workspace.Completions is [{ Status: "finished", CompletedAt: "2026-07-19T00:02:00Z", QueryCount: 3, RecordCount: 2, RejectedActionCount: 0, BudgetMetric: "" }]
                     && draft.Status == "proposed"
                     && Math.Abs(draft.Uncertainty - 0.2) < 0.000001
                     && draft.QueryDigest == "sha256:query-use-case-slice"
                     && draft.EvidenceIds.SequenceEqual(new[] { claimId, "evidence:record" }.OrderBy(id => id, StringComparer.Ordinal), StringComparer.Ordinal),
-                "workspace read view should return runs, records, query digest, status, uncertainty, and sorted evidence refs");
+                "workspace read view should project an immutable terminal completion onto its run while retaining the completion audit record");
 
             var acceptedAfter = await ontologyStore.ReadExportableAsync(OntologyId);
             var acceptedCountsAfter = await CountsAsync(om, [

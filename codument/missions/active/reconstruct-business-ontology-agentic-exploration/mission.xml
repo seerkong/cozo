@@ -2,25 +2,25 @@
 <Mission id="reconstruct-business-ontology-agentic-exploration" version="1" xmlns:cdt="urn:codument:v1">
   <Metadata>
     <Status>active</Status>
-    <Goal>让受限 AI 主动探索已索引代码事实和现有业务本体，重建可审核的业务语义、诊断历史建模问题，并输出符合 ontology XML DSL 的候选本体增量。</Goal>
-    <Description>在 onto_* 基础投影之上建立只读调查工具、分析工作区、证据追查循环、诊断 DSL 和候选导出；AI 结论始终保持 pending，只有显式 review/promotion 才能进入可导出本体。</Description>
+    <Goal>让受限 AI 主动探索已索引代码事实和现有业务本体，重建可追溯的业务语义，诊断历史建模问题，并交付独立于源数据库的完整 IT Asset 语义本体设计。</Goal>
+    <Description>在 onto_* 基础投影之上建立只读调查工具、分析工作区、证据追查循环、诊断 DSL 和候选导出；v2 的符号投影反例已触发重规划。新增的最终交付路径在仓库外编排模型归纳与批评，直接输出有证据、覆盖说明和未决项的 IT Asset 语义本体设计；它不写入 accepted ontology 或源数据库。</Description>
     <QuestionMode>decision-tree</QuestionMode>
     <QuestionSeverity>light</QuestionSeverity>
-    <Revision>10</Revision>
+    <Revision>12</Revision>
     <CreatedAt>2026-07-19T00:00:00Z</CreatedAt>
-    <UpdatedAt>2026-07-19T12:30:00Z</UpdatedAt>
+    <UpdatedAt>2026-07-25T12:00:00Z</UpdatedAt>
   </Metadata>
 
   <Ports scope="mission">
-    <MaterialBundle role="input" name="backend-indexed-facts" domain="depa-wiki" path="file:///Users/kongweixian/java/ks-ep/is-asset-new/.depa-wiki/" />
-    <MaterialBundle role="input" name="frontend-indexed-facts" domain="depa-wiki" path="file:///Users/kongweixian/nodejs/ks-ep/is-asset-fe/.depa-wiki/" />
+    <MaterialBundle role="input" name="backend-indexed-facts" domain="depa-wiki" path="vfs://external/depa-wiki/backend/" />
+    <MaterialBundle role="input" name="frontend-indexed-facts" domain="depa-wiki" path="vfs://external/depa-wiki/frontend/" />
     <MaterialBundle role="input" name="onto-foundation" domain="mission" path="vfs://@/codument/missions/active/add-onto-business-ontology-projection/" />
     <MaterialBundle role="input" name="ontology-xml-dsl" domain="skill" path="vfs://@/skills/ontology-xml-dsl/" />
     <MaterialBundle role="state" name="analysis" domain="mission" path="vfs://./analysis/" />
     <MaterialBundle role="state" name="reports" domain="mission" path="vfs://./reports/" />
     <MaterialBundle role="output" name="llm-wiki" domain="source" path="vfs://@/cozo-lib-dotnet-llm-wiki/" />
-    <MaterialBundle role="output" name="agent-skill" domain="skill" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/skills/" />
-    <MaterialBundle role="output" name="candidate-artifacts" domain="artifact" path="file:///Users/kongweixian/ai/solution/it-asset-ai-solution/cozo-ontology/v2/" />
+    <MaterialBundle role="output" name="agent-skill" domain="skill" path="vfs://@/skills/" />
+    <MaterialBundle role="output" name="candidate-artifacts" domain="artifact" path="vfs://external/ontology-artifacts/" />
     <MaterialBundle role="output" name="tracks" domain="codument" path="vfs://@/codument/tracks/" />
   </Ports>
 
@@ -66,14 +66,26 @@
         </SubNodes>
       </TaskGroup>
 
-      <TaskGroup id="G5" name="真实项目 v2 实验与验收" status="NOT_STARTED" order="4">
-        <Description>在两个数据库副本上执行受控 agentic run，比较初始 onto 投影与 AI 候选/诊断，人工审核抽样结果后决定是否继续 v3 critic 或重规划。</Description>
+      <TaskGroup id="G5" name="v2 反例收口与 v3 业务语义归纳" status="ACTIVE" order="4">
+        <Description>v2 已证明候选隔离和模型调用可用，但其结果仍接近代码符号投影；本组以此反例为质量基线，建设并验收按业务域聚合、独立 critic 审核的 v3 pending semantic bundle。</Description>
         <SubNodes>
-          <Task id="G5-T1" name="创建并执行 agentic 本体重建 v2 真实项目实验 track" status="NOT_STARTED" order="0">
-            <cdt:TrackLink state="candidate" id="verify-agentic-business-ontology-reconstruction-v2" />
+          <Task id="G5-T1" name="记录 v2 真实运行的符号投影反例与质量缺口" status="DONE" order="0">
+            <cdt:TrackLink state="bound" id="add-ontology-semantic-experiments-v2-v3" />
           </Task>
-          <Task id="G5-T2" name="形成业务价值、证据覆盖、误报和人工接受率报告" status="NOT_STARTED" order="1" />
-          <Task id="G5-T3" name="根据 v2 结果决定 v3 proposal-critic 的范围或受控重规划" status="NOT_STARTED" order="2" />
+          <Task id="G5-T2" name="创建并执行按业务域归纳的 v3 semantic synthesis track" status="NOT_STARTED" order="1">
+            <cdt:TrackLink state="bound" id="add-v3-business-semantic-ontology-synthesis" />
+          </Task>
+          <Task id="G5-T3" name="形成 v3 业务价值、证据覆盖、投影差异、误报和人工接受率报告" status="NOT_STARTED" order="2" />
+          <Task id="G5-T4" name="在人工审核后决定是否启动独立 promotion track" status="NOT_STARTED" order="3" />
+          <Task id="G5-T5" name="直接交付外部编排的 IT Asset 语义本体设计" status="DONE" order="4">
+            <cdt:TrackLink state="bound" id="export-it-asset-semantic-ontology" />
+          </Task>
+          <Task id="G5-T6" name="固化数据库调查与 Cozo OM 可执行建模 skill" status="DONE" order="5">
+            <cdt:TrackLink state="bound" id="add-business-knowledge-investigation-and-cozo-om-skills" />
+          </Task>
+          <Task id="G5-T7" name="以 BO-first XML 统一调查、归纳与 OM 建模 skill" status="ACTIVE" order="6">
+            <cdt:TrackLink state="bound" id="align-skills-with-bo-first-ontology-xml" />
+          </Task>
         </SubNodes>
       </TaskGroup>
     </SubNodes>

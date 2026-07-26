@@ -184,6 +184,10 @@ internal sealed record BusinessOntologyAgentStep(
     string Action,
     string Outcome);
 
+internal sealed record BusinessOntologyAgentPendingSynthesis(
+    IReadOnlyList<BusinessOntologySemanticDomainCharter> DomainCharters,
+    IReadOnlyList<BusinessOntologySemanticCluster> Clusters);
+
 internal sealed record BusinessOntologyAgentRunResult(
     string Status,
     string Phase,
@@ -193,7 +197,8 @@ internal sealed record BusinessOntologyAgentRunResult(
     BusinessOntologyAgentFinish? Finish,
     BusinessOntologyAgentBudgetRejection? BudgetRejection,
     string? RejectionReason,
-    IReadOnlyList<BusinessOntologyAgentStep> Steps);
+    IReadOnlyList<BusinessOntologyAgentStep> Steps,
+    IReadOnlyList<BusinessOntologyAgentPendingSynthesis> PendingSyntheses);
 
 internal interface IBusinessOntologyInvestigationOperations
 {
@@ -204,6 +209,10 @@ internal interface IBusinessOntologyInvestigationOperations
     Task<BusinessOntologyInvestigationPage<BusinessUseCaseSlice>> ListUseCaseSlicesAsync(string ontologyId, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default);
     Task<BusinessUseCaseSlice> GetUseCaseSliceAsync(string ontologyId, string sliceId, CancellationToken cancellationToken = default);
     Task<BusinessOntologySubjectInspection> InspectOntologySubjectAsync(string ontologyId, string subjectKind, string subjectId, CancellationToken cancellationToken = default);
+    Task<BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter>> DiscoverDomainChartersAsync(string term, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default);
+    Task<BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase>> ListCrossLayerUseCasesAsync(string? entrySymbolId = null, string? domainSeed = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default);
+    Task<BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster>> FindStateRuleClustersAsync(string term, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default);
+    Task<BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster>> FindImplementationClustersAsync(string? domainSeed = null, IReadOnlyList<string>? evidenceIds = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default);
 }
 
 internal sealed class BusinessOntologyInvestigationServiceOperations(BusinessOntologyInvestigationService service)
@@ -229,6 +238,18 @@ internal sealed class BusinessOntologyInvestigationServiceOperations(BusinessOnt
 
     public Task<BusinessOntologySubjectInspection> InspectOntologySubjectAsync(string ontologyId, string subjectKind, string subjectId, CancellationToken cancellationToken = default) =>
         service.InspectOntologySubjectAsync(ontologyId, subjectKind, subjectId, cancellationToken);
+
+    public Task<BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter>> DiscoverDomainChartersAsync(string term, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
+        service.DiscoverDomainChartersAsync(term, cursor, limit, cancellationToken);
+
+    public Task<BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase>> ListCrossLayerUseCasesAsync(string? entrySymbolId = null, string? domainSeed = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
+        service.ListCrossLayerUseCasesAsync(entrySymbolId, domainSeed, cursor, limit, cancellationToken);
+
+    public Task<BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster>> FindStateRuleClustersAsync(string term, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
+        service.FindStateRuleClustersAsync(term, cursor, limit, cancellationToken);
+
+    public Task<BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster>> FindImplementationClustersAsync(string? domainSeed = null, IReadOnlyList<string>? evidenceIds = null, string? cursor = null, int? limit = null, CancellationToken cancellationToken = default) =>
+        service.FindImplementationClustersAsync(domainSeed, evidenceIds, cursor, limit, cancellationToken);
 }
 
 internal sealed class BusinessOntologyAgenticReconstructionService
@@ -262,7 +283,6 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             {
                 throw new ArgumentException("Persistence run identity must match the active agent run.", nameof(request));
             }
-            await persistence.Store.AppendRunAsync(persistence.Run, cancellationToken);
         }
 
         var limits = request.BudgetLimits ?? BusinessOntologyAgentBudgetLimits.Default;
@@ -270,9 +290,101 @@ internal sealed class BusinessOntologyAgenticReconstructionService
         var state = BusinessOntologyAgentBudgetState.Start(startedAt);
         var phase = BusinessOntologyAgentPhases.Explore;
         var queries = new List<BusinessOntologyAgentQueryObservation>();
+        var evidenceIdsByQueryDigest = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        var evidenceRefsById = new Dictionary<string, BusinessOntologyInvestigationEvidenceRef>(StringComparer.Ordinal);
         var records = new List<BusinessOntologyAnalysisRecordInput>();
         var steps = new List<BusinessOntologyAgentStep>();
+        var pendingSyntheses = new List<BusinessOntologyAgentPendingSynthesis>();
         BusinessOntologyAgentFinish? finish = null;
+        var persistenceInitialized = false;
+
+        async Task<BusinessOntologyAgentRunResult> CompleteTerminalAsync(BusinessOntologyAgentRunResult result)
+        {
+            if (!persistenceInitialized || request.Persistence is not { } persistence)
+            {
+                return result;
+            }
+
+            await persistence.Store.AppendRunCompletionAsync(
+                new BusinessOntologyAnalysisRunCompletionInput(
+                    request.RunId,
+                    result.Status,
+                    TerminalCompletedAt(startedAt, result).ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                    result.Queries.Count,
+                    result.Records.Count,
+                    result.Steps.Count(step => StringComparer.Ordinal.Equals(step.Outcome, "rejected")),
+                    result.BudgetRejection?.Metric ?? ""),
+                CancellationToken.None);
+            return result;
+        }
+
+        async Task<BusinessOntologyAgentRunResult> CompleteWithBudgetAsync(
+            string runId,
+            string phase,
+            BusinessOntologyAgentBudgetState state,
+            IReadOnlyList<BusinessOntologyAgentQueryObservation> queries,
+            List<BusinessOntologyAnalysisRecordInput> records,
+            BusinessOntologyAgentFinish? finish,
+            BusinessOntologyAgentBudgetRejection? rejection,
+            IReadOnlyList<BusinessOntologyAgentStep> steps,
+            IReadOnlyList<BusinessOntologyAgentPendingSynthesis> pendingSyntheses,
+            BusinessOntologyAgentPersistenceContext? persistence,
+            DateTimeOffset nowUtc,
+            CancellationToken persistenceCancellationToken)
+        {
+            var budgetFinish = finish ?? new BusinessOntologyAgentFinish(
+                "local:budget",
+                BusinessOntologyAgentFinishStatuses.BudgetExhausted,
+                $"Budget exhausted for run '{runId}' before accepting another effect.",
+                rejection is null ? [] : [$"{rejection.Metric}: {rejection.Audit}"]);
+            var rejectionReason = rejection?.Audit;
+
+            if (persistence is not null
+                && pendingSyntheses.Count == 0
+                && TryCreateBudgetGapRecord(runId, phase, queries, rejection, nowUtc, out var gap)
+                && !records.Any(record => StringComparer.Ordinal.Equals(record.RecordId, gap.RecordId)))
+            {
+                try
+                {
+                    await persistence.Store.AppendRunAsync(persistence.Run, persistenceCancellationToken);
+                    persistenceInitialized = true;
+                    await persistence.Store.AppendRecordsAsync([gap], persistenceCancellationToken);
+                    records.Add(gap);
+                }
+                catch (OperationCanceledException) when (persistenceCancellationToken.IsCancellationRequested)
+                {
+                    return await CompleteTerminalAsync(CompleteWithFailure(
+                        BusinessOntologyAgentRunStatuses.Cancelled,
+                        phase,
+                        state,
+                        queries,
+                        records,
+                        budgetFinish,
+                        rejection,
+                        "external cancellation interrupted local budget-gap persistence",
+                        steps,
+                        pendingSyntheses));
+                }
+                catch (Exception ex)
+                {
+                    rejectionReason = rejectionReason is null
+                        ? "budget gap persistence failed: " + ex.Message
+                        : rejectionReason + "; budget gap persistence failed: " + ex.Message;
+                }
+            }
+
+            return await CompleteTerminalAsync(new BusinessOntologyAgentRunResult(
+                BusinessOntologyAgentRunStatuses.BudgetExhausted,
+                phase,
+                state,
+                queries,
+                records,
+                budgetFinish,
+                rejection,
+                rejectionReason,
+                steps,
+                pendingSyntheses));
+        }
 
         while (finish is null)
         {
@@ -289,6 +401,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     exhausted,
                     steps,
+                    pendingSyntheses,
                     request.Persistence,
                     nowUtc,
                     cancellationToken);
@@ -313,6 +426,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     turnRejection,
                     steps,
+                    pendingSyntheses,
                     request.Persistence,
                     nowUtc,
                     cancellationToken);
@@ -327,7 +441,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, "source", "cancelled"));
-                return CompleteWithFailure(
+                return await CompleteTerminalAsync(CompleteWithFailure(
                     BusinessOntologyAgentRunStatuses.Cancelled,
                     phase,
                     turnReservation.State.BeforeReservation,
@@ -336,12 +450,13 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     null,
                     "external cancellation interrupted the action source before accepting another effect",
-                    steps);
+                    steps,
+                    pendingSyntheses));
             }
             catch (OperationCanceledException)
             {
                 steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, "source", "timed_out"));
-                return CompleteWithFailure(
+                return await CompleteTerminalAsync(CompleteWithFailure(
                     BusinessOntologyAgentRunStatuses.TimedOut,
                     phase,
                     turnReservation.State.BeforeReservation,
@@ -350,12 +465,13 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     WallClockRejection(limits, state, nowUtc),
                     "wall-clock timeout interrupted the action source before accepting another effect",
-                    steps);
+                    steps,
+                    pendingSyntheses));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, "source", "blocked"));
-                return CompleteWithFailure(
+                return await CompleteTerminalAsync(CompleteWithFailure(
                     BusinessOntologyAgentRunStatuses.Blocked,
                     phase,
                     turnReservation.State.BeforeReservation,
@@ -364,7 +480,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     null,
                     ex.Message,
-                    steps);
+                    steps,
+                    pendingSyntheses));
             }
 
             var turnCommit = BusinessOntologyAgentBudget.CommitTurnCompletion(
@@ -386,6 +503,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     turnCommit.Rejection,
                     steps,
+                    pendingSyntheses,
                     request.Persistence,
                     nowUtc,
                     cancellationToken);
@@ -400,12 +518,14 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                         request.RunId,
                         queries.SelectMany(query => query.EvidenceRefs.Select(item => item.EvidenceId)).ToHashSet(StringComparer.Ordinal),
                         queries.Select(query => query.QueryDigest).ToHashSet(StringComparer.Ordinal),
-                        nowUtc));
+                        nowUtc,
+                        evidenceIdsByQueryDigest,
+                        evidenceRefsById));
             }
             catch (ArgumentException ex)
             {
                 steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, "validate", "rejected"));
-                return new BusinessOntologyAgentRunResult(
+                return await CompleteTerminalAsync(new BusinessOntologyAgentRunResult(
                     BusinessOntologyAgentRunStatuses.Rejected,
                     phase,
                     state,
@@ -414,7 +534,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     finish,
                     null,
                     ex.Message,
-                    steps);
+                    steps,
+                    pendingSyntheses));
             }
 
             var phaseBefore = phase;
@@ -440,6 +561,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                             finish,
                             queryRejection,
                             steps,
+                            pendingSyntheses,
                             request.Persistence,
                             nowUtc,
                             cancellationToken);
@@ -454,7 +576,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
                         steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Query, "cancelled"));
-                        return CompleteWithFailure(
+                        return await CompleteTerminalAsync(CompleteWithFailure(
                             BusinessOntologyAgentRunStatuses.Cancelled,
                             phase,
                             queryReservation.State.BeforeReservation,
@@ -463,12 +585,13 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                             finish,
                             null,
                             "external cancellation interrupted the query before accepting its observation",
-                            steps);
+                            steps,
+                            pendingSyntheses));
                     }
                     catch (OperationCanceledException)
                     {
                         steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Query, "timed_out"));
-                        return CompleteWithFailure(
+                        return await CompleteTerminalAsync(CompleteWithFailure(
                             BusinessOntologyAgentRunStatuses.TimedOut,
                             phase,
                             queryReservation.State.BeforeReservation,
@@ -477,12 +600,13 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                             finish,
                             WallClockRejection(limits, state, nowUtc),
                             "wall-clock timeout interrupted the query before accepting its observation",
-                            steps);
+                            steps,
+                            pendingSyntheses));
                     }
                     catch (Exception ex)
                     {
                         steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Query, "failed"));
-                        return CompleteWithFailure(
+                        return await CompleteTerminalAsync(CompleteWithFailure(
                             BusinessOntologyAgentRunStatuses.Blocked,
                             phase,
                             queryReservation.State.BeforeReservation,
@@ -491,7 +615,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                             finish,
                             null,
                             ex.Message,
-                            steps);
+                            steps,
+                            pendingSyntheses));
                     }
 
                     var queryCommit = BusinessOntologyAgentBudget.CommitQueryResult(
@@ -510,28 +635,54 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                             finish,
                             queryCommit.Rejection,
                             steps,
+                            pendingSyntheses,
                             request.Persistence,
                             nowUtc,
                             cancellationToken);
                     }
 
                     queries.Add(observation);
+                    foreach (var evidenceRef in observation.EvidenceRefs)
+                    {
+                        // Evidence identity binds to its first accepted coordinates for this run.
+                        evidenceRefsById.TryAdd(evidenceRef.EvidenceId, evidenceRef);
+                    }
+                    evidenceIdsByQueryDigest.TryAdd(
+                        observation.QueryDigest,
+                        observation.EvidenceRefs.Select(item => item.EvidenceId).ToHashSet(StringComparer.Ordinal));
                     phase = NextPhaseAfterQuery(phase);
                     steps.Add(new BusinessOntologyAgentStep(turnId, phaseBefore, phase, BusinessOntologyAgentActionKinds.Query, "accepted"));
                     break;
                 }
 
                 case ValidatedBusinessOntologyRecordAction record:
+                    if (pendingSyntheses.Count != 0)
+                    {
+                        steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Record, "rejected"));
+                        return await CompleteTerminalAsync(CompleteWithFailure(
+                            BusinessOntologyAgentRunStatuses.Rejected,
+                            phase,
+                            state,
+                            queries,
+                            records,
+                            finish,
+                            null,
+                            "record actions are not allowed after a synthesize action is accepted",
+                            steps,
+                            pendingSyntheses));
+                    }
                     if (request.Persistence is { } recordPersistence)
                     {
                         try
                         {
+                            await recordPersistence.Store.AppendRunAsync(recordPersistence.Run, cancellationToken);
+                            persistenceInitialized = true;
                             await recordPersistence.Store.AppendRecordsAsync(record.Records, cancellationToken);
                         }
                         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                         {
                             steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Record, "cancelled"));
-                            return CompleteWithFailure(
+                            return await CompleteTerminalAsync(CompleteWithFailure(
                                 BusinessOntologyAgentRunStatuses.Cancelled,
                                 phase,
                                 state,
@@ -540,12 +691,13 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                                 finish,
                                 null,
                                 "external cancellation interrupted analysis record append before accepting the batch",
-                                steps);
+                                steps,
+                                pendingSyntheses));
                         }
                         catch (Exception ex)
                         {
                             steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Record, "failed"));
-                            return CompleteWithFailure(
+                            return await CompleteTerminalAsync(CompleteWithFailure(
                                 BusinessOntologyAgentRunStatuses.Blocked,
                                 phase,
                                 state,
@@ -554,12 +706,36 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                                 finish,
                                 null,
                                 ex.Message,
-                                steps);
+                                steps,
+                                pendingSyntheses));
                         }
                     }
                     records.AddRange(record.Records);
                     phase = NextPhaseAfterRecord(phase, record.Records);
                     steps.Add(new BusinessOntologyAgentStep(turnId, phaseBefore, phase, BusinessOntologyAgentActionKinds.Record, "accepted"));
+                    break;
+
+                case ValidatedBusinessOntologySynthesizeAction synthesize:
+                    if (records.Count != 0)
+                    {
+                        steps.Add(new BusinessOntologyAgentStep(turnId, phase, phase, BusinessOntologyAgentActionKinds.Synthesize, "rejected"));
+                        return await CompleteTerminalAsync(CompleteWithFailure(
+                            BusinessOntologyAgentRunStatuses.Rejected,
+                            phase,
+                            state,
+                            queries,
+                            records,
+                            finish,
+                            null,
+                            "synthesize actions require a run without accepted analysis records",
+                            steps,
+                            pendingSyntheses));
+                    }
+                    pendingSyntheses.Add(new BusinessOntologyAgentPendingSynthesis(
+                        synthesize.DomainCharters,
+                        synthesize.Clusters));
+                    phase = BusinessOntologyAgentPhases.Model;
+                    steps.Add(new BusinessOntologyAgentStep(turnId, phaseBefore, phase, BusinessOntologyAgentActionKinds.Synthesize, "accepted"));
                     break;
 
                 case ValidatedBusinessOntologyFinishAction done:
@@ -569,7 +745,7 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             }
         }
 
-        return new BusinessOntologyAgentRunResult(
+        return await CompleteTerminalAsync(new BusinessOntologyAgentRunResult(
             BusinessOntologyAgentRunStatuses.Finished,
             phase,
             state,
@@ -578,7 +754,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             finish,
             null,
             null,
-            steps);
+            steps,
+            pendingSyntheses));
     }
 
     private static BusinessOntologyAgentActionSourceContext Context(
@@ -642,6 +819,32 @@ internal sealed class BusinessOntologyAgenticReconstructionService
                     RequiredString(parameters, "ontologyId"),
                     RequiredString(parameters, "subjectKind"),
                     RequiredString(parameters, "subjectId"),
+                    cancellationToken),
+            BusinessOntologyAgentQueryOperations.DiscoverDomainCharters =>
+                await _investigation.DiscoverDomainChartersAsync(
+                    RequiredString(parameters, "term"),
+                    OptionalString(parameters, "cursor"),
+                    OptionalInt(parameters, "limit"),
+                    cancellationToken),
+            BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases =>
+                await _investigation.ListCrossLayerUseCasesAsync(
+                    OptionalString(parameters, "entrySymbolId"),
+                    OptionalString(parameters, "domainSeed"),
+                    OptionalString(parameters, "cursor"),
+                    OptionalInt(parameters, "limit"),
+                    cancellationToken),
+            BusinessOntologyAgentQueryOperations.FindStateRuleClusters =>
+                await _investigation.FindStateRuleClustersAsync(
+                    RequiredString(parameters, "term"),
+                    OptionalString(parameters, "cursor"),
+                    OptionalInt(parameters, "limit"),
+                    cancellationToken),
+            BusinessOntologyAgentQueryOperations.FindImplementationClusters =>
+                await _investigation.FindImplementationClustersAsync(
+                    OptionalString(parameters, "domainSeed"),
+                    OptionalStringArray(parameters, "evidenceIds"),
+                    OptionalString(parameters, "cursor"),
+                    OptionalInt(parameters, "limit"),
                     cancellationToken),
             _ => throw new ArgumentException($"Unknown business ontology investigation operation '{query.Operation}'.", nameof(query)),
         };
@@ -771,67 +974,12 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             "wall-clock timeout interrupted an in-flight effect");
     }
 
-    private static async Task<BusinessOntologyAgentRunResult> CompleteWithBudgetAsync(
-        string runId,
-        string phase,
-        BusinessOntologyAgentBudgetState state,
-        IReadOnlyList<BusinessOntologyAgentQueryObservation> queries,
-        List<BusinessOntologyAnalysisRecordInput> records,
-        BusinessOntologyAgentFinish? finish,
-        BusinessOntologyAgentBudgetRejection? rejection,
-        IReadOnlyList<BusinessOntologyAgentStep> steps,
-        BusinessOntologyAgentPersistenceContext? persistence,
-        DateTimeOffset nowUtc,
-        CancellationToken cancellationToken)
-    {
-        var budgetFinish = finish ?? new BusinessOntologyAgentFinish(
-            "local:budget",
-            BusinessOntologyAgentFinishStatuses.BudgetExhausted,
-            $"Budget exhausted for run '{runId}' before accepting another effect.",
-            rejection is null ? [] : [$"{rejection.Metric}: {rejection.Audit}"]);
-        var rejectionReason = rejection?.Audit;
-
-        if (persistence is not null
-            && TryCreateBudgetGapRecord(runId, phase, queries, rejection, nowUtc, out var gap)
-            && !records.Any(record => StringComparer.Ordinal.Equals(record.RecordId, gap.RecordId)))
-        {
-            try
-            {
-                await persistence.Store.AppendRecordsAsync([gap], cancellationToken);
-                records.Add(gap);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                return CompleteWithFailure(
-                    BusinessOntologyAgentRunStatuses.Cancelled,
-                    phase,
-                    state,
-                    queries,
-                    records,
-                    budgetFinish,
-                    rejection,
-                    "external cancellation interrupted local budget-gap persistence",
-                    steps);
-            }
-            catch (Exception ex)
-            {
-                rejectionReason = rejectionReason is null
-                    ? "budget gap persistence failed: " + ex.Message
-                    : rejectionReason + "; budget gap persistence failed: " + ex.Message;
-            }
-        }
-
-        return new BusinessOntologyAgentRunResult(
-            BusinessOntologyAgentRunStatuses.BudgetExhausted,
-            phase,
-            state,
-            queries,
-            records,
-            budgetFinish,
-            rejection,
-            rejectionReason,
-            steps);
-    }
+    private static DateTimeOffset TerminalCompletedAt(
+        DateTimeOffset startedAt,
+        BusinessOntologyAgentRunResult result) =>
+        startedAt + TimeSpan.FromSeconds(Math.Max(
+            1L,
+            result.BudgetState.TurnsUsed + result.Queries.Count + result.Records.Count + result.Steps.Count));
 
     private static bool TryCreateBudgetGapRecord(
         string runId,
@@ -902,7 +1050,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
         BusinessOntologyAgentFinish? finish,
         BusinessOntologyAgentBudgetRejection? budgetRejection,
         string? rejectionReason,
-        IReadOnlyList<BusinessOntologyAgentStep> steps) =>
+        IReadOnlyList<BusinessOntologyAgentStep> steps,
+        IReadOnlyList<BusinessOntologyAgentPendingSynthesis> pendingSyntheses) =>
         new(
             status,
             phase,
@@ -912,7 +1061,8 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             finish,
             budgetRejection,
             rejectionReason,
-            steps);
+            steps,
+            pendingSyntheses);
 
     private static string QueryDigest(object result, string operation, string parametersJson) =>
         result switch
@@ -921,6 +1071,10 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             BusinessOntologyInvestigationPage<BusinessTermHit> value => value.QueryDigest,
             BusinessOntologyInvestigationPage<BusinessOntologySemanticPattern> value => value.QueryDigest,
             BusinessOntologyInvestigationPage<BusinessUseCaseSlice> value => value.QueryDigest,
+            BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter> value => value.QueryDigest,
+            BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase> value => value.QueryDigest,
+            BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster> value => value.QueryDigest,
+            BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster> value => value.QueryDigest,
             BusinessOntologySubjectInspection value => value.QueryDigest,
             _ => Digest(operation, new { parametersJson, result }),
         };
@@ -932,6 +1086,10 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             BusinessOntologyInvestigationPage<BusinessTermHit> value => value.Items.Count,
             BusinessOntologyInvestigationPage<BusinessOntologySemanticPattern> value => value.Items.Count,
             BusinessOntologyInvestigationPage<BusinessUseCaseSlice> value => value.Items.Count,
+            BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter> value => value.Items.Count,
+            BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase> value => value.Items.Count,
+            BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster> value => value.Items.Count,
+            BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster> value => value.Items.Count,
             SemanticEvidencePack value => value.Anchors.Count,
             BusinessUseCaseSlice => 1,
             BusinessOntologySubjectInspection => 1,
@@ -997,6 +1155,34 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             BusinessOntologyInvestigationPage<BusinessUseCaseSlice> page => new
             {
                 Items = page.Items.Take(5).Select(SliceSummary).ToArray(),
+                page.NextCursor,
+                page.Truncated,
+                page.QueryDigest,
+            },
+            BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter> page => new
+            {
+                Items = page.Items.Take(5).Select(item => new { item.Id, item.DomainSeed, item.EvidenceIds, EntrySymbolId = item.Workflow.EntrySymbolId, item.Workflow.Action }).ToArray(),
+                page.NextCursor,
+                page.Truncated,
+                page.QueryDigest,
+            },
+            BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase> page => new
+            {
+                Items = page.Items.Take(5).Select(item => new { item.Id, item.DomainSeed, item.EntrySymbolId, item.Action, item.Roles, item.EvidenceIds }).ToArray(),
+                page.NextCursor,
+                page.Truncated,
+                page.QueryDigest,
+            },
+            BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster> page => new
+            {
+                Items = page.Items.Take(5).Select(item => new { item.Id, item.DomainSeed, item.SubjectId, item.EvidenceRefs, StateFieldCount = item.StateFields.Count, TransitionCount = item.Transitions.Count, GuardCount = item.Guards.Count }).ToArray(),
+                page.NextCursor,
+                page.Truncated,
+                page.QueryDigest,
+            },
+            BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster> page => new
+            {
+                Items = page.Items.Take(5).Select(item => new { item.Id, item.DomainSeed, item.EvidenceIds, AnchorCount = item.SemanticCluster.ImplementationAnchors.Count }).ToArray(),
                 page.NextCursor,
                 page.Truncated,
                 page.QueryDigest,
@@ -1084,13 +1270,20 @@ internal sealed class BusinessOntologyAgenticReconstructionService
             BusinessOntologyInvestigationPage<BusinessTermHit> page => page.Items.SelectMany(item => item.EvidenceRefs),
             BusinessOntologyInvestigationPage<BusinessOntologySemanticPattern> page => page.Items.SelectMany(item => item.EvidenceRefs),
             BusinessOntologyInvestigationPage<BusinessUseCaseSlice> page => page.Items.SelectMany(item => item.EvidenceIds.Select(IdOnly)),
+            BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter> page => page.Items.SelectMany(item => item.EvidenceRefs),
+            BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase> page => page.Items.SelectMany(item => item.EvidenceRefs),
+            BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster> page => page.Items.SelectMany(item => item.EvidenceRefs),
+            BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster> page => page.Items.SelectMany(item => item.EvidenceRefs),
             SemanticEvidencePack pack => pack.Anchors.Select(anchor => new BusinessOntologyInvestigationEvidenceRef(
                 anchor.EvidenceId,
                 anchor.Repository,
                 anchor.Path,
                 anchor.SubjectId,
                 anchor.StartLine,
-                anchor.EndLine)),
+                anchor.EndLine)
+            {
+                SymbolId = anchor.SubjectId,
+            }),
             BusinessUseCaseSlice slice => slice.EvidenceIds.Select(IdOnly),
             BusinessOntologySubjectInspection inspection => inspection.EvidenceIds.Select(IdOnly),
             _ => [],
@@ -1127,4 +1320,9 @@ internal sealed class BusinessOntologyAgenticReconstructionService
         parameters.GetProperty(propertyName).EnumerateArray()
             .Select(item => item.GetString() ?? throw new ArgumentException($"{propertyName} must contain strings."))
             .ToArray();
+
+    private static IReadOnlyList<string>? OptionalStringArray(JsonElement parameters, string propertyName) =>
+        parameters.TryGetProperty(propertyName, out var value) && value.ValueKind != JsonValueKind.Null
+            ? value.EnumerateArray().Select(item => item.GetString() ?? throw new ArgumentException($"{propertyName} must contain strings.")).ToArray()
+            : null;
 }

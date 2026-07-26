@@ -18,6 +18,19 @@ ln -sf "<仓根>/cozo-lib-dotnet-llm-wiki/packages/Cozo.DotNet.LlmWiki.McpServer
 - 确认 `~/.local/bin` 在 PATH（对 GUI 启动的 Claude Code，注意其 PATH 可能与终端不同）；
 - 重新 `dotnet build` 后符号链接自动生效，无需重装。
 
+## 本地测试编译长时间占用 Roslyn 或留下构建进程
+
+**症状**：`Cozo.DotNet.LlmWiki.Tests` 在 `Csc` / Roslyn 阶段持续占用一个 CPU 核，机器出现明显
+内存压缩或 swap；此前异常中止后还可能观察到 MSBuild worker。
+
+**原因与处置**：该项目是一个约两万行的单一测试可执行程序集，引用多个项目。完整 analyzer 与 source
+generator 在资源紧张的开发机上会显著放大编译时间；高 CPU 本身不代表死锁。
+
+1. 有限的本地 build/run/test 一律使用 `scripts/dotnet-safe.sh`。它禁用 node reuse、禁用 build server、将 `build`/`test` 限制为一个 MSBuild worker，并在退出时执行 `dotnet build-server shutdown`；对该测试项目默认关闭 analyzers 和并行项目引用构建。
+2. CI 与直接 `dotnet` 构建仍保留完整 analyzer；本地需要复现该路径时设 `LLM_WIKI_FAST_LOCAL_TESTS=0`。
+3. CLI 子进程测试默认有 90 秒预算，超时会 `Kill(entireProcessTree: true)`；可用 `DEPA_WIKI_TEST_CLI_TIMEOUT_SECONDS` 在 1-300 秒间调整，不能设置为无限期。
+4. 若命令被外部中断，执行 `dotnet build-server shutdown` 后再确认没有 `dotnet`、`VBCSCompiler` 或 `MSBuild.dll` 进程；不要用测试 apphost 去启动 `depa-wiki.dll`，否则会递归启动整个测试套件。
+
 ## 索引落后 HEAD
 
 **症状**：SessionStart 时 staleness hook 提示索引落后；或 `detect_changes` 输出 `"stale":true`：

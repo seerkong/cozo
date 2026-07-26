@@ -25,4 +25,13 @@
     <UseSharedCompilation>false</UseSharedCompilation>
   </PropertyGroup>
 
+  <!-- Set only by scripts/dotnet-safe.sh for finite local test commands. CI and direct
+       dotnet builds retain analyzers; the fast mode prevents a single 22k-line test host
+       from creating avoidable analyzer and project-reference contention on a developer laptop. -->
+  <PropertyGroup Condition="'$(LLM_WIKI_FAST_LOCAL_TESTS)' == '1'">
+    <RunAnalyzers>false</RunAnalyzers>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <BuildInParallel>false</BuildInParallel>
+  </PropertyGroup>
+
 </Project>

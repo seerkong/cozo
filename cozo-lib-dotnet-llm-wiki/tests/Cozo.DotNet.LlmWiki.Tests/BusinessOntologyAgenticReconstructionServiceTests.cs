@@ -12,6 +12,8 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
     private const string RunId = "analysis-run:agentic-fixture";
     private const string OntologyId = "SampleDomain.Ontology";
     private const string GenerationId = "fixture-1";
+    private const string OtherEvidenceId = "evidence:other-query";
+    private const string SecondEvidenceId = "evidence:record-persist";
     private static readonly DateTimeOffset StartedAt = new(2026, 7, 19, 10, 0, 0, TimeSpan.Zero);
     private static readonly string ClaimPayload = JsonSerializer.Serialize(new { property = "state", from = "DRAFT", to = "SUBMITTED" });
     private static readonly string EvidenceId = CodeSemanticClaimIdentity.Create(
@@ -24,11 +26,18 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
     public static async Task RunAsync(Action<bool, string> assert)
     {
         await MultiRoundStateMachineAsync(assert);
+        await CrossQueryEvidenceIsRejectedBeforePersistenceAsync(assert);
+        await SynthesisStaysInMemoryAndDoesNotMutatePersistenceAsync(assert);
+        await SynthesisRejectsLaterRecordsWithoutPersistenceAsync(assert);
+        await SynthesisBudgetExhaustionStaysInMemoryAsync(assert);
+        PendingSynthesisAppearsInPublicRunSummary(assert);
+        await LaterEvidenceCoordinatesCannotOverwriteFirstBindingAsync(assert);
         await ZeroCandidateFinishDoesNotInventDraftAsync(assert);
         await DispatchesAllWhitelistedOperationsAsync(assert);
         await UnknownOperationIsRejectedBeforeDispatchAsync(assert);
         await BudgetRejectionStopsBeforeSecondQueryDispatchAsync(assert);
         await LlmActionSourcePersistsValidatedRecordsWithoutLeakingSourceAsync(assert);
+        await PersistedFailureAppendsOneTerminalCompletionAsync(assert);
         await InvalidActionsAreFailureAtomicWithPersistentStoreAsync(assert);
         await BudgetExhaustionPersistsLocalGapAndStopsBeforeFurtherEffectsAsync(assert);
         await TimeoutCancellationAndQueryFailureAreFailureAtomicAsync(assert);
@@ -72,6 +81,353 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             "controller should dispatch through the typed investigation operation surface only");
     }
 
+    private static async Task CrossQueryEvidenceIsRejectedBeforePersistenceAsync(Action<bool, string> assert)
+    {
+        using var fixture = await PersistentFixture.CreateAsync("cross-query-provenance");
+        var result = await new BusinessOntologyAgenticReconstructionService(new ProvenanceInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":cross-query-provenance",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":1}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindBusinessTerms,
+                        """
+                        {"term":"record","limit":1}
+                        """),
+                    ctx => Record(ctx, "observation:cross-query", "observation", "lifecycle", OntologyId + ".RecordLifecycle", "observed",
+                        ctx.Queries[0].QueryDigest,
+                        ctx.Queries[1].EvidenceRefs.Single().EvidenceId),
+                ]),
+                StartedAtUtc: StartedAt,
+                Persistence: new BusinessOntologyAgentPersistenceContext(
+                    fixture.AnalysisStore,
+                    AgentRunInput(RunId + ":cross-query-provenance"))));
+
+        var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
+        assert(result.Status == BusinessOntologyAgentRunStatuses.Rejected
+                && result.Queries.Count == 2
+                && result.Records.Count == 0
+                && workspace.Records.Count == 0,
+            "controller must reject known evidence paired with a different query digest before persistence");
+
+        var directResult = await new BusinessOntologyAgenticReconstructionService(new ProvenanceInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":direct-query-provenance",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":1}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindBusinessTerms,
+                        """
+                        {"term":"record","limit":1}
+                        """),
+                    ctx => Record(ctx, "observation:direct-query", "observation", "lifecycle", OntologyId + ".RecordLifecycle", "observed",
+                        ctx.Queries[1].QueryDigest,
+                        ctx.Queries[1].EvidenceRefs.Single().EvidenceId),
+                    ctx => Finish(ctx, BusinessOntologyAgentFinishStatuses.Completed),
+                ]),
+                StartedAtUtc: StartedAt));
+
+        assert(directResult.Status == BusinessOntologyAgentRunStatuses.Finished
+                && directResult.Records.Single().EvidenceIds.SequenceEqual([OtherEvidenceId], StringComparer.Ordinal),
+            "controller should accept evidence returned by the record query digest");
+    }
+
+    private static async Task SynthesisStaysInMemoryAndDoesNotMutatePersistenceAsync(Action<bool, string> assert)
+    {
+        using var fixture = await PersistentFixture.CreateAsync("pending-synthesis");
+        var acceptedBefore = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        var result = await new BusinessOntologyAgenticReconstructionService(new SynthesisInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":pending-synthesis",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":2}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.GetSemanticEvidence,
+                        JsonSerializer.Serialize(new { evidenceIds = ctx.KnownEvidenceIds.Order(StringComparer.Ordinal).ToArray() })),
+                    Synthesize,
+                    ctx => Finish(ctx, BusinessOntologyAgentFinishStatuses.Completed),
+                ]),
+                StartedAtUtc: StartedAt,
+                Persistence: new BusinessOntologyAgentPersistenceContext(
+                    fixture.AnalysisStore,
+                    AgentRunInput(RunId + ":pending-synthesis"))));
+
+        var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
+        var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        assert(result.Status == BusinessOntologyAgentRunStatuses.Finished
+                && result.PendingSyntheses is [{ DomainCharters.Count: 1, Clusters.Count: 1 }]
+                && result.PendingSyntheses.Single().Clusters.Single().ConceptId == "Records.Record"
+                && result.Steps.Any(step => step.Action == BusinessOntologyAgentActionKinds.Synthesize && step.Outcome == "accepted")
+                && result.Records.Count == 0
+                && workspace.Runs.Count == 0
+                && workspace.Records.Count == 0
+                && workspace.Completions.Count == 0
+                && acceptedBefore == acceptedAfter,
+            "synthesize should retain a strong pending semantic draft only in the run result without writing analysis or accepted ontology");
+        assert(result.Queries.Single(query => query.Operation == BusinessOntologyAgentQueryOperations.GetSemanticEvidence)
+                    .EvidenceRefs.Single(item => item.EvidenceId == EvidenceId).SymbolId == "symbol:record:create",
+            "semantic evidence-pack refs should retain their runtime SubjectId as the synthesize anchor symbol id");
+    }
+
+    private static async Task SynthesisRejectsLaterRecordsWithoutPersistenceAsync(Action<bool, string> assert)
+    {
+        using var fixture = await PersistentFixture.CreateAsync("synthesis-record-rejected");
+        var acceptedBefore = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        var result = await new BusinessOntologyAgenticReconstructionService(new SynthesisInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":synthesis-record-rejected",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":2}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.GetSemanticEvidence,
+                        JsonSerializer.Serialize(new { evidenceIds = ctx.KnownEvidenceIds.Order(StringComparer.Ordinal).ToArray() })),
+                    Synthesize,
+                    ctx => Record(
+                        ctx,
+                        "observation:after-synthesis",
+                        "observation",
+                        "lifecycle",
+                        OntologyId + ".RecordLifecycle",
+                        "observed",
+                        ctx.Queries.First(query => query.Operation == BusinessOntologyAgentQueryOperations.FindSemanticPatterns).QueryDigest,
+                        EvidenceId),
+                    ctx => Finish(ctx, BusinessOntologyAgentFinishStatuses.Completed),
+                ]),
+                StartedAtUtc: StartedAt,
+                Persistence: new BusinessOntologyAgentPersistenceContext(
+                    fixture.AnalysisStore,
+                    AgentRunInput(RunId + ":synthesis-record-rejected"))));
+
+        var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
+        var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        assert(result.Status == BusinessOntologyAgentRunStatuses.Rejected
+                && result.PendingSyntheses.Count == 1
+                && result.Records.Count == 0
+                && result.Steps.Last() is { Action: BusinessOntologyAgentActionKinds.Record, Outcome: "rejected" }
+                && workspace.Runs.Count == 0
+                && workspace.Records.Count == 0
+                && workspace.Completions.Count == 0
+                && acceptedBefore == acceptedAfter,
+            "a record after synthesize must be rejected before any analysis workspace or accepted-ontology write");
+    }
+
+    private static async Task SynthesisBudgetExhaustionStaysInMemoryAsync(Action<bool, string> assert)
+    {
+        using var fixture = await PersistentFixture.CreateAsync("synthesis-budget");
+        var acceptedBefore = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        var result = await new BusinessOntologyAgenticReconstructionService(new SynthesisInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":synthesis-budget",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":2}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.GetSemanticEvidence,
+                        JsonSerializer.Serialize(new { evidenceIds = ctx.KnownEvidenceIds.Order(StringComparer.Ordinal).ToArray() })),
+                    Synthesize,
+                ]),
+                new BusinessOntologyAgentBudgetLimits(maxTurns: 3),
+                StartedAt,
+                new BusinessOntologyAgentPersistenceContext(
+                    fixture.AnalysisStore,
+                    AgentRunInput(RunId + ":synthesis-budget"))));
+
+        var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
+        var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
+        assert(result.Status == BusinessOntologyAgentRunStatuses.BudgetExhausted
+                && result.BudgetRejection is { Metric: BusinessOntologyAgentBudgetMetrics.Turns }
+                && result.PendingSyntheses.Count == 1
+                && workspace.Runs.Count == 0
+                && workspace.Records.Count == 0
+                && workspace.Completions.Count == 0
+                && acceptedBefore == acceptedAfter,
+            "budget exhaustion after synthesize must not append a gap, run, or terminal analysis envelope");
+    }
+
+    private static void PendingSynthesisAppearsInPublicRunSummary(Action<bool, string> assert)
+    {
+        const string poisonRunId = "poison-run-id:/private/run.json";
+        const string poisonTurnId = "poison-turn-id:/private/turn.json";
+        const string poisonQueryDigest = "poison-query-digest:/private/query.json";
+        const string poisonOperation = "poison-operation:/private/operation.json";
+        const string poisonEvidenceId = "poison-evidence-id:/private/evidence.json";
+        const string poisonSecondEvidenceId = "poison-evidence-id-2:/private/evidence-2.json";
+        const string poisonOntologyId = "poison-ontology-id:/private/ontology.json";
+        const string poisonCharterId = "poison-domain-id:/private/domain.json";
+        const string poisonClusterId = "poison-cluster-id:/private/cluster.json";
+        const string poisonConceptId = "poison-concept-id:/private/concept.json";
+        const string poisonAnchorId = "poison-anchor-id:/private/anchor.json";
+        var summary = LlmWikiToolRunner.BusinessOntologyAgentRunSummary(
+            poisonRunId,
+            BusinessOntologyAgentRunStatuses.Finished,
+            BusinessOntologyAgentPhases.Model,
+            BusinessOntologyAgentBudgetLimits.Default,
+            null,
+            [new BusinessOntologyAgentQueryObservation(
+                poisonTurnId,
+                poisonOperation,
+                "{\"parameters\":\"/private/query.json\"}",
+                poisonQueryDigest,
+                [
+                    new BusinessOntologyInvestigationEvidenceRef(poisonEvidenceId, "sample", "src/RecordService.java", "createRecord", 3, 3),
+                    new BusinessOntologyInvestigationEvidenceRef(poisonSecondEvidenceId, "sample", "src/RecordRepository.java", "persistRecord", 9, 9),
+                ],
+                2,
+                128,
+                new { })],
+            [
+            new BusinessOntologyAnalysisRecordInput(poisonRunId, "record:/private/RecordService.cs:{\"raw\":true}", "candidate_draft", "unknown", poisonOntologyId, "ignored", "{}", "proposed", 0.5, poisonQueryDigest, StartedAt.ToString("O"), [poisonEvidenceId]),
+            new BusinessOntologyAnalysisRecordInput(poisonRunId, "gap:/private/RecordRepository.cs", "gap", "unknown", poisonOntologyId, "ignored", "{}", "open", 0.5, poisonQueryDigest, StartedAt.ToString("O"), [poisonEvidenceId]),
+            new BusinessOntologyAnalysisRecordInput(poisonRunId, "conflict:{\"source\":\"/private/RecordController.cs\"}", "conflict", "unknown", poisonOntologyId, "ignored", "{}", "open", 0.5, poisonQueryDigest, StartedAt.ToString("O"), [poisonEvidenceId]),
+            ],
+            [],
+            "rejectionReason:/private/RecordService.cs:{\"raw\":true}",
+            "providerUnavailableReason:/private/RecordProvider.cs:{\"raw\":true}",
+            "model:/private/ModelConfig.json:{\"raw\":true}",
+            "sha256:summary-input",
+            budgetRejection: new BusinessOntologyAgentBudgetRejection(
+                BusinessOntologyAgentBudgetMetrics.OutputTokens,
+                100,
+                90,
+                20,
+                "budgetAudit:/private/RecordBudget.cs:{\"raw\":true}"),
+            finish: new BusinessOntologyAgentFinish(
+                poisonTurnId,
+                BusinessOntologyAgentFinishStatuses.NoCandidate,
+                "finishReason:/private/RecordService.cs:{\"raw\":true}",
+                ["unresolved:/private/RecordService.cs", "{\"sourceSnippet\":\"public void leak()\"}" ]),
+            pendingSyntheses:
+            [
+                new BusinessOntologyAgentPendingSynthesis(
+                [
+                    new BusinessOntologySemanticDomainCharter(
+                        poisonCharterId, "中文 charter:/private/RecordService.cs", "中文 description:{\"raw\":\"source\"}", [poisonEvidenceId, poisonSecondEvidenceId],
+                        ["workflow:/private/RecordService.cs:{\"raw\":true}"]),
+                ],
+                [
+                    new BusinessOntologySemanticCluster(
+                        poisonClusterId, poisonCharterId, poisonConceptId, "中文 cluster:/private/RecordService.cs", "中文 description:{\"raw\":\"source\"}",
+                        [
+                            new BusinessOntologySemanticImplementationAnchor(poisonAnchorId, "role:/private/RecordController.cs:{\"raw\":true}", "src/RecordController.java", poisonEvidenceId),
+                            new BusinessOntologySemanticImplementationAnchor(poisonAnchorId + "-2", "role:/private/RecordService.cs:{\"raw\":true}", "src/RecordService.java", poisonSecondEvidenceId),
+                        ]),
+                ]),
+            ]);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(summary));
+        var pending = document.RootElement.GetProperty("pendingSynthesis");
+        var json = document.RootElement.GetRawText();
+        static bool HasOnlyProperties(JsonElement element, params string[] names) =>
+            element.EnumerateObject().Select(property => property.Name).OrderBy(name => name, StringComparer.Ordinal).SequenceEqual(
+                names.OrderBy(name => name, StringComparer.Ordinal), StringComparer.Ordinal);
+
+        assert(HasOnlyProperties(document.RootElement,
+                    ["analysis", "budget", "diagnostics", "finish", "operation", "pendingSynthesis", "phase", "provenance", "schemaVersion", "status"])
+                && HasOnlyProperties(document.RootElement.GetProperty("analysis"),
+                    ["candidateDraftCount", "conflictCount", "gapCount", "recordCount"])
+                && HasOnlyProperties(pending,
+                    ["anchorCount", "charterCount", "clusterCount", "workflowCount"])
+                && HasOnlyProperties(document.RootElement.GetProperty("budget"), ["limits", "rejection", "used"])
+                && HasOnlyProperties(document.RootElement.GetProperty("budget").GetProperty("limits"),
+                    ["MaxConcurrency", "MaxInputTokens", "MaxOutputTokens", "MaxQueries", "MaxRows", "MaxSourceBytes", "MaxTurns", "maxWallClockSeconds"])
+                && HasOnlyProperties(document.RootElement.GetProperty("budget").GetProperty("rejection"),
+                    ["Limit", "Metric", "Requested", "Used"])
+                && document.RootElement.GetProperty("budget").GetProperty("used").ValueKind == JsonValueKind.Null
+                && HasOnlyProperties(document.RootElement.GetProperty("provenance"),
+                    ["evidenceCount", "inputDigest", "queryCount", "stepCount"])
+                && HasOnlyProperties(document.RootElement.GetProperty("finish"), ["Status", "unresolvedCount"])
+                && HasOnlyProperties(document.RootElement.GetProperty("diagnostics"), ["providerUnavailable", "rejected"])
+                && document.RootElement.GetProperty("schemaVersion").GetString() == "business-ontology-agent-run-summary-v1"
+                && document.RootElement.GetProperty("operation").GetString() == "run_business_ontology_agent"
+                && document.RootElement.GetProperty("status").GetString() == BusinessOntologyAgentRunStatuses.Finished
+                && document.RootElement.GetProperty("phase").GetString() == BusinessOntologyAgentPhases.Model
+                && document.RootElement.GetProperty("analysis").GetProperty("recordCount").GetInt32() == 3
+                && document.RootElement.GetProperty("analysis").GetProperty("candidateDraftCount").GetInt32() == 1
+                && document.RootElement.GetProperty("analysis").GetProperty("gapCount").GetInt32() == 1
+                && document.RootElement.GetProperty("analysis").GetProperty("conflictCount").GetInt32() == 1
+                && !document.RootElement.GetProperty("analysis").TryGetProperty("runId", out _)
+                && pending.GetProperty("charterCount").GetInt32() == 1
+                && pending.GetProperty("clusterCount").GetInt32() == 1
+                && pending.GetProperty("workflowCount").GetInt32() == 1
+                && pending.GetProperty("anchorCount").GetInt32() == 2
+                && document.RootElement.GetProperty("provenance").GetProperty("inputDigest").GetString() == "sha256:summary-input"
+                && document.RootElement.GetProperty("provenance").GetProperty("queryCount").GetInt32() == 1
+                && document.RootElement.GetProperty("provenance").GetProperty("evidenceCount").GetInt32() == 2
+                && document.RootElement.GetProperty("provenance").GetProperty("stepCount").GetInt32() == 0
+                && document.RootElement.GetProperty("finish").GetProperty("Status").GetString() == BusinessOntologyAgentFinishStatuses.NoCandidate
+                && document.RootElement.GetProperty("finish").GetProperty("unresolvedCount").GetInt32() == 2
+                && document.RootElement.GetProperty("diagnostics").GetProperty("rejected").GetBoolean()
+                && document.RootElement.GetProperty("diagnostics").GetProperty("providerUnavailable").GetBoolean()
+                && !document.RootElement.GetProperty("analysis").TryGetProperty("recordIds", out _)
+                && !document.RootElement.TryGetProperty("ontologyId", out _)
+                && !document.RootElement.TryGetProperty("generationId", out _)
+                && !document.RootElement.TryGetProperty("workItem", out _)
+                && !document.RootElement.GetProperty("finish").TryGetProperty("Reason", out _)
+                && !document.RootElement.GetProperty("diagnostics").TryGetProperty("rejectionReason", out _)
+                && !document.RootElement.GetProperty("diagnostics").TryGetProperty("providerUnavailableReason", out _)
+                && !document.RootElement.GetProperty("budget").GetProperty("rejection").TryGetProperty("Audit", out _)
+                && !document.RootElement.GetProperty("provenance").TryGetProperty("queryDigests", out _)
+                && !document.RootElement.GetProperty("provenance").TryGetProperty("evidenceIds", out _)
+                && !document.RootElement.GetProperty("provenance").TryGetProperty("operations", out _)
+                && !new[]
+                {
+                    poisonRunId,
+                    poisonTurnId,
+                    poisonQueryDigest,
+                    poisonOperation,
+                    poisonEvidenceId,
+                    poisonSecondEvidenceId,
+                    poisonOntologyId,
+                    poisonCharterId,
+                    poisonClusterId,
+                    poisonConceptId,
+                    poisonAnchorId,
+                }.Any(poison => json.Contains(poison, StringComparison.Ordinal))
+                && !json.Contains("/private/", StringComparison.Ordinal)
+                && !json.Contains("sourceSnippet", StringComparison.Ordinal)
+                && !json.Contains("raw", StringComparison.Ordinal),
+            "public run summary should retain only enum-controlled status, diagnostics, and aggregate counts without raw IDs or model-controlled text");
+    }
+
+    private static async Task LaterEvidenceCoordinatesCannotOverwriteFirstBindingAsync(Action<bool, string> assert)
+    {
+        var result = await new BusinessOntologyAgenticReconstructionService(new SynthesisInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                RunId + ":first-evidence-binding",
+                new BusinessOntologyAgentSequenceActionSource(
+                [
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                        """
+                        {"kind":"business_guard","term":"record","limit":2}
+                        """),
+                    ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindBusinessTerms,
+                        """
+                        {"term":"record","limit":1}
+                        """),
+                    Synthesize,
+                    ctx => Finish(ctx, BusinessOntologyAgentFinishStatuses.Completed),
+                ]),
+                StartedAtUtc: StartedAt));
+
+        assert(result.Status == BusinessOntologyAgentRunStatuses.Finished
+                && result.PendingSyntheses.Count == 1
+                && result.Queries.Count == 2,
+            "a later query must not replace the first runtime-owned evidence coordinates used by synthesize validation");
+    }
+
     private static async Task DispatchesAllWhitelistedOperationsAsync(Action<bool, string> assert)
     {
         var operations = new FakeInvestigationOperations();
@@ -105,12 +461,35 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
                     """
                     {"ontologyId":"SampleDomain.Ontology","subjectKind":"candidate","subjectId":"candidate:record"}
                     """),
+                ctx => Query(ctx, BusinessOntologyAgentQueryOperations.DiscoverDomainCharters,
+                    """
+                    {"term":"record","limit":1}
+                    """),
+                ctx => Query(ctx, BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases,
+                    """
+                    {"entrySymbolId":"symbol:record:create","limit":1}
+                    """),
+                ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindStateRuleClusters,
+                    """
+                    {"term":"record","limit":1}
+                    """),
+                ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindImplementationClusters,
+                    """
+                    {"domainSeed":"record","limit":1}
+                    """),
                 ctx => Finish(ctx, BusinessOntologyAgentFinishStatuses.NoCandidate),
             ]),
+            new BusinessOntologyAgentBudgetLimits(
+                maxTurns: 16,
+                maxQueries: 12,
+                maxRows: 32,
+                maxSourceBytes: 131072,
+                maxInputTokens: 200000,
+                maxOutputTokens: 50000),
             StartedAtUtc: new DateTimeOffset(2026, 7, 19, 8, 40, 0, TimeSpan.Zero)));
 
-        assert(result.Status == BusinessOntologyAgentRunStatuses.Finished && result.Queries.Count == 7,
-            "controller should accept all seven whitelisted investigation operations");
+        assert(result.Status == BusinessOntologyAgentRunStatuses.Finished && result.Queries.Count == 11,
+            $"controller should accept every whitelisted investigation operation including the v3 read-only views (status={result.Status}, queries={result.Queries.Count}, reason={result.RejectionReason ?? result.BudgetRejection?.Metric ?? "none"})");
         assert(result.Finish is { Status: BusinessOntologyAgentFinishStatuses.NoCandidate }
                 && result.Records.Count == 0
                 && !result.Records.Any(record => record.Kind == "candidate_draft"),
@@ -123,6 +502,10 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
                 BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
                 BusinessOntologyAgentQueryOperations.GetSemanticEvidence,
                 BusinessOntologyAgentQueryOperations.InspectOntologySubject,
+                BusinessOntologyAgentQueryOperations.DiscoverDomainCharters,
+                BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases,
+                BusinessOntologyAgentQueryOperations.FindStateRuleClusters,
+                BusinessOntologyAgentQueryOperations.FindImplementationClusters,
             ]),
             "each whitelisted operation should dispatch to its typed G1 service method exactly once");
         assert(result.Queries.Any(query => query.Operation == BusinessOntologyAgentQueryOperations.GetSemanticEvidence
@@ -165,9 +548,11 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
                 && result.Finish is { Status: BusinessOntologyAgentFinishStatuses.NoCandidate, Unresolved.Count: 1 }
                 && result.Queries.Count == 1
                 && result.Records.Count == 0
+                && workspace.Runs.Count == 0
                 && workspace.Records.Count == 0
+                && workspace.Completions.Count == 0
                 && acceptedBefore == acceptedAfter,
-            "no_candidate finish should preserve query provenance but append no candidate draft and leave accepted ontology unchanged");
+            "no_candidate finish should preserve query provenance without creating an analysis run, terminal envelope, or accepted-ontology mutation");
     }
 
     private static async Task UnknownOperationIsRejectedBeforeDispatchAsync(Action<bool, string> assert)
@@ -262,14 +647,22 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
 
             var workspace = await analysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
             var persisted = workspace.Records.Single();
+            var completion = workspace.Completions.Single();
             assert(workspace.Runs.Single().Model == "gpt-5.6-terra"
                     && persisted.RecordId == "candidate:record-lifecycle"
                     && persisted.Kind == "candidate_draft"
                     && persisted.EvidenceIds.SequenceEqual([EvidenceId], StringComparer.Ordinal)
+                    && completion.Status == BusinessOntologyAgentRunStatuses.Finished
+                    && DateTimeOffset.TryParse(completion.CompletedAt, out var completedAt)
+                    && completedAt > StartedAt
+                    && completion.QueryCount == first.Queries.Count
+                    && completion.RecordCount == first.Records.Count
+                    && completion.RejectedActionCount == 0
+                    && completion.BudgetMetric == ""
                     && !persisted.EvidenceIds.Any(id => id.Contains("codex", StringComparison.OrdinalIgnoreCase)
                                                         || id.Contains("gpt", StringComparison.OrdinalIgnoreCase)
                                                         || id.Contains(RunId, StringComparison.Ordinal)),
-                "G2 persistence should store only validated evidence ids, not model text, model identity, or run identity as evidence");
+                "G2 persistence should append one safe terminal envelope and store only validated evidence ids, not model text, model identity, or run identity as evidence");
 
             var second = await new BusinessOntologyAgenticReconstructionService(new FakeInvestigationOperations())
                 .RunAsync(new BusinessOntologyAgentRunRequest(
@@ -280,9 +673,11 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             var replayWorkspace = await analysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
             assert(second.Status == BusinessOntologyAgentRunStatuses.Finished
                     && replayWorkspace.Records.Count == 1
+                    && replayWorkspace.Completions.Count == 1
+                    && replayWorkspace.Completions.Single() == completion
                     && second.Records.Single().CreatedAt == first.Records.Single().CreatedAt
                     && replayWorkspace.Records.Single().CreatedAt == first.Records.Single().CreatedAt,
-                "record CreatedAt should come from stable run/turn context so replay is idempotent");
+                "record and terminal completion timestamps should come from stable run/turn context so replay is idempotent");
 
             var acceptedAfter = SnapshotBytes(await ontologyStore.ReadExportableAsync(OntologyId));
             assert(acceptedBefore == acceptedAfter,
@@ -292,6 +687,49 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static async Task PersistedFailureAppendsOneTerminalCompletionAsync(Action<bool, string> assert)
+    {
+        using var fixture = await PersistentFixture.CreateAsync("persisted-failure");
+        var runId = RunId + ":persisted-failure";
+        var actions = new Func<BusinessOntologyAgentActionSourceContext, string>[]
+        {
+            ctx => Query(ctx, BusinessOntologyAgentQueryOperations.FindSemanticPatterns,
+                """
+                {"kind":"business_guard","term":"record","limit":1}
+                """),
+            ctx => RecordObservation(ctx, "observation:before-provider-failure"),
+        };
+
+        var first = await new BusinessOntologyAgenticReconstructionService(new FakeInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                runId,
+                new BusinessOntologyAgentSequenceActionSource(actions),
+                StartedAtUtc: StartedAt,
+                Persistence: new BusinessOntologyAgentPersistenceContext(fixture.AnalysisStore, AgentRunInput(runId))));
+        var second = await new BusinessOntologyAgenticReconstructionService(new FakeInvestigationOperations())
+            .RunAsync(new BusinessOntologyAgentRunRequest(
+                runId,
+                new BusinessOntologyAgentSequenceActionSource(actions),
+                StartedAtUtc: StartedAt,
+                Persistence: new BusinessOntologyAgentPersistenceContext(fixture.AnalysisStore, AgentRunInput(runId))));
+
+        var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
+        var completion = workspace.Completions.Single();
+        assert(first.Status == BusinessOntologyAgentRunStatuses.Blocked
+                && second.Status == BusinessOntologyAgentRunStatuses.Blocked
+                && workspace.Runs.Count == 1
+                && workspace.Records.Count == 1
+                && workspace.Completions.Count == 1
+                && completion.Status == BusinessOntologyAgentRunStatuses.Blocked
+                && DateTimeOffset.TryParse(completion.CompletedAt, out var completedAt)
+                && completedAt > StartedAt
+                && completion.QueryCount == 1
+                && completion.RecordCount == 1
+                && completion.RejectedActionCount == 0
+                && completion.BudgetMetric == "",
+            "a provider/action-source failure after record persistence should append one immutable blocked terminal envelope");
     }
 
     private static async Task InvalidActionsAreFailureAtomicWithPersistentStoreAsync(Action<bool, string> assert)
@@ -340,7 +778,9 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
             assert(result.Status == BusinessOntologyAgentRunStatuses.Rejected
                     && result.Records.Count == 0
+                    && workspace.Runs.Count == 0
                     && workspace.Records.Count == 0
+                    && workspace.Completions.Count == 0
                     && acceptedBefore == acceptedAfter,
                 $"{testCase.Name} should reject before appending model records or changing accepted ontology");
         }
@@ -369,6 +809,7 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
         var workspace = await fixture.AnalysisStore.ReadWorkspaceAsync(OntologyId, GenerationId);
         var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
         var gap = workspace.Records.Single();
+        var completion = workspace.Completions.Single();
         assert(result.Status == BusinessOntologyAgentRunStatuses.BudgetExhausted
                 && result.BudgetRejection is { Metric: BusinessOntologyAgentBudgetMetrics.Queries }
                 && source.Calls == 1
@@ -378,8 +819,15 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
                 && gap.Kind == "gap"
                 && gap.QueryDigest == result.Queries.Single().QueryDigest
                 && gap.EvidenceIds.SequenceEqual([EvidenceId], StringComparer.Ordinal)
+                && completion.Status == BusinessOntologyAgentRunStatuses.BudgetExhausted
+                && DateTimeOffset.TryParse(completion.CompletedAt, out var completedAt)
+                && completedAt > StartedAt
+                && completion.QueryCount == 1
+                && completion.RecordCount == 1
+                && completion.RejectedActionCount == 0
+                && completion.BudgetMetric == BusinessOntologyAgentBudgetMetrics.Queries
                 && acceptedBefore == acceptedAfter,
-            "budget exhaustion should persist one local evidence-bounded gap and leave accepted ontology unchanged");
+            "budget exhaustion should persist one local evidence-bounded gap and one immutable terminal envelope without changing accepted ontology");
     }
 
     private static async Task TimeoutCancellationAndQueryFailureAreFailureAtomicAsync(Action<bool, string> assert)
@@ -399,7 +847,9 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
             assert(result.Status == BusinessOntologyAgentRunStatuses.TimedOut
                     && source.Calls == 1
+                    && workspace.Runs.Count == 0
                     && workspace.Records.Count == 0
+                    && workspace.Completions.Count == 0
                     && acceptedBefore == acceptedAfter,
                 "action-source timeout should not append model records or mutate accepted ontology");
         }
@@ -420,7 +870,9 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             var acceptedAfter = SnapshotBytes(await fixture.OntologyStore.ReadExportableAsync(OntologyId));
             assert(result.Status == BusinessOntologyAgentRunStatuses.Cancelled
                     && source.Calls == 1
+                    && workspace.Runs.Count == 0
                     && workspace.Records.Count == 0
+                    && workspace.Completions.Count == 0
                     && acceptedBefore == acceptedAfter,
                 "external cancellation should return a terminal local result without partial records or accepted ontology changes");
         }
@@ -445,7 +897,9 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
             assert(result.Status == BusinessOntologyAgentRunStatuses.Blocked
                     && operations.Calls.SequenceEqual([BusinessOntologyAgentQueryOperations.FindSemanticPatterns])
                     && result.Queries.Count == 0
+                    && workspace.Runs.Count == 0
                     && workspace.Records.Count == 0
+                    && workspace.Completions.Count == 0
                     && acceptedBefore == acceptedAfter,
                 "query failure should not accept a query observation, append analysis records, or mutate accepted ontology");
         }
@@ -475,7 +929,9 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
         string kind,
         string subjectKind,
         string subjectId,
-        string status) =>
+        string status,
+        string? queryDigest = null,
+        string? evidenceId = null) =>
         $$"""
         {
           "schemaVersion": "business-ontology-agent-action-v1",
@@ -491,8 +947,8 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
               "body": {"from": "DRAFT", "to": "SUBMITTED"},
               "status": "{{status}}",
               "uncertainty": 0.1,
-              "queryDigest": "{{context.KnownQueryDigests.Single()}}",
-              "evidenceIds": ["{{context.KnownEvidenceIds.Single()}}"]
+              "queryDigest": "{{queryDigest ?? context.KnownQueryDigests.Single()}}",
+              "evidenceIds": ["{{evidenceId ?? context.KnownEvidenceIds.Single()}}"]
             }
           ]
         }
@@ -507,6 +963,37 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
           "status": "{{status}}",
           "reason": "fixture complete",
           "unresolved": []
+        }
+        """;
+
+    private static string Synthesize(BusinessOntologyAgentActionSourceContext context) =>
+        $$"""
+        {
+          "schemaVersion": "business-ontology-agent-action-v1",
+          "action": "synthesize",
+          "identity": {"runId": "{{context.RunId}}", "turnId": "{{context.TurnId}}"},
+          "domainCharters": [
+            {
+              "id": "Records",
+              "nameZh": "记录管理",
+              "descriptionZh": "管理业务记录的创建、提交和持久化。",
+              "evidenceIds": ["{{EvidenceId}}", "{{SecondEvidenceId}}"],
+              "workflowNames": ["记录提交"]
+            }
+          ],
+          "clusters": [
+            {
+              "id": "cluster:record",
+              "domainId": "Records",
+              "conceptId": "Records.Record",
+              "nameZh": "业务记录",
+              "descriptionZh": "跨控制器和持久化实现聚合的业务记录。",
+              "implementationAnchors": [
+                {"symbolId": "symbol:record:create", "role": "controller", "relativePath": "src/RecordController.java", "evidenceId": "{{EvidenceId}}"},
+                {"symbolId": "symbol:record:persist", "role": "repository", "relativePath": "src/RecordRepository.java", "evidenceId": "{{SecondEvidenceId}}"}
+              ]
+            }
+          ]
         }
         """;
 
@@ -847,6 +1334,68 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
                 Digest("inspect")));
         }
 
+        public virtual Task<BusinessOntologyInvestigationPage<BusinessOntologyDiscoveredDomainCharter>> DiscoverDomainChartersAsync(
+            string term,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.DiscoverDomainCharters);
+            return Task.FromResult(Page(
+                BusinessOntologyAgentQueryOperations.DiscoverDomainCharters,
+                new BusinessOntologyDiscoveredDomainCharter(
+                    "domain-charter:record", "record",
+                    [new BusinessOntologyInvestigationActor("actor:record", "Record user", "controller", [EvidenceId])],
+                    new BusinessOntologyInvestigationWorkflow("symbol:record:create", "http_route", "POST /records", [], [EvidenceRef()]),
+                    [], [EvidenceId], [EvidenceRef()])));
+        }
+
+        public virtual Task<BusinessOntologyInvestigationPage<BusinessOntologyCrossLayerUseCase>> ListCrossLayerUseCasesAsync(
+            string? entrySymbolId = null,
+            string? domainSeed = null,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases);
+            return Task.FromResult(Page(
+                BusinessOntologyAgentQueryOperations.ListCrossLayerUseCases,
+                new BusinessOntologyCrossLayerUseCase(
+                    "cross-layer:record", "record", "symbol:record:create", "http_route", "POST /records",
+                    [new BusinessOntologyInvestigationCallPathStep("symbol:record:create", "createRecord", "controller", "sample", "src/RecordService.java", 3)],
+                    ["controller", "service", "repository"], [], [EvidenceId], [EvidenceRef()])));
+        }
+
+        public virtual Task<BusinessOntologyInvestigationPage<BusinessOntologyStateRuleCluster>> FindStateRuleClustersAsync(
+            string term,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.FindStateRuleClusters);
+            var pattern = new BusinessOntologySemanticPattern(EvidenceId, "state_assignment", "symbol:record:create", "createRecord", "sample", "src/RecordService.java", 3, 3, "{}", 0.95, [EvidenceRef()]);
+            return Task.FromResult(Page(
+                BusinessOntologyAgentQueryOperations.FindStateRuleClusters,
+                new BusinessOntologyStateRuleCluster("state-rule:record", "record", "symbol:record:create", [], [], [], [pattern], [], [], [], [EvidenceRef()])));
+        }
+
+        public virtual Task<BusinessOntologyInvestigationPage<BusinessOntologyImplementationCluster>> FindImplementationClustersAsync(
+            string? domainSeed = null,
+            IReadOnlyList<string>? evidenceIds = null,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.FindImplementationClusters);
+            return Task.FromResult(Page(
+                BusinessOntologyAgentQueryOperations.FindImplementationClusters,
+                new BusinessOntologyImplementationCluster(
+                    "implementation-cluster:record", "record",
+                    new BusinessOntologySemanticCluster("implementation-cluster:record", "domain:record", "pending:record", "record", "fixture anchors",
+                        [new BusinessOntologySemanticImplementationAnchor("symbol:record:create", "service", "src/RecordService.java", EvidenceId)]),
+                    [EvidenceId], [EvidenceRef()])));
+        }
+
         private static BusinessOntologyInvestigationPage<T> Page<T>(string operation, T item) =>
             new([item], null, false, Digest(operation));
 
@@ -878,6 +1427,92 @@ internal static class BusinessOntologyAgenticReconstructionServiceTests
         {
             Calls.Add(BusinessOntologyAgentQueryOperations.FindSemanticPatterns);
             throw new InvalidOperationException("fixture query failure");
+        }
+    }
+
+    private sealed class SynthesisInvestigationOperations : FakeInvestigationOperations
+    {
+        public override Task<BusinessOntologyInvestigationPage<BusinessOntologySemanticPattern>> FindSemanticPatternsAsync(
+            string kind,
+            string? term = null,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.FindSemanticPatterns);
+            return Task.FromResult(new BusinessOntologyInvestigationPage<BusinessOntologySemanticPattern>(
+            [
+                Pattern(EvidenceId, "symbol:record:create", "src/RecordController.java", "createRecord", "controller"),
+                Pattern(SecondEvidenceId, "symbol:record:persist", "src/RecordRepository.java", "persistRecord", "repository"),
+            ],
+            null,
+            false,
+            "query:synthesis-patterns"));
+        }
+
+        public override Task<SemanticEvidencePack> GetSemanticEvidenceAsync(IReadOnlyList<string> evidenceIds, CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.GetSemanticEvidence);
+            return Task.FromResult(new SemanticEvidencePack(
+            [
+                Anchor(EvidenceId, "symbol:record:create", "src/RecordController.java", "controller"),
+                Anchor(SecondEvidenceId, "symbol:record:persist", "src/RecordRepository.java", "repository"),
+            ],
+            128,
+            0,
+            false));
+        }
+
+        public override Task<BusinessOntologyInvestigationPage<BusinessTermHit>> FindBusinessTermsAsync(
+            string term,
+            string? ontologyId = null,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.FindBusinessTerms);
+            var altered = new BusinessOntologyInvestigationEvidenceRef(EvidenceId, "sample", "src/ForgedRecord.java", "forgedRecord", 99, 99)
+            {
+                SymbolId = "symbol:record:forged",
+            };
+            return Task.FromResult(new BusinessOntologyInvestigationPage<BusinessTermHit>(
+                [new BusinessTermHit("semantic-claim", EvidenceId, "record", "altered", "sample", "src/ForgedRecord.java", 99, 99, [altered], 0.95, "source-fact")],
+                null,
+                false,
+                "query:altered-evidence"));
+        }
+
+        private static BusinessOntologySemanticPattern Pattern(string evidenceId, string symbolId, string path, string symbol, string role) =>
+            new(evidenceId, "business_guard", symbolId, symbol, "sample", path, 3, 3, "{}", 0.95,
+                [new BusinessOntologyInvestigationEvidenceRef(evidenceId, "sample", path, symbol, 3, 3) { SymbolId = symbolId }]);
+
+        private static SemanticEvidencePackAnchor Anchor(string evidenceId, string subjectId, string path, string role) =>
+            new(evidenceId, "sample", path, subjectId, "business_guard", "{}", 3, 3, 1, 5, role, [], "", false);
+    }
+
+    private sealed class ProvenanceInvestigationOperations : FakeInvestigationOperations
+    {
+        public override Task<BusinessOntologyInvestigationPage<BusinessTermHit>> FindBusinessTermsAsync(
+            string term,
+            string? ontologyId = null,
+            string? cursor = null,
+            int? limit = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(BusinessOntologyAgentQueryOperations.FindBusinessTerms);
+            var evidence = new BusinessOntologyInvestigationEvidenceRef(
+                OtherEvidenceId,
+                "sample",
+                "src/OtherRecordService.java",
+                "findRecord",
+                5,
+                5);
+            return Task.FromResult(new BusinessOntologyInvestigationPage<BusinessTermHit>(
+                [new BusinessTermHit("semantic-claim", OtherEvidenceId, "record", "business_guard", "sample", "src/OtherRecordService.java", 5, 5,
+                    [evidence], 0.95, "source-fact")],
+                null,
+                false,
+                "query:other-record"));
         }
     }
 }

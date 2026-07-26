@@ -28,9 +28,32 @@ fi
 # This environment setting applies before MSBuild starts, unlike a project property.
 export MSBUILDDISABLENODEREUSE=1
 
+# The monolithic LLM Wiki test executable is expensive to compile with every Roslyn analyzer
+# under memory pressure. The test project consumes this flag only for local wrapper-driven
+# work; CI and direct dotnet invocations retain analyzers. Set it to 0 for a local full check.
+export LLM_WIKI_FAST_LOCAL_TESTS="${LLM_WIKI_FAST_LOCAL_TESTS:-1}"
+
 cleanup() {
   "${dotnet_bin}" build-server shutdown >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
-"${dotnet_bin}" "$@"
+args=("$@")
+case "${args[0]}" in
+  build|run|test|publish)
+    if [[ " ${args[*]} " != *" --disable-build-servers "* ]]; then
+      args+=("--disable-build-servers")
+    fi
+    ;;
+esac
+
+case "${args[0]}" in
+  build|test)
+    # A solution build otherwise starts many compiler processes at once on a cold workspace.
+    if [[ " ${args[*]} " != *" -m:"* && " ${args[*]} " != *" -maxcpucount:"* && " ${args[*]} " != *" /m:"* ]]; then
+      args+=("-m:1")
+    fi
+    ;;
+esac
+
+"${dotnet_bin}" "${args[@]}"

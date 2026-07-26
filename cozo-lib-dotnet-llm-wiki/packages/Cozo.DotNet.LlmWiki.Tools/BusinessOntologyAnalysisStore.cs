@@ -44,6 +44,24 @@ public sealed record BusinessOntologyAnalysisRun(
     string CompletedAt,
     string InputDigest);
 
+public sealed record BusinessOntologyAnalysisRunCompletionInput(
+    string RunId,
+    string Status,
+    string CompletedAt,
+    int QueryCount,
+    int RecordCount,
+    int RejectedActionCount,
+    string BudgetMetric);
+
+public sealed record BusinessOntologyAnalysisRunCompletion(
+    string RunId,
+    string Status,
+    string CompletedAt,
+    int QueryCount,
+    int RecordCount,
+    int RejectedActionCount,
+    string BudgetMetric);
+
 public sealed record BusinessOntologyAnalysisRecord(
     string RunId,
     string RecordId,
@@ -64,7 +82,8 @@ public sealed record BusinessOntologyAnalysisWorkspaceSnapshot(
     string OntologyId,
     string GenerationId,
     IReadOnlyList<BusinessOntologyAnalysisRun> Runs,
-    IReadOnlyList<BusinessOntologyAnalysisRecord> Records);
+    IReadOnlyList<BusinessOntologyAnalysisRecord> Records,
+    IReadOnlyList<BusinessOntologyAnalysisRunCompletion> Completions);
 
 /// <summary>
 /// Append-only workspace for agentic ontology analysis. It can reference accepted ontology and
@@ -75,6 +94,8 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
     private static readonly Regex Fqn = new("^[A-Z][A-Za-z0-9]*(?:\\.[A-Z][A-Za-z0-9]*)+$", RegexOptions.CultureInvariant);
     private static readonly Regex Identity = new("^[A-Za-z0-9][A-Za-z0-9:_./-]{0,191}$", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> RunStatuses = new(["running", "completed", "failed", "abandoned"], StringComparer.Ordinal);
+    private static readonly HashSet<string> CompletionStatuses = new(["finished", "rejected", "budget_exhausted", "blocked", "cancelled", "timed_out"], StringComparer.Ordinal);
+    private static readonly HashSet<string> BudgetMetrics = new(["turns", "queries", "rows", "source_bytes", "input_tokens", "output_tokens", "wall_clock", "concurrency"], StringComparer.Ordinal);
     private static readonly HashSet<string> RecordKinds = new(["observation", "hypothesis", "conflict", "gap", "candidate_draft"], StringComparer.Ordinal);
     private static readonly HashSet<string> RecordStatuses = new(["observed", "open", "proposed", "confirmed", "rejected", "resolved", "superseded"], StringComparer.Ordinal);
     private static readonly HashSet<string> SubjectKinds = new(["ontology", "concept", "attribute", "relation", "rule", "lifecycle", "state", "transition", "use_case", "evidence", "unknown"], StringComparer.Ordinal);
@@ -82,6 +103,7 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
     public static IReadOnlyList<string> RequiredRelationNames { get; } =
     [
         "onto_analysis_run",
+        "onto_analysis_run_completion",
         "onto_analysis_record",
         "onto_analysis_evidence_ref",
     ];
@@ -214,6 +236,53 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
             .ToArray();
     }
 
+    public async Task<BusinessOntologyAnalysisAppendResult<BusinessOntologyAnalysisRunCompletion>> AppendRunCompletionAsync(
+        BusinessOntologyAnalysisRunCompletionInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ValidateRunCompletion(input);
+        await InitializeAsync(cancellationToken);
+        _ = await ReadRunByIdAsync(input.RunId, cancellationToken)
+            ?? throw new ArgumentException($"Unknown analysis run '{input.RunId}'.", nameof(input));
+
+        var normalized = ToRunCompletion(input);
+        var existing = await ReadRunCompletionByIdAsync(normalized.RunId, cancellationToken);
+        if (existing is not null)
+        {
+            if (SameRunCompletion(existing, normalized))
+            {
+                return new BusinessOntologyAnalysisAppendResult<BusinessOntologyAnalysisRunCompletion>(existing, false);
+            }
+            throw new InvalidOperationException($"Analysis run completion '{normalized.RunId}' already exists with different immutable content.");
+        }
+
+        await om.Runtime.Store.RunAsync(
+            """
+            ?[run_id, status, completed_at, query_count, record_count, rejected_action_count, budget_metric] <-
+                [[$run_id, $status, $completed_at, $query_count, $record_count, $rejected_action_count, $budget_metric]]
+            :insert onto_analysis_run_completion {
+                run_id =>
+                status,
+                completed_at,
+                query_count,
+                record_count,
+                rejected_action_count,
+                budget_metric
+            }
+            """,
+            Params(
+                ("run_id", normalized.RunId),
+                ("status", normalized.Status),
+                ("completed_at", normalized.CompletedAt),
+                ("query_count", normalized.QueryCount),
+                ("record_count", normalized.RecordCount),
+                ("rejected_action_count", normalized.RejectedActionCount),
+                ("budget_metric", normalized.BudgetMetric)),
+            cancellationToken: cancellationToken);
+        return new BusinessOntologyAnalysisAppendResult<BusinessOntologyAnalysisRunCompletion>(normalized, true);
+    }
+
     public async Task<BusinessOntologyAnalysisWorkspaceSnapshot> ReadWorkspaceAsync(
         string ontologyId,
         string generationId,
@@ -250,21 +319,37 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
             .ToArray();
         if (runRows.Length == 0)
         {
-            return new BusinessOntologyAnalysisWorkspaceSnapshot(ontologyId, generationId, [], []);
+            return new BusinessOntologyAnalysisWorkspaceSnapshot(ontologyId, generationId, [], [], []);
         }
 
         var records = new List<BusinessOntologyAnalysisRecord>();
+        var completions = new List<BusinessOntologyAnalysisRunCompletion>();
+        var completionsByRunId = new Dictionary<string, BusinessOntologyAnalysisRunCompletion>(StringComparer.Ordinal);
         foreach (var run in runRows)
         {
             records.AddRange(await ReadRecordsAsync(run.RunId, cancellationToken: cancellationToken));
+            var completion = await ReadRunCompletionByIdAsync(run.RunId, cancellationToken);
+            if (completion is not null)
+            {
+                completions.Add(completion);
+                completionsByRunId.Add(run.RunId, completion);
+            }
         }
         return new BusinessOntologyAnalysisWorkspaceSnapshot(
             ontologyId,
             generationId,
-            runRows,
+            runRows
+                .Select(run => completionsByRunId.TryGetValue(run.RunId, out var completion)
+                    ? EffectiveRun(run, completion)
+                    : run)
+                .ToArray(),
             records
                 .OrderBy(item => item.CreatedAt, StringComparer.Ordinal)
                 .ThenBy(item => item.RecordId, StringComparer.Ordinal)
+                .ToArray(),
+            completions
+                .OrderBy(item => item.CompletedAt, StringComparer.Ordinal)
+                .ThenBy(item => item.RunId, StringComparer.Ordinal)
                 .ToArray());
     }
 
@@ -415,6 +500,32 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
             S(row, 7), D(row, 8), S(row, 9), S(row, 10), refs.GetValueOrDefault(recordId, []));
     }
 
+    private async Task<BusinessOntologyAnalysisRunCompletion?> ReadRunCompletionByIdAsync(
+        string runId,
+        CancellationToken cancellationToken)
+    {
+        var relations = await RelationNamesAsync(cancellationToken);
+        if (!relations.Contains("onto_analysis_run_completion")) return null;
+        var rows = await om.Runtime.Store.RunAsync(
+            """
+            ?[run_id, status, completed_at, query_count, record_count, rejected_action_count, budget_metric] :=
+                *onto_analysis_run_completion{run_id, status, completed_at, query_count, record_count, rejected_action_count, budget_metric},
+                run_id == $run_id
+            """,
+            Params(("run_id", runId)),
+            cancellationToken: cancellationToken);
+        return rows.Rows.Count == 0
+            ? null
+            : new BusinessOntologyAnalysisRunCompletion(
+                S(rows.Rows[0], 0),
+                S(rows.Rows[0], 1),
+                S(rows.Rows[0], 2),
+                int.Parse(S(rows.Rows[0], 3), CultureInfo.InvariantCulture),
+                int.Parse(S(rows.Rows[0], 4), CultureInfo.InvariantCulture),
+                int.Parse(S(rows.Rows[0], 5), CultureInfo.InvariantCulture),
+                S(rows.Rows[0], 6));
+    }
+
     private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> ReadEvidenceRefsForRunAsync(
         string runId,
         CancellationToken cancellationToken)
@@ -533,6 +644,30 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
             input.CreatedAt.Trim(),
             input.EvidenceIds.Select(id => id.Trim()).OrderBy(id => id, StringComparer.Ordinal).ToArray());
 
+    private static BusinessOntologyAnalysisRunCompletion ToRunCompletion(BusinessOntologyAnalysisRunCompletionInput input) =>
+        new(
+            input.RunId.Trim(),
+            input.Status.Trim(),
+            input.CompletedAt.Trim(),
+            input.QueryCount,
+            input.RecordCount,
+            input.RejectedActionCount,
+            input.BudgetMetric.Trim());
+
+    private static BusinessOntologyAnalysisRun EffectiveRun(
+        BusinessOntologyAnalysisRun run,
+        BusinessOntologyAnalysisRunCompletion completion) =>
+        run with
+        {
+            Status = completion.Status switch
+            {
+                "finished" => "completed",
+                "cancelled" or "timed_out" => "abandoned",
+                _ => "failed",
+            },
+            CompletedAt = completion.CompletedAt,
+        };
+
     private static void ValidateRun(BusinessOntologyAnalysisRunInput input)
     {
         ValidateIdentity(input.RunId, nameof(input.RunId));
@@ -586,6 +721,23 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
         }
     }
 
+    private static void ValidateRunCompletion(BusinessOntologyAnalysisRunCompletionInput input)
+    {
+        ValidateIdentity(input.RunId, nameof(input.RunId));
+        if (!CompletionStatuses.Contains(input.Status.Trim()))
+        {
+            throw new ArgumentException("completion status is not supported for ontology analysis runs.", nameof(input.Status));
+        }
+        RequireTimestamp(input.CompletedAt, nameof(input.CompletedAt));
+        if (input.QueryCount < 0) throw new ArgumentOutOfRangeException(nameof(input.QueryCount));
+        if (input.RecordCount < 0) throw new ArgumentOutOfRangeException(nameof(input.RecordCount));
+        if (input.RejectedActionCount < 0) throw new ArgumentOutOfRangeException(nameof(input.RejectedActionCount));
+        if (!string.IsNullOrWhiteSpace(input.BudgetMetric) && !BudgetMetrics.Contains(input.BudgetMetric.Trim()))
+        {
+            throw new ArgumentException("budget metric is not supported for ontology analysis run completions.", nameof(input.BudgetMetric));
+        }
+    }
+
     private static string CanonicalizeJson(string json, string name)
     {
         Require(json, name);
@@ -621,6 +773,9 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
         && StringComparer.Ordinal.Equals(left.CreatedAt, right.CreatedAt)
         && left.EvidenceIds.OrderBy(id => id, StringComparer.Ordinal)
             .SequenceEqual(right.EvidenceIds.OrderBy(id => id, StringComparer.Ordinal), StringComparer.Ordinal);
+
+    private static bool SameRunCompletion(BusinessOntologyAnalysisRunCompletion left, BusinessOntologyAnalysisRunCompletion right) =>
+        left == right;
 
     private static void ValidateFqn(string value, string name)
     {
@@ -673,6 +828,7 @@ public sealed class BusinessOntologyAnalysisStore(CozoOm om)
     private static readonly string[] Creates =
     [
         ":create onto_analysis_run {run_id => ontology_id, generation_id, agent_id, model, purpose, status, started_at, completed_at, input_digest}",
+        ":create onto_analysis_run_completion {run_id => status, completed_at, query_count, record_count, rejected_action_count, budget_metric}",
         ":create onto_analysis_record {run_id, record_id => kind, subject_kind, subject_id, title, body_json, status, uncertainty, query_digest, created_at}",
         ":create onto_analysis_evidence_ref {run_id, record_id, evidence_id => linked default true}",
     ];
