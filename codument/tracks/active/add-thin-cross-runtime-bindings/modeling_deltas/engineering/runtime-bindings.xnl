@@ -1,0 +1,27 @@
+<module #engineering.depa_cozo_bun {
+  kind = "module"
+  depends_on = [ modeling://engineering/cozo-node ]
+} [
+  <desc ?>npm 薄绑定模块：负责按 JavaScript 平台和 CPU 定位 N-API 原生库，不承载对象建模或业务语义。</?>
+  <capsule-tree ?tree>
+depa-cozo-bun/
+  index.js              # JavaScript 数据库原语 API 与原生模块加载
+  lib/native-path.js    # 平台与架构到 native 二进制路径的纯映射
+  build-native.sh       # 从 cozo-node 构建并复制本机原生制品
+  scripts/verify-native.js # 打包前检查受支持平台制品是否存在
+  </?tree>
+]>
+
+<module #engineering.depa_cozo_csharp {
+  kind = "module"
+  depends_on = [ modeling://engineering/cozo-c ]
+} [
+  <desc ?>NuGet 薄绑定模块：通过 cozo_c C ABI 提供 .NET 数据库原语；原生文件由 NuGet RID 资产选择。</?>
+  <capsule-tree ?tree>
+depa-cozo-csharp/
+  src/CozoDb.cs         # 托管数据库原语和生命周期包装
+  src/CozoNative.cs     # P/Invoke 声明与 UTF-8 结果释放
+  build-native.sh       # 从 cozo_c 构建并复制本机 RID 制品
+  runtimes/*/native/    # NuGet 标准 RID 原生资产目录
+  </?tree>
+]>

@@ -64,6 +64,40 @@ char *cozo_run_query(int32_t db_id,
                      bool immutable_query);
 
 /**
+ * Start a multi-statement transaction.
+ *
+ * `db_id`: the ID representing the database to transact against.
+ * `write`: whether the transaction is allowed to modify persisted relations.
+ * `tx_id`: receives an ID for use with `cozo_run_tx`, `cozo_commit_tx`, or `cozo_abort_tx`.
+ *
+ * Returns null on success. On failure, returns a C-string error that must be freed with
+ * `cozo_free_str`.
+ */
+char *cozo_multi_transact(int32_t db_id, bool write, int32_t *tx_id);
+
+/**
+ * Run a CozoScript query within a multi-statement transaction.
+ *
+ * Both `script_raw` and `params_raw` are UTF-8 C-strings. `params_raw` must contain a JSON map.
+ * The returned JSON C-string must be freed with `cozo_free_str`.
+ */
+char *cozo_run_tx(int32_t tx_id, const char *script_raw, const char *params_raw);
+
+/**
+ * Commit a multi-statement transaction and consume its transaction handle.
+ *
+ * Returns a JSON C-string that must be freed with `cozo_free_str`.
+ */
+char *cozo_commit_tx(int32_t tx_id);
+
+/**
+ * Abort a multi-statement transaction and consume its transaction handle.
+ *
+ * Returns a JSON C-string that must be freed with `cozo_free_str`.
+ */
+char *cozo_abort_tx(int32_t tx_id);
+
+/**
  * Import data into relations
  *
  * Note that triggers are _not_ run for the relations, if any exists.

@@ -1,0 +1,54 @@
+{
+  "name": "depa-cozo",
+  "version": "0.1.0",
+  "description": "macOS arm64 thin Cozo native database binding for Bun and Node.js",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.js",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "lib/",
+    "native/",
+    "build-native.sh",
+    "scripts/",
+    "README.md"
+  ],
+  "scripts": {
+    "build-native": "bash ./build-native.sh",
+    "verify-native": "node ./scripts/verify-native.js",
+    "test:node": "node --test test/native-path.test.js",
+    "test:bun": "bun test test/*.test.js",
+    "test:package": "bash ./test/package-smoke.sh",
+    "test": "npm run test:node && npm run test:bun"
+  },
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "keywords": [
+    "cozo",
+    "database",
+    "datalog",
+    "graph",
+    "bun",
+    "nodejs"
+  ],
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cozodb/cozo.git"
+  }
+}

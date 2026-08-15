@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>Depa.Cozo</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Depa</Authors>
+    <Description>Thin .NET binding for the Cozo native C API.</Description>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/cozodb/cozo</RepositoryUrl>
+    <PackageProjectUrl>https://www.cozodb.org</PackageProjectUrl>
+    <PackageTags>cozo;database;datalog;graph;native</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <!-- Copy available native assets for ProjectReference consumers; NuGet reads the same RID layout. -->
+    <Content Include="runtimes/osx-arm64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/osx-arm64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes/osx-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/osx-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes/linux-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/linux-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes/win-x64/native/*" Exclude="**/.gitkeep" Pack="true" PackagePath="runtimes/win-x64/native/" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -60,6 +60,9 @@ release.zip
 .vscode
 release/
 release*
+!.github/
+!.github/workflows/
+!.github/workflows/release-depa-bindings.yml
 Cross.toml
 /tools
 *.cozo_auth

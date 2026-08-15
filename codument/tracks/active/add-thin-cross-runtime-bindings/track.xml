@@ -1,0 +1,91 @@
+<Track id="add-thin-cross-runtime-bindings" version="1" xmlns:cdt="urn:codument:v1">
+  <Metadata>
+    <Status>in_progress</Status>
+    <Goal>发布不含对象建模层的 Bun/Node.js 与 .NET Cozo 原生薄绑定。</Goal>
+    <Description>新增 depa-cozo-bun（npm: depa-cozo）和 depa-cozo-csharp（NuGet: Depa.Cozo），并为各操作系统的原生制品建立可复现的发布流程。</Description>
+    <QuestionMode>decision-tree</QuestionMode>
+    <QuestionSeverity>auto</QuestionSeverity>
+    <CommitMode>manual</CommitMode>
+    <CreatedAt>2026-07-26T00:00:00Z</CreatedAt>
+    <UpdatedAt>2026-07-26T19:30:00Z</UpdatedAt>
+  </Metadata>
+  <Ports scope="track">
+    <MaterialBundle role="input" name="behavior-deltas" domain="behavior" path="vfs://./behavior_deltas/"/>
+    <MaterialBundle role="input" name="modeling-deltas" domain="modeling" path="vfs://./modeling_deltas/"/>
+    <MaterialBundle role="output" name="behavior" domain="codument" path="vfs://@/codument/behaviors/"/>
+    <MaterialBundle role="output" name="modeling" domain="codument" path="vfs://@/codument/modeling/"/>
+  </Ports>
+  <TaskSpace id="space_add-thin-cross-runtime-bindings" name="add-thin-cross-runtime-bindings" version="1">
+    <Description>建立跨运行时、跨 RID 的 Cozo 原生薄绑定发布面。</Description>
+    <SubNodes>
+      <TaskGroup id="P1" name="绑定包实现" status="DONE" order="0">
+        <Description>实现 npm 与 NuGet 的最小公共 API、原生定位与本机构建脚本。</Description>
+        <SubNodes>
+          <Task id="T1.1" name="Bun 与 Node.js 薄绑定" status="DONE" order="0" priority="P0">
+            <Description>新增 npm 包 depa-cozo，不携带 OM、DSL 或本体 API。</Description>
+          </Task>
+          <Task id="T1.2" name=".NET 薄绑定" status="DONE" order="1" priority="P0">
+            <Description>新增 NuGet 包 Depa.Cozo，经稳定 cozo_c ABI 调用数据库原语。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P2" name="跨平台发布与验证" status="DONE" order="1">
+        <Description>建立原生构建汇总、包验证和手动凭证发布流程。</Description>
+        <SubNodes>
+          <Task id="T2.1" name="发布工作流" status="DONE" order="0" priority="P0">
+            <Description>在 macOS、Linux、Windows 构建相应的原生二进制并生成两种包。</Description>
+          </Task>
+          <Task id="T2.2" name="本地打包验证" status="DONE" order="1" priority="P0">
+            <Description>验证 JavaScript 解析、.NET 编译与两个包的 pack 布局。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P3" name="远程发布执行" status="ACTIVE" order="2">
+        <Description>在提交并推送变更后，由手动 workflow 在所有原生 runner 上构建、验证并在获得凭证授权时发布。</Description>
+        <SubNodes>
+          <Task id="T3.1" name="执行跨平台构建与受控发布" status="ACTIVE" order="0" priority="P0">
+            <Description>触发 release-depa-bindings workflow；默认只产出 packages artifact，只有显式 publish=true 和配置 NPM_TOKEN、NUGET_API_KEY 时才发布。</Description>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P4" name="事务 C ABI 补齐与本地包验证" status="DONE" order="3">
+        <Description>为 cozo_c 导出多语句事务入口，并验证重新打包的 macOS arm64 NuGet 原生资产。</Description>
+        <SubNodes>
+          <Task id="T4.1" name="实现事务 C ABI" status="DONE" order="0" priority="P0">
+            <Description>在 cozo-lib-c 中导出 cozo_multi_transact、cozo_run_tx、cozo_commit_tx 和 cozo_abort_tx，复用 Cozo MultiTransaction 语义并管理事务句柄生命周期。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.1-AC1" checked="true">四个事务 C ABI 符号均由 macOS arm64 libcozo_c.dylib 导出，且其签名与 Depa.Cozo 的 P/Invoke 声明一致。</cdt:Criterion>
+              <cdt:Criterion id="T4.1-AC2" checked="true">从 Depa.Cozo 开始事务、运行脚本、提交及中止的端到端烟测通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+          <Task id="T4.2" name="本地 NuGet 重新打包与发布" status="DONE" order="1" priority="P0">
+            <Description>以新的本地预发布版本打包 Depa.Cozo，并发布到 ~/.NuGetLocal。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T4.2-AC1" checked="true">新的 .nupkg 仅携带当前 macOS arm64 原生资产且该资产导出四个事务符号。</cdt:Criterion>
+              <cdt:Criterion id="T4.2-AC2" checked="true">隔离的 PackageReference restore 从 ~/.NuGetLocal 安装新版本后，事务烟测通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+      <TaskGroup id="P5" name="历史薄绑定回归迁移" status="DONE" order="4">
+        <Description>将历史 JavaScript wrapper 契约留在薄绑定，并验证直接项目引用与 NuGet 包消费的 native asset 装载。</Description>
+        <SubNodes>
+          <Task id="T5.1" name="迁移 CozoDb wrapper 回归" status="DONE" order="0" priority="P0">
+            <Description>将历史 cozodb-wrapper 测试置于 depa-cozo-bun/test，适配公开 camelCase API。</Description>
+          </Task>
+          <Task id="T5.2" name="验证 native asset 传播" status="DONE" order="1" priority="P0">
+            <Description>使 .NET ProjectReference 消费者也复制 RID native asset，并验证打包 PackageReference 使用同一加载器。</Description>
+            <cdt:Acceptance>
+              <cdt:Criterion id="T5.2-AC1" checked="true">depa-cozo-bun 的 Node 与 Bun 测试共 16 项通过，其中包括历史 CozoDb、事务、备份和命名规则 API。</cdt:Criterion>
+              <cdt:Criterion id="T5.2-AC2" checked="true">Depa.Cozo 的 ProjectReference 消费输出包含 runtimes/osx-arm64/native/libcozo_c.dylib，且隔离的 PackageReference smoke test 通过。</cdt:Criterion>
+            </cdt:Acceptance>
+          </Task>
+        </SubNodes>
+      </TaskGroup>
+    </SubNodes>
+  </TaskSpace>
+  <Schedule><Parallel max-concurrent="1" spot-check="true"/></Schedule>
+  <Hooks>
+    <Hook on="track:after"><cdt:AttractorCheck use="coding"/></Hook>
+  </Hooks>
+</Track>

@@ -1,0 +1,23 @@
+# depa-cozo
+
+`depa-cozo` is the thin Cozo native binding for both Bun and Node.js. It exposes database lifecycle, CozoScript queries, transactions and backup/import/export primitives only. It intentionally does **not** contain an object model, ontology DSL or business behavior system.
+
+> `depa-cozo@0.1.0` supports **macOS arm64 only**. Linux, Windows, and macOS x64 binaries will be released in later versions.
+
+## Use
+
+```js
+const { CozoDb } = require('depa-cozo');
+
+const db = new CozoDb('mem');
+const result = await db.run('?[value] <- [[42]]');
+db.close();
+```
+
+The published package contains the `darwin-arm64` N-API binary. npm restricts installation to macOS arm64, and the runtime loader rejects every other platform or architecture before attempting to load a binary.
+
+## Source build
+
+From a macOS arm64 checkout of this repository, run `npm run build-native` in this directory. It builds the existing `cozo-node` N-API artifact and copies it into `native/darwin-arm64/`. `npm run verify-native` verifies the host artifact before packing.
+
+Later cross-platform release packaging is performed by `.github/workflows/release-depa-bindings.yml` after each target has a verified native artifact.

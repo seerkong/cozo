@@ -1,0 +1,24 @@
+<behavior-patch capability="thin-cross-runtime-bindings" version="1">
+  <upsert selector="behavior://thin-cross-runtime-bindings/requirements/runtime-native-loading">
+    <requirement id="runtime-native-loading">
+      <statement>系统 SHALL 提供不含对象建模层的 npm 包 depa-cozo 和 NuGet 包 Depa.Cozo，并在受支持运行时选择匹配平台与 CPU 架构的 Cozo 原生库。</statement>
+      <suite id="package-contract" name="包边界与加载契约">
+        <case id="npm-thin-api">
+          <given>使用者在 Node.js 或 Bun 中安装 depa-cozo</given>
+          <when>导入包并创建 CozoDb</when>
+          <then>包 SHALL 加载匹配的 N-API 二进制，且导出中不包含 OM、ontology 或 DSL API</then>
+        </case>
+        <case id="nuget-thin-api">
+          <given>使用者在具有受支持 RID 的 .NET Core 应用中引用 Depa.Cozo</given>
+          <when>创建 CozoDb 并执行原始 CozoScript</when>
+          <then>NuGet runtime native asset SHALL 被加载，并经 cozo_c 返回 JSON 结果</then>
+        </case>
+        <case id="nuget-transaction-c-abi">
+          <given>使用者在 macOS arm64 .NET 应用中安装带有 Depa.Cozo 原生资产的本地 NuGet 版本</given>
+          <when>开始多语句事务、执行事务脚本并提交或中止</when>
+          <then>NuGet 资产 SHALL 导出 cozo_multi_transact、cozo_run_tx、cozo_commit_tx 和 cozo_abort_tx，且托管事务调用 SHALL 返回 JSON 结果并遵循提交/中止语义</then>
+        </case>
+      </suite>
+    </requirement>
+  </upsert>
+</behavior-patch>

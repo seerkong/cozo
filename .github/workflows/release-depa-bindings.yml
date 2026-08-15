@@ -1,0 +1,127 @@
+name: Release Depa Cozo bindings
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version to pack and optionally publish
+        required: true
+        type: string
+      publish:
+        description: Publish packages using repository secrets after successful pack
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    name: Build native (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            rid: osx-arm64
+            npm_target: darwin-arm64
+          - os: macos-13
+            rid: osx-x64
+            npm_target: darwin-x64
+          - os: ubuntu-24.04
+            rid: linux-x64
+            npm_target: linux-x64
+          - os: windows-2022
+            rid: win-x64
+            npm_target: win32-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build N-API addon
+        shell: bash
+        run: bash depa-cozo-bun/build-native.sh
+      - name: Build C ABI library
+        shell: bash
+        run: bash depa-cozo-csharp/build-native.sh
+      - name: Stage runtime artifacts
+        shell: bash
+        run: |
+          mkdir -p stage/depa-cozo-bun/native stage/depa-cozo-csharp/runtimes
+          cp -R "depa-cozo-bun/native/${{ matrix.npm_target }}" stage/depa-cozo-bun/native/
+          cp -R "depa-cozo-csharp/runtimes/${{ matrix.rid }}" stage/depa-cozo-csharp/runtimes/
+      - name: Verify Node.js and Bun native loading
+        shell: bash
+        run: |
+          node -e '(async () => { const { CozoDb } = require("./depa-cozo-bun"); const db = new CozoDb("mem"); const r = await db.run("?[value] <- [[42]]"); db.close(); if (r.rows[0][0] !== 42) throw new Error(JSON.stringify(r)); })().catch(error => { console.error(error); process.exit(1); });'
+          bun -e 'const { CozoDb } = require("./depa-cozo-bun"); const db = new CozoDb("mem"); const r = await db.run("?[value] <- [[42]]"); db.close(); if (r.rows[0][0] !== 42) throw new Error(JSON.stringify(r));'
+          npm run test:package --prefix depa-cozo-bun
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: stage/
+          if-no-files-found: error
+
+  pack:
+    name: Pack npm and NuGet packages
+    needs: build-native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: stage
+          merge-multiple: true
+      - name: Merge native artifacts into package layouts
+        shell: bash
+        run: |
+          cp -R stage/depa-cozo-bun/native/. depa-cozo-bun/native/
+          cp -R stage/depa-cozo-csharp/runtimes/. depa-cozo-csharp/runtimes/
+      - name: Verify .NET Core package-consumer native loading on Linux
+        shell: bash
+        env:
+          DEPA_COZO_VERSION: ${{ inputs.version }}
+        run: bash depa-cozo-csharp/tests/PackageSmoke/test-package.sh
+      - name: Pack npm package
+        shell: bash
+        run: |
+          mkdir -p dist
+          npm pkg set version="${{ inputs.version }}" --prefix depa-cozo-bun
+          cd depa-cozo-bun
+          npm run verify-native
+          npm pack --pack-destination ../dist
+      - name: Pack NuGet package
+        shell: bash
+        run: dotnet pack depa-cozo-csharp/Depa.Cozo.csproj --configuration Release --output dist -p:PackageVersion="${{ inputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: depa-cozo-packages
+          path: dist/
+          if-no-files-found: error
+      - name: Publish npm package
+        if: inputs.publish
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish dist/depa-cozo-${{ inputs.version }}.tgz
+      - name: Publish NuGet package
+        if: inputs.publish
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push dist/Depa.Cozo.${{ inputs.version }}.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
