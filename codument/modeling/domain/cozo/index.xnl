@@ -1,0 +1,9 @@
+<object #cozo.session { kind = "entity" fact_grade = "runtime_control_fact" single_writer = "CozoDb" } (
+  <desc ?01M1W1851FD4J6BRYZ44GKYB8B>
+  原生数据库句柄的运行时生命周期；查询和事务只在打开期间有效。
+  </?01M1W1851FD4J6BRYZ44GKYB8B>
+  <types ?01M1W1851FD4J6BRYZ44GKYB8C>
+  interface Session { closed: boolean; close(): void; multiTransact(write?: boolean): Transaction }
+  interface Transaction { state: 'open' | 'committed' | 'aborted'; run(script: string): Promise<unknown> }
+  </?01M1W1851FD4J6BRYZ44GKYB8C>
+)>

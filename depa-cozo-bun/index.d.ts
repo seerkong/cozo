@@ -1,12 +1,15 @@
 /** Thin database binding. This package deliberately excludes OM, ontology and DSL APIs. */
 export class CozoTx {
     readonly txId: number;
+    readonly state: 'open' | 'committed' | 'aborted';
+    readonly pending: boolean;
     run(script: string, params?: Record<string, unknown>): Promise<unknown>;
     abort(): unknown;
     commit(): unknown;
 }
 
 export class CozoDb {
+    readonly closed: boolean;
     constructor(engine?: string, databasePath?: string, options?: Record<string, unknown>);
     close(): void;
     multiTransact(write?: boolean): CozoTx;

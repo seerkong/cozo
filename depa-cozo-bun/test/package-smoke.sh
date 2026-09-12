@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PACKAGE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEST_DIR="$(mktemp -d /tmp/depa-cozo-npm-consumer.XXXXXX)"
+trap 'rm -rf "$TEST_DIR"' EXIT
 
 (cd "$PACKAGE_DIR" && npm pack --pack-destination "$TEST_DIR" >/dev/null)
 PACKAGE_TARBALL="$(find "$TEST_DIR" -maxdepth 1 -name 'depa-cozo-*.tgz' -print -quit)"

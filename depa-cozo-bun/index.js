@@ -16,24 +16,45 @@ if (!fs.existsSync(nativePath)) {
 const native = require(nativePath);
 
 class CozoTx {
-    constructor(id) {
+    constructor(id, owner) {
         this.txId = id;
+        this.owner = owner;
+        this.state = 'open';
+        this.pending = false;
     }
 
     run(script, params = {}) {
+        this.#assertReady();
+        this.pending = true;
         return new Promise((resolve, reject) => {
             native.query_tx(this.txId, script, params, (error, result) => {
                 if (error) reject(parseError(error)); else resolve(result);
             });
-        });
+        }).finally(() => { this.pending = false; });
     }
 
     abort() {
-        return native.abort_tx(this.txId);
+        return this.#finish('aborted', 'abort_tx');
     }
 
     commit() {
-        return native.commit_tx(this.txId);
+        return this.#finish('committed', 'commit_tx');
+    }
+
+    #assertReady() {
+        if (this.state !== 'open') throw new Error(`The Cozo transaction is ${this.state}.`);
+        if (this.owner?.closed) throw new Error('The Cozo database is closed.');
+        if (this.pending) throw new Error('The Cozo transaction has a pending query; await it first.');
+    }
+
+    #finish(state, method) {
+        this.#assertReady();
+        try { return native[method](this.txId); }
+        catch (error) { throw parseError(error); }
+        finally {
+            this.state = state;
+            this.owner?.transactions.delete(this);
+        }
     }
 }
 
@@ -41,10 +62,16 @@ class CozoDb {
     constructor(engine = 'mem', databasePath = 'data.db', options = {}) {
         this.dbId = native.open_db(engine, databasePath, JSON.stringify(options));
         this.closed = false;
+        this.pending = 0;
+        this.transactions = new Set();
     }
 
     close() {
         if (!this.closed) {
+            if (this.pending || [...this.transactions].some(tx => tx.pending)) {
+                throw new Error('The Cozo database has pending queries; await them before closing.');
+            }
+            for (const tx of this.transactions) tx.abort();
             native.close_db(this.dbId);
             this.closed = true;
         }
@@ -52,25 +79,29 @@ class CozoDb {
 
     multiTransact(write = false) {
         this.#assertOpen();
-        return new CozoTx(native.multi_transact(this.dbId, Boolean(write)));
+        const tx = new CozoTx(native.multi_transact(this.dbId, Boolean(write)), this);
+        this.transactions.add(tx);
+        return tx;
     }
 
     run(script, params = {}, immutable = false) {
         this.#assertOpen();
+        this.pending++;
         return new Promise((resolve, reject) => {
             native.query_db(this.dbId, script, params, (error, result) => {
                 if (error) reject(parseError(error)); else resolve(result);
             }, Boolean(immutable));
-        });
+        }).finally(() => { this.pending--; });
     }
 
     exportRelations(relations) {
         this.#assertOpen();
+        this.pending++;
         return new Promise((resolve, reject) => {
             native.export_relations(this.dbId, relations, (error, result) => {
                 if (error) reject(parseError(error)); else resolve(result);
             });
-        });
+        }).finally(() => { this.pending--; });
     }
 
     importRelations(data) {
@@ -117,11 +148,12 @@ class CozoDb {
 
     #complete(method, ...args) {
         this.#assertOpen();
+        this.pending++;
         return new Promise((resolve, reject) => {
             native[method](this.dbId, ...args, (error) => {
                 if (error) reject(parseError(error)); else resolve();
             });
-        });
+        }).finally(() => { this.pending--; });
     }
 
     #assertOpen() {
@@ -130,8 +162,10 @@ class CozoDb {
 }
 
 function parseError(error) {
+    if (error instanceof Error) return error;
     try {
-        return JSON.parse(error);
+        const details = JSON.parse(error);
+        return Object.assign(new Error(details.message || details.display || String(error)), details);
     } catch (_) {
         return new Error(String(error));
     }

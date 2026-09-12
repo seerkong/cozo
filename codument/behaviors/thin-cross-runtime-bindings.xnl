@@ -1,0 +1,26 @@
+<Behavior #thin-cross-runtime-bindings apiVersion="codument.tech/v1alpha1" version="1" (
+  <Requirements [
+    <Requirement #inference-session-boundaries (
+      <Statement ?01M1W1851DWF9R3JWHRMCRAQW8>
+      数据库 SHALL 隔离事务终态和并行查询，超时后仍可使用会话。
+      </?01M1W1851DWF9R3JWHRMCRAQW8>
+      <Suites [
+        <Suite #lifecycle { name = "会话生命周期" } (
+          <Cases [
+            <Case #rollback-close (
+              <Given ?01M1W1851DWF9R3JWHRMCRAQW9>
+              真实 mem 数据库存在未提交事务
+              </?01M1W1851DWF9R3JWHRMCRAQW9>
+              <When ?01M1W1851DWF9R3JWHRMCRAQWA>
+              关闭空闲会话
+              </?01M1W1851DWF9R3JWHRMCRAQWA>
+              <Then ?01M1W1851DWF9R3JWHRMCRAQWB>
+              未提交数据不可见且终止句柄拒绝查询。
+              </?01M1W1851DWF9R3JWHRMCRAQWB>
+            )>
+          ]>
+        )>
+      ]>
+    )>
+  ]>
+)>

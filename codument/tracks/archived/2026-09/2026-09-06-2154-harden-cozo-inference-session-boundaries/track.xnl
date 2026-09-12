@@ -1,0 +1,31 @@
+<Track #harden-cozo-inference-session-boundaries apiVersion="codument.tech/v1alpha1" version="1" { status = "completed" goal = "加固 Cozo 会话、事务关闭与真实双运行时预算边界。" description = "加固 Cozo 会话、事务关闭与真实双运行时预算边界。" question_mode = "decision-tree" question_severity = "auto" commit_mode = "manual" created_at = "2026-09-06T18:51:01.793Z" updated_at = "2026-09-06T18:54:20.589Z" modeling_base_commit = "faf1bb6b02b8023e70a817efce943e58dcb74249" engineering_base_commit = "faf1bb6b02b8023e70a817efce943e58dcb74249" } (
+  <Ports { scope = "track" } [
+    <MaterialBundle { role = "input" name = "modeling_delta" domain = "modeling" path = "vfs://./modeling_deltas/" }>
+    <MaterialBundle { role = "output" name = "modeling" domain = "modeling" path = "vfs://@/codument/modeling/" }>
+  ]>
+  <TaskSpace #space_harden-cozo-inference-session-boundaries { name = "harden-cozo-inference-session-boundaries" version = "1" } (
+    <SubNodes [
+      <TaskGroup #P1 { name = "实现并验证" status = "DONE" order = 0 } (
+        <SubNodes [
+          <Task #P1-T1 { name = "会话与事务生命周期" status = "DONE" order = 0 } (
+            <Description ?01M1W12M5KTWY9YPB04DKZWYPH>
+            关闭、事务终态与并发 run 守卫；错误字段与 Error；真实验证 mem、参数、回滚、immutable、timeout 和 Node/Bun。
+            </?01M1W12M5KTWY9YPB04DKZWYPH>
+            <Acceptance [
+              <Criterion #P1-T1-AC1 { checked = true } ?01M1W12M5KTWY9YPB04DKZWYPJ>
+              npm test 双运行时通过，超时后继续查询。
+              </?01M1W12M5KTWY9YPB04DKZWYPJ>
+            ]>
+          )>
+        ]>
+        <Gate [
+          <Criterion #P1-AC1 { checked = true } ?01M1W12M5KTWY9YPB04DKZWYPK>
+          公共 API、文档与真实测试一致。
+          </?01M1W12M5KTWY9YPB04DKZWYPK>
+        ]>
+      )>
+    ]>
+  )>
+  <Schedule []>
+  <Hooks []>
+)>

@@ -1,6 +1,6 @@
 {
   "name": "depa-cozo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "macOS arm64 thin Cozo native database binding for Bun and Node.js",
   "main": "index.js",
   "types": "index.d.ts",
@@ -23,7 +23,7 @@
   "scripts": {
     "build-native": "bash ./build-native.sh",
     "verify-native": "node ./scripts/verify-native.js",
-    "test:node": "node --test test/native-path.test.js",
+    "test:node": "node --test test/native-path.test.js test/session-boundaries.test.js",
     "test:bun": "bun test test/*.test.js",
     "test:package": "bash ./test/package-smoke.sh",
     "test": "npm run test:node && npm run test:bun"
