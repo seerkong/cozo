@@ -6,30 +6,33 @@ const path = require('path');
 const packageJson = require('../package.json');
 const { platformKey, resolveNativePath } = require('../lib/native-path');
 
-test('advertises macOS arm64 as the sole install target', () => {
-    assert.deepEqual(packageJson.os, ['darwin']);
-    assert.deepEqual(packageJson.cpu, ['arm64']);
+test('does not restrict install to one os or cpu — the loader picks the artifact', () => {
+    assert.equal(packageJson.os, undefined);
+    assert.equal(packageJson.cpu, undefined);
 });
 
-test('maps the macOS arm64 release target to a package-local binary', () => {
-    assert.equal(platformKey('darwin', 'arm64'), 'darwin-arm64');
-    assert.equal(
-        resolveNativePath('/package', 'darwin', 'arm64'),
-        path.join('/package', 'native', 'darwin-arm64', 'depa_cozo.node')
-    );
-});
-
-test('rejects all targets other than macOS arm64', () => {
-    for (const [platform, arch] of [
-        ['darwin', 'x64'],
-        ['linux', 'arm64'],
-        ['linux', 'x64'],
-        ['win32', 'arm64'],
-        ['win32', 'x64'],
-    ]) {
-        assert.throws(
-            () => resolveNativePath('/package', platform, arch),
-            /does not provide a native binary/
+test('maps each platform-arch pair to its own package-local binary', () => {
+    const cases = [
+        ['darwin', 'arm64', 'darwin-arm64'],
+        ['darwin', 'x64', 'darwin-x64'],
+        ['linux', 'x64', 'linux-x64'],
+        ['linux', 'arm64', 'linux-arm64'],
+        ['win32', 'x64', 'win32-x64'],
+        ['win32', 'arm64', 'win32-arm64'],
+    ];
+    for (const [platform, arch, key] of cases) {
+        assert.equal(platformKey(platform, arch), key);
+        assert.equal(
+            resolveNativePath('/package', platform, arch),
+            path.join('/package', 'native', key, 'depa_cozo.node')
         );
     }
+});
+
+test('does not reject a target that has no binary yet', () => {
+    // Absence of the file is the unsupported state. resolveNativePath only names the slot.
+    assert.equal(
+        resolveNativePath('/package', 'win32', 'x64'),
+        path.join('/package', 'native', 'win32-x64', 'depa_cozo.node')
+    );
 });

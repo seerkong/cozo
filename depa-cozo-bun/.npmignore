@@ -1,0 +1,3 @@
+# This file exists so npm pack does not apply .gitignore.
+# .gitignore excludes native/*/*.node; those binaries are the package.
+test/

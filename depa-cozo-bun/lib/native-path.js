@@ -2,23 +2,19 @@
 
 const path = require('path');
 
-const supportedPlatforms = new Set([
-    'darwin-arm64',
-]);
-
+/**
+ * One directory per Node platform-arch key. The loader does not keep an allowlist:
+ * a missing file is the unsupported state, so a new target (win32-x64, linux-arm64, …)
+ * is added by dropping `native/<platform>-<arch>/depa_cozo.node` in place.
+ *
+ * Keys match `process.platform` + `process.arch` (Windows is `win32`, not `windows`).
+ */
 function platformKey(platform = process.platform, arch = process.arch) {
     return `${platform}-${arch}`;
 }
 
 function resolveNativePath(rootDirectory, platform = process.platform, arch = process.arch) {
-    const key = platformKey(platform, arch);
-    if (!supportedPlatforms.has(key)) {
-        throw new Error(
-            `depa-cozo does not provide a native binary for ${key}. ` +
-            `Supported targets: ${[...supportedPlatforms].join(', ')}.`
-        );
-    }
-    return path.join(rootDirectory, 'native', key, 'depa_cozo.node');
+    return path.join(rootDirectory, 'native', platformKey(platform, arch), 'depa_cozo.node');
 }
 
-module.exports = { platformKey, resolveNativePath, supportedPlatforms };
+module.exports = { platformKey, resolveNativePath };

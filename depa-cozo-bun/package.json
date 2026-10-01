@@ -1,7 +1,7 @@
 {
   "name": "depa-cozo",
-  "version": "0.1.1",
-  "description": "macOS arm64 thin Cozo native database binding for Bun and Node.js",
+  "version": "0.1.2",
+  "description": "Thin Cozo native database binding for Bun and Node.js. Loads native/<platform>-<arch>/depa_cozo.node for the host.",
   "main": "index.js",
   "types": "index.d.ts",
   "exports": {
@@ -32,12 +32,6 @@
     "node": ">=18",
     "bun": ">=1.0"
   },
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "arm64"
-  ],
   "keywords": [
     "cozo",
     "database",

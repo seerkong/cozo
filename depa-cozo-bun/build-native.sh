@@ -18,10 +18,8 @@ case "$(uname -m)" in
 esac
 
 target="$platform-$arch"
-if [[ "$target" != "darwin-arm64" ]]; then
-  echo "depa-cozo@0.1.0 supports only macOS arm64; refusing to build $target." >&2
-  exit 1
-fi
+# Host build only. The artifact lands in native/<platform>-<arch>/, which is the
+# same key the loader uses. Cross-compilation is not attempted here.
 
 cargo build --release -p cozo-node -F compact -F storage-rocksdb --manifest-path "$REPO_ROOT/Cargo.toml"
 
