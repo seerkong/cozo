@@ -11,7 +11,7 @@ using var db = new CozoDb("mem");
 var json = db.RunRaw("?[value] <- [[42]]");
 ```
 
-The NuGet package uses the standard `runtimes/<RID>/native/` layout. Restore and publish select the native library for the application's RID. The first published targets are `osx-arm64`, `osx-x64`, `linux-x64` and `win-x64`.
+The NuGet package uses the standard `runtimes/<RID>/native/` layout. Restore and publish select the native library for the application's RID. The shipped targets are the existing macOS arm64 slot and Windows x64 (`runtimes/win-x64/native/cozo_c.dll`). `osx-x64` and `linux-x64` are not included.
 
 ## Source build
 
