@@ -21,6 +21,48 @@ target="$platform-$arch"
 # Host build only. The artifact lands in native/<platform>-<arch>/, which is the
 # same key the loader uses. Cross-compilation is not attempted here.
 
+# Git Bash puts /usr/bin ahead of MSVC, so coreutils `link` shadows the real
+# linker. Node addons on Windows must be built with the MSVC toolchain that
+# Node itself uses; import vcvars64 so cl.exe can see windows.h and the SDK.
+setup_windows_msvc() {
+  local vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+  local install unix_install msvc_bin vcvars tmp
+  if [[ ! -x "$vswhere" ]]; then
+    echo "vswhere.exe not found; install Visual Studio with C++ tools." >&2
+    exit 1
+  fi
+  install="$("$vswhere" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | tr -d '\r')"
+  unix_install="$(cygpath -u "$install")"
+  msvc_bin="$(ls -d "$unix_install"/VC/Tools/MSVC/*/bin/Hostx64/x64 2>/dev/null | tail -1)"
+  vcvars="$unix_install/VC/Auxiliary/Build/vcvars64.bat"
+  if [[ -z "$msvc_bin" || ! -f "$vcvars" ]]; then
+    echo "MSVC x64 tools not found under $install" >&2
+    exit 1
+  fi
+  export PATH="$msvc_bin:$PATH"
+  if [[ -n "${INCLUDE:-}" && -n "${LIB:-}" ]]; then
+    return 0
+  fi
+  tmp="$(mktemp /tmp/depa-vcvars.XXXXXX.bat)"
+  printf '@echo off\r\nset "PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer;%%PATH%%"\r\ncall "%s" >nul\r\nset INCLUDE\r\nset LIB\r\nset LIBPATH\r\n' "$(cygpath -w "$vcvars")" > "$tmp"
+  while IFS= read -r line; do
+    local key="${line%%=*}"
+    local val="${line#*=}"
+    case "$key" in
+      INCLUDE|LIB|LIBPATH) export "$key=$val" ;;
+    esac
+  done < <(cmd.exe //C "$(cygpath -w "$tmp")" | tr -d '\r')
+  rm -f "$tmp"
+  if [[ -z "${INCLUDE:-}" || -z "${LIB:-}" ]]; then
+    echo "Failed to import MSVC INCLUDE/LIB from vcvars64.bat" >&2
+    exit 1
+  fi
+}
+
+if [[ "$platform" == "win32" ]]; then
+  setup_windows_msvc
+fi
+
 cargo build --release -p cozo-node -F compact -F storage-rocksdb --manifest-path "$REPO_ROOT/Cargo.toml"
 
 for candidate in \

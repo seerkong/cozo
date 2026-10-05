@@ -1,6 +1,6 @@
 {
   "name": "depa-cozo",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Thin Cozo native database binding for Bun and Node.js. Loads native/<platform>-<arch>/depa_cozo.node for the host.",
   "main": "index.js",
   "types": "index.d.ts",
@@ -24,7 +24,7 @@
     "build-native": "bash ./build-native.sh",
     "verify-native": "node ./scripts/verify-native.js",
     "test:node": "node --test test/native-path.test.js test/session-boundaries.test.js",
-    "test:bun": "bun test test/*.test.js",
+    "test:bun": "bun test ./test",
     "test:package": "bash ./test/package-smoke.sh",
     "test": "npm run test:node && npm run test:bun"
   },
