@@ -1,1 +1,3 @@
 native/*/*.node
+!native/linux-x64/depa_cozo.node
+!RELEASE-0.1.4.md
